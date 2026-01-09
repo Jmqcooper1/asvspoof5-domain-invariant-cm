@@ -1,0 +1,37 @@
+# WavLM Base+ Model Configuration
+
+backbone:
+  name: wavlm_base_plus
+  pretrained: microsoft/wavlm-base-plus
+  num_layers: 12
+  hidden_size: 768
+  freeze: true  # Start with frozen backbone
+  
+  # Layer selection
+  layer_selection:
+    method: weighted  # weighted, first_k, last_k, specific
+    # For weighted: learn weights over all layers
+    # For first_k/last_k: use k layers
+    # For specific: use specific layer indices
+    k: 6  # Used for first_k/last_k
+    init_lower_bias: true  # Initialize with higher weights for lower layers
+
+# Projection head
+projection:
+  input_dim: 768
+  hidden_dim: 512
+  output_dim: 256
+  num_layers: 2
+  dropout: 0.1
+  activation: relu
+
+# Task classifier (bonafide/spoof)
+classifier:
+  input_dim: 256  # From projection output
+  num_classes: 2
+  hidden_dim: 128
+  dropout: 0.1
+
+# Pooling over time
+pooling:
+  method: mean  # mean, attention, stats (mean + std)

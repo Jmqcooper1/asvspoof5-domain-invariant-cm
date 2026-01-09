@@ -1,0 +1,70 @@
+# Domain Split Evaluation Configuration
+
+# Per-domain breakdown
+domain_breakdown:
+  enabled: true
+  
+  # Domains to analyze
+  domains:
+    - codec
+    - codec_q
+  
+  # Metrics per domain
+  metrics:
+    - eer
+    - min_dcf
+    - n_samples
+    - n_bonafide
+    - n_spoof
+
+# Held-out domain evaluation (leave-one-out)
+held_out:
+  enabled: false  # Enable for custom domain generalization analysis
+  
+  # Which domain to hold out
+  domain: codec  # codec or codec_q
+  
+  # Hold out specific values (if null, do leave-one-out for all)
+  hold_out_values: null
+  
+  # Grouping to prevent leakage
+  group_by: codec_seed  # Ensure coded variants stay together
+
+# Cross-domain performance gap
+gap_analysis:
+  enabled: true
+  
+  # Compare in-domain vs out-of-domain
+  # In-domain: train and test on same domain distribution
+  # Out-of-domain: train on one, test on another
+  
+  metrics:
+    - gap_eer      # EER_ood - EER_id
+    - gap_min_dcf  # minDCF_ood - minDCF_id
+    - ratio_eer    # EER_ood / EER_id
+
+# Domain invariance metrics
+invariance:
+  # Domain probe accuracy (lower = more invariant)
+  probe_accuracy:
+    enabled: true
+    per_layer: true  # Compute for each layer
+    classifier: logistic  # logistic, svm
+    cv_folds: 5
+  
+  # Domain discriminator accuracy during training
+  discriminator_accuracy:
+    enabled: true
+    log_per_epoch: true
+
+# Visualization
+visualization:
+  enabled: true
+  
+  plots:
+    - per_domain_eer_bar
+    - per_domain_mindcf_bar
+    - probe_accuracy_per_layer
+    - erm_vs_dann_comparison
+  
+  output_dir: figures/domain_analysis

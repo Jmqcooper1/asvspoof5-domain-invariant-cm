@@ -1,0 +1,27 @@
+# TRILLsson Non-Semantic Baseline Configuration
+
+backbone:
+  name: trillsson
+  # TRILLsson embeddings are extracted offline and loaded from disk
+  embedding_dim: 1024  # TRILLsson output dimension
+  embedding_dir: data/embeddings/trillsson
+  freeze: true  # Always frozen (pre-extracted)
+
+# Simple classifier (no projection needed)
+classifier:
+  input_dim: 1024
+  num_classes: 2
+  type: mlp  # mlp, linear, svm
+  
+  # MLP settings (if type=mlp)
+  mlp:
+    hidden_dims: [256, 128]
+    dropout: 0.1
+    activation: relu
+  
+  # SVM settings (if type=svm)
+  svm:
+    kernel: rbf
+    C: 1.0
+
+# No layer selection or pooling needed (embeddings are fixed-size)

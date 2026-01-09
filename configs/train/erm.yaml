@@ -1,0 +1,44 @@
+# ERM (Empirical Risk Minimization) Training Configuration
+
+training:
+  method: erm
+  
+  # Optimizer
+  optimizer:
+    name: adamw
+    lr: 1.0e-4
+    weight_decay: 0.01
+    betas: [0.9, 0.999]
+  
+  # Scheduler
+  scheduler:
+    name: cosine
+    warmup_steps: 500
+    min_lr: 1.0e-6
+  
+  # Training loop
+  max_epochs: 50
+  patience: 10  # Early stopping patience
+  gradient_clip: 1.0
+  
+  # Checkpointing
+  save_every_n_epochs: 5
+  save_best_only: true
+  monitor_metric: eer  # eer, min_dcf
+  monitor_mode: min
+
+# Loss
+loss:
+  task:
+    name: cross_entropy
+    weight: 1.0
+    label_smoothing: 0.0
+
+# Logging
+logging:
+  log_every_n_steps: 50
+  val_every_n_epochs: 1
+  
+# Reproducibility
+seed: 42
+deterministic: true
