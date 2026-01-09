@@ -7,11 +7,10 @@ backbone:
   hidden_size: 768
   freeze: true  # Start with frozen backbone
   
-  # Layer selection
   layer_selection:
     method: weighted  # weighted, first_k, last_k, specific
-    k: 6  # Used for first_k/last_k
-    init_lower_bias: true  # Initialize with higher weights for lower layers
+    k: 6
+    init_lower_bias: true
 
 # Projection head
 projection:
@@ -22,13 +21,11 @@ projection:
   dropout: 0.1
   activation: relu
 
-# Task classifier (bonafide/spoof)
 classifier:
-  input_dim: 256  # From projection output
+  input_dim: 256
   num_classes: 2
   hidden_dim: 128
   dropout: 0.1
 
-# Pooling over time
 pooling:
-  method: mean  # mean, attention, stats (mean + std)
+  method: mean  # mean, attention, stats

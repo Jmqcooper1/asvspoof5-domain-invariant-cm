@@ -18,13 +18,13 @@ training:
   
   # Training loop
   max_epochs: 50
-  patience: 10  # Early stopping patience
+  patience: 10
   gradient_clip: 1.0
   
   # Checkpointing
   save_every_n_epochs: 5
   save_best_only: true
-  monitor_metric: eer  # eer, min_dcf
+  monitor_metric: eer
   monitor_mode: min
 
 # Loss

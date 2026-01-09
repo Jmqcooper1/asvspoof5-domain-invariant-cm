@@ -143,23 +143,13 @@ class DANNModel(nn.Module):
         Returns:
             Dictionary with task_logits, codec_logits, codec_q_logits.
         """
-        # Extract features
         features, all_hidden_states = self.backbone(waveform, attention_mask)
-
-        # Project
         projected = self.projection(features)
-
-        # Pool over time
         pooled = self.pooling(projected, lengths)
-
-        # Task classification
         task_logits = self.classifier(pooled)
 
-        # Domain classification (through GRL)
         reversed_features = self.grl(pooled)
-        codec_logits, codec_q_logits = self.domain_discriminator(
-            reversed_features
-        )
+        codec_logits, codec_q_logits = self.domain_discriminator(reversed_features)
 
         return {
             "task_logits": task_logits,

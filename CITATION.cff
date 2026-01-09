@@ -4,8 +4,8 @@ message: "If you use this code, please cite the repository and the ASVspoof 5 pa
 type: software
 authors:
   - given-names: Mike
-    family-names: ""
-    email: your.email@student.uva.nl
+    family-names: Cooper
+    email: mike.cooper@student.uva.nl
 repository-code: "https://github.com/jmqcooper/asvspoof5-domain-invariant-cm"
 license: MIT
 keywords:

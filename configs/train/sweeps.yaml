@@ -1,36 +1,27 @@
 # Hyperparameter Sweep Configuration
 
-# Base config to extend
 base_config: dann.yaml
 
 sweeps:
-  # Lambda (adversarial weight) sweep
   lambda_sweep:
     parameter: dann.lambda_
     values: [0.01, 0.05, 0.1, 0.25, 0.5, 1.0]
-    description: "Sweep adversarial loss weight"
   
-  # Learning rate sweep
   lr_sweep:
     parameter: training.optimizer.lr
     values: [5.0e-5, 1.0e-4, 2.0e-4, 5.0e-4]
-    description: "Sweep learning rate"
   
-  # Layer selection sweep
   layer_sweep:
     parameter: backbone.layer_selection.k
     values: [4, 6, 8, 12]
-    description: "Sweep number of layers to use"
 
-# Combined sweep (grid search subset)
 combined:
   enabled: false
   parameters:
     - dann.lambda_: [0.1, 0.5]
     - training.optimizer.lr: [1.0e-4, 2.0e-4]
 
-# Tracking
 tracking:
   project: asvspoof5-dann-sweeps
-  group: null  # Set per experiment
+  group: null
   tags: [sweep, dann]

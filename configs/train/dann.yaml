@@ -18,13 +18,13 @@ training:
   
   # Training loop
   max_epochs: 50
-  patience: 10  # Early stopping patience
+  patience: 10
   gradient_clip: 1.0
   
   # Checkpointing
   save_every_n_epochs: 5
   save_best_only: true
-  monitor_metric: eer  # eer, min_dcf
+  monitor_metric: eer
   monitor_mode: min
 
 # Loss
@@ -45,10 +45,8 @@ loss:
 
 # DANN-specific settings
 dann:
-  # Adversarial weight (lambda)
-  lambda_: 0.1  # Tune this: [0.01, 0.1, 0.5, 1.0]
+  lambda_: 0.1
   
-  # Lambda scheduling (optional)
   lambda_schedule:
     enabled: false
     type: linear  # linear, exponential
@@ -56,17 +54,15 @@ dann:
     end: 1.0
     warmup_epochs: 5
   
-  # Multi-head domain discriminator
   discriminator:
     shared_dim: 256
     dropout: 0.1
-    # Separate heads for CODEC and CODEC_Q
 
 # Logging
 logging:
   log_every_n_steps: 50
   val_every_n_epochs: 1
-  log_domain_accuracy: true  # Log domain discriminator accuracy
+  log_domain_accuracy: true
 
 # Reproducibility
 seed: 42

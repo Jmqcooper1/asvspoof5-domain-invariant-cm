@@ -75,22 +75,7 @@ def main():
     logger.info(f"Split: {args.split}")
     logger.info(f"Layers to patch: {args.layers}")
 
-    # TODO: Implement patching logic
-    # 1. Load source and target models
-    # 2. Load data
-    # 3. For each sample:
-    #    a. Run forward pass on both models
-    #    b. Patch activations from source into target at specified layers
-    #    c. Record predictions and domain probe outputs
-    # 4. Compare:
-    #    - Task performance before/after patching
-    #    - Domain probe accuracy before/after patching
-    # 5. Save results
-
-    raise NotImplementedError(
-        "Patching logic not yet implemented. "
-        "See src/asvspoof5_domain_invariant_cm/analysis/patching.py"
-    )
+    raise NotImplementedError("Patching logic not yet implemented.")
 
 
 if __name__ == "__main__":

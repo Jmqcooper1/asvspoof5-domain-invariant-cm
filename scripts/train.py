@@ -70,19 +70,7 @@ def main():
     logger.info(f"Output dir: {args.output_dir}")
     logger.info(f"Seed: {args.seed}")
 
-    # TODO: Implement training logic
-    # 1. Load configs
-    # 2. Set up data loaders
-    # 3. Initialize model (backbone + heads)
-    # 4. Initialize optimizer and scheduler
-    # 5. Training loop (ERM or DANN)
-    # 6. Validation and checkpointing
-    # 7. Save final model and metrics
-
-    raise NotImplementedError(
-        "Training logic not yet implemented. "
-        "See src/asvspoof5_domain_invariant_cm/ for module structure."
-    )
+    raise NotImplementedError("Training logic not yet implemented.")
 
 
 if __name__ == "__main__":

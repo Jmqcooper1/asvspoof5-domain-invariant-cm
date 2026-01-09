@@ -69,18 +69,7 @@ def main():
     logger.info(f"Track: {args.track}")
     logger.info(f"Per-domain: {args.per_domain}")
 
-    # TODO: Implement evaluation logic
-    # 1. Load model from checkpoint
-    # 2. Load evaluation data
-    # 3. Run inference (get scores)
-    # 4. Compute metrics (EER, minDCF, etc.)
-    # 5. Per-domain breakdown (if requested)
-    # 6. Save predictions and metrics
-
-    raise NotImplementedError(
-        "Evaluation logic not yet implemented. "
-        "See src/asvspoof5_domain_invariant_cm/evaluation/ for module structure."
-    )
+    raise NotImplementedError("Evaluation logic not yet implemented.")
 
 
 if __name__ == "__main__":

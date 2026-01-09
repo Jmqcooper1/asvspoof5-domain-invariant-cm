@@ -42,11 +42,9 @@ def save_checkpoint(
     if config is not None:
         checkpoint["config"] = config
 
-    # Try to get git commit
     try:
         commit = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            stderr=subprocess.DEVNULL,
+            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
         ).decode().strip()
         checkpoint["git_commit"] = commit
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -93,7 +91,6 @@ def save_metrics(metrics: dict, path: Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Convert numpy types to Python types
     def convert(obj):
         if hasattr(obj, "tolist"):
             return obj.tolist()

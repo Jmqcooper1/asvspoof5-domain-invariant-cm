@@ -131,10 +131,8 @@ class WavLMBackbone(SSLBackbone):
             output_hidden_states=True,
         )
 
-        # Get hidden states (skip input embedding, index 0)
-        hidden_states = outputs.hidden_states[1:]  # (L, B, T, D)
+        hidden_states = outputs.hidden_states[1:]  # skip embedding layer
 
-        # Select layers
         if self.layer_selection == "first_k":
             selected = list(hidden_states[: self.k])
         elif self.layer_selection == "last_k":
@@ -142,7 +140,6 @@ class WavLMBackbone(SSLBackbone):
         else:
             selected = list(hidden_states)
 
-        # Weighted pooling over layers
         pooled = self.layer_pooling(selected)
 
         return pooled, list(hidden_states)
@@ -213,10 +210,8 @@ class Wav2Vec2Backbone(SSLBackbone):
             output_hidden_states=True,
         )
 
-        # Get hidden states (skip input embedding)
-        hidden_states = outputs.hidden_states[1:]
+        hidden_states = outputs.hidden_states[1:]  # skip embedding layer
 
-        # Select layers
         if self.layer_selection == "first_k":
             selected = list(hidden_states[: self.k])
         elif self.layer_selection == "last_k":
@@ -224,7 +219,6 @@ class Wav2Vec2Backbone(SSLBackbone):
         else:
             selected = list(hidden_states)
 
-        # Weighted pooling over layers
         pooled = self.layer_pooling(selected)
 
         return pooled, list(hidden_states)

@@ -93,19 +93,7 @@ def main():
     logger.info(f"Domains: {args.domains}")
     logger.info(f"Classifier: {args.classifier}")
 
-    # TODO: Implement probing logic
-    # 1. Load model from checkpoint
-    # 2. Load data
-    # 3. Extract embeddings from each layer
-    # 4. For each layer and each domain:
-    #    - Train linear probe (with CV)
-    #    - Record accuracy
-    # 5. Save results and generate plots
-
-    raise NotImplementedError(
-        "Probing logic not yet implemented. "
-        "See src/asvspoof5_domain_invariant_cm/analysis/probes.py"
-    )
+    raise NotImplementedError("Probing logic not yet implemented.")
 
 
 if __name__ == "__main__":

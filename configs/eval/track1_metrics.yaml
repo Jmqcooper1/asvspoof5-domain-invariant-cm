@@ -17,9 +17,8 @@ metrics:
     c_fa: 1.0
     p_target: 0.05
   
-  # actDCF parameters (fixed threshold)
   act_dcf:
-    threshold: 0.5  # Or use EER threshold
+    threshold: 0.5
     c_miss: 1.0
     c_fa: 1.0
     p_target: 0.05
@@ -30,7 +29,6 @@ output:
   scores_file: predictions.tsv
   metrics_file: metrics.json
   
-  # Per-utterance output columns
   score_columns:
     - utterance_id
     - score
@@ -46,7 +44,6 @@ statistics:
     n_samples: 1000
     confidence_level: 0.95
   
-  # Multiple seeds (if run with different seeds)
   aggregate_seeds:
     compute_mean: true
     compute_std: true

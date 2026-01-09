@@ -30,34 +30,24 @@ held_out:
   # Grouping to prevent leakage
   group_by: codec_seed  # Ensure coded variants stay together
 
-# Cross-domain performance gap
 gap_analysis:
   enabled: true
-  
-  # Compare in-domain vs out-of-domain
-  # In-domain: train and test on same domain distribution
-  # Out-of-domain: train on one, test on another
-  
   metrics:
     - gap_eer      # EER_ood - EER_id
     - gap_min_dcf  # minDCF_ood - minDCF_id
     - ratio_eer    # EER_ood / EER_id
 
-# Domain invariance metrics
 invariance:
-  # Domain probe accuracy (lower = more invariant)
   probe_accuracy:
     enabled: true
-    per_layer: true  # Compute for each layer
-    classifier: logistic  # logistic, svm
+    per_layer: true
+    classifier: logistic
     cv_folds: 5
   
-  # Domain discriminator accuracy during training
   discriminator_accuracy:
     enabled: true
     log_per_epoch: true
 
-# Visualization
 visualization:
   enabled: true
   

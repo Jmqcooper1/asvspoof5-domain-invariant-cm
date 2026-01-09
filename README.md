@@ -27,55 +27,50 @@ extension. Parse by splitting on whitespace and do not hardcode column counts.
 
 See [docs/dataset.md](docs/dataset.md) for exact setup instructions.
 
-## Installation
-
-Create a virtual environment and install in editable mode:
+## Installation (install uv first)
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -e ".[dev,xai,tracking]"
+uv sync --all-extras
 ```
 
-If you want a minimal install:
+For minimal install:
 
 ```bash
-pip install -e .
+uv sync
 ```
 
 ## Quickstart
 
-1. Download protocols and a small audio subset (for sanity checks):
+1. Download and prepare data:
 
 ```bash
 bash scripts/download_asvspoof5.sh
 bash scripts/unpack_asvspoof5.sh
-python scripts/make_manifest.py
+uv run python scripts/make_manifest.py
 ```
 
-2. Train an ERM baseline:
+2. Train ERM baseline:
 
 ```bash
-python scripts/train.py --config configs/train/erm.yaml --model configs/model/wavlm_base.yaml
+uv run python scripts/train.py --config configs/train/erm.yaml --model configs/model/wavlm_base.yaml
 ```
 
-3. Train a DANN model:
+3. Train DANN:
 
 ```bash
-python scripts/train.py --config configs/train/dann.yaml --model configs/model/wavlm_base.yaml
+uv run python scripts/train.py --config configs/train/dann.yaml --model configs/model/wavlm_base.yaml
 ```
 
-4. Evaluate on dev Track 1:
+4. Evaluate:
 
 ```bash
-python scripts/evaluate.py --split dev --track 1
+uv run python scripts/evaluate.py --split dev --track 1
 ```
 
-5. Run domain probes:
+5. Run probes:
 
 ```bash
-python scripts/run_probes.py --split dev --track 1
+uv run python scripts/run_probes.py --split dev --track 1
 ```
 
 ## Repository Structure
