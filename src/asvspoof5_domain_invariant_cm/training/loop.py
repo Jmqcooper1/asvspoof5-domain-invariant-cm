@@ -1,10 +1,14 @@
-"""Training and validation loops."""
+"""Training and validation loops with comprehensive logging."""
 
 import json
 import logging
+import random
+import time
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.amp import GradScaler, autocast
@@ -12,6 +16,12 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from ..utils.io import save_checkpoint, save_config, save_metrics
+from ..utils.logging import (
+    ExperimentLogger,
+    check_for_nan_grads,
+    compute_grad_norm,
+    get_gpu_memory_usage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +51,8 @@ def train_epoch(
     gradient_clip: float = 1.0,
     method: str = "erm",
     log_interval: int = 50,
+    batch_sample_rate: float = 0.0,
+    track_gradients: bool = True,
 ) -> dict:
     """Train for one epoch.
 
@@ -55,6 +67,8 @@ def train_epoch(
         gradient_clip: Gradient clipping value.
         method: Training method ('erm' or 'dann').
         log_interval: Logging interval.
+        batch_sample_rate: Rate of batches to log detailed info (0.0-1.0).
+        track_gradients: Whether to track gradient norms.
 
     Returns:
         Dictionary of average metrics for the epoch.
@@ -70,9 +84,19 @@ def train_epoch(
     total_codec_q_acc = 0.0
     num_batches = 0
 
+    # Gradient tracking
+    grad_norms = []
+    grad_clips_count = 0
+    nan_grad_count = 0
+
+    # Batch-level logging samples
+    batch_samples = []
+
     pbar = tqdm(dataloader, desc="Training", leave=False)
 
     for batch_idx, batch in enumerate(pbar):
+        batch_start_time = time.time()
+
         waveform = batch["waveform"].to(device)
         attention_mask = batch["attention_mask"].to(device)
         lengths = batch["lengths"].to(device)
@@ -106,12 +130,40 @@ def train_epoch(
         if use_amp:
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
-            nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
+
+            # Track gradients before clipping
+            if track_gradients:
+                grad_norm = compute_grad_norm(model)
+                grad_norms.append(grad_norm)
+
+                # Check for NaN gradients
+                if check_for_nan_grads(model):
+                    nan_grad_count += 1
+                    logger.warning(f"NaN gradient detected at batch {batch_idx}")
+
+            # Clip gradients
+            orig_norm = nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
+            if orig_norm > gradient_clip:
+                grad_clips_count += 1
+
             scaler.step(optimizer)
             scaler.update()
         else:
             loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
+
+            # Track gradients before clipping
+            if track_gradients:
+                grad_norm = compute_grad_norm(model)
+                grad_norms.append(grad_norm)
+
+                if check_for_nan_grads(model):
+                    nan_grad_count += 1
+                    logger.warning(f"NaN gradient detected at batch {batch_idx}")
+
+            orig_norm = nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
+            if orig_norm > gradient_clip:
+                grad_clips_count += 1
+
             optimizer.step()
 
         if scheduler is not None:
@@ -134,6 +186,25 @@ def train_epoch(
             total_codec_acc += codec_acc
             total_codec_q_acc += codec_q_acc
 
+        # Sample batches for detailed logging
+        if batch_sample_rate > 0 and random.random() < batch_sample_rate:
+            batch_duration = time.time() - batch_start_time
+            batch_event = {
+                "batch_idx": batch_idx,
+                "loss": losses["total_loss"].item(),
+                "task_loss": losses["task_loss"].item(),
+                "task_acc": task_acc,
+                "grad_norm": grad_norms[-1] if grad_norms else None,
+                "batch_duration_sec": batch_duration,
+                "batch_size": waveform.shape[0],
+            }
+            if method == "dann":
+                batch_event["codec_loss"] = losses["codec_loss"].item()
+                batch_event["codec_q_loss"] = losses["codec_q_loss"].item()
+                batch_event["codec_acc"] = codec_acc
+                batch_event["codec_q_acc"] = codec_q_acc
+            batch_samples.append(batch_event)
+
         # Update progress bar
         if batch_idx % log_interval == 0:
             pbar.set_postfix({
@@ -154,6 +225,17 @@ def train_epoch(
         metrics["codec_acc"] = total_codec_acc / num_batches
         metrics["codec_q_acc"] = total_codec_q_acc / num_batches
 
+    # Gradient statistics
+    if track_gradients and grad_norms:
+        metrics["grad_norm_mean"] = float(np.mean(grad_norms))
+        metrics["grad_norm_max"] = float(np.max(grad_norms))
+        metrics["grad_clips"] = grad_clips_count
+        metrics["nan_grads"] = nan_grad_count
+
+    # Include batch samples for wide event logging
+    if batch_samples:
+        metrics["_batch_samples"] = batch_samples
+
     return metrics
 
 
@@ -164,6 +246,9 @@ def validate_epoch(
     loss_fn: nn.Module,
     device: torch.device,
     method: str = "erm",
+    compute_domain_breakdown: bool = False,
+    codec_vocab: Optional[dict] = None,
+    codec_q_vocab: Optional[dict] = None,
 ) -> dict:
     """Validate for one epoch.
 
@@ -173,6 +258,9 @@ def validate_epoch(
         loss_fn: Loss function.
         device: Device.
         method: Training method ('erm' or 'dann').
+        compute_domain_breakdown: Whether to compute per-domain metrics.
+        codec_vocab: CODEC vocabulary (for domain breakdown).
+        codec_q_vocab: CODEC_Q vocabulary (for domain breakdown).
 
     Returns:
         Dictionary of average metrics for the epoch.
@@ -190,6 +278,8 @@ def validate_epoch(
 
     all_scores = []
     all_labels = []
+    all_codec_labels = []
+    all_codec_q_labels = []
 
     for batch in tqdm(dataloader, desc="Validating", leave=False):
         waveform = batch["waveform"].to(device)
@@ -237,6 +327,11 @@ def validate_epoch(
         all_scores.append(scores.cpu())
         all_labels.append(y_task.cpu())
 
+        # Collect domain labels for breakdown
+        if compute_domain_breakdown:
+            all_codec_labels.append(y_codec.cpu())
+            all_codec_q_labels.append(y_codec_q.cpu())
+
     # Compute EER
     all_scores = torch.cat(all_scores).numpy()
     all_labels = torch.cat(all_labels).numpy()
@@ -261,11 +356,67 @@ def validate_epoch(
         metrics["codec_acc"] = total_codec_acc / num_batches
         metrics["codec_q_acc"] = total_codec_q_acc / num_batches
 
+    # Per-domain breakdown
+    if compute_domain_breakdown and codec_vocab and codec_q_vocab:
+        all_codec_labels = torch.cat(all_codec_labels).numpy()
+        all_codec_q_labels = torch.cat(all_codec_q_labels).numpy()
+
+        # Compute EER per CODEC
+        codec_id_to_name = {v: k for k, v in codec_vocab.items()}
+        metrics["per_codec"] = {}
+        for codec_id in np.unique(all_codec_labels):
+            mask = all_codec_labels == codec_id
+            if mask.sum() > 10:  # Need enough samples
+                codec_scores = all_scores[mask]
+                codec_labels = all_labels[mask]
+                if len(np.unique(codec_labels)) == 2:  # Need both classes
+                    codec_eer, _ = compute_eer(codec_scores, codec_labels)
+                    codec_name = codec_id_to_name.get(codec_id, str(codec_id))
+                    metrics["per_codec"][codec_name] = {
+                        "eer": float(codec_eer),
+                        "n_samples": int(mask.sum()),
+                    }
+
+        # Compute EER per CODEC_Q
+        codec_q_id_to_name = {v: k for k, v in codec_q_vocab.items()}
+        metrics["per_codec_q"] = {}
+        for codec_q_id in np.unique(all_codec_q_labels):
+            mask = all_codec_q_labels == codec_q_id
+            if mask.sum() > 10:
+                cq_scores = all_scores[mask]
+                cq_labels = all_labels[mask]
+                if len(np.unique(cq_labels)) == 2:
+                    cq_eer, _ = compute_eer(cq_scores, cq_labels)
+                    cq_name = codec_q_id_to_name.get(codec_q_id, str(codec_q_id))
+                    metrics["per_codec_q"][cq_name] = {
+                        "eer": float(cq_eer),
+                        "n_samples": int(mask.sum()),
+                    }
+
     return metrics
 
 
+def get_layer_weights(model: nn.Module) -> Optional[list[float]]:
+    """Extract learned layer mixing weights from model.
+
+    Args:
+        model: Model with potential layer_pooling.
+
+    Returns:
+        List of layer weights or None if not available.
+    """
+    try:
+        if hasattr(model, "backbone") and hasattr(model.backbone, "layer_pooling"):
+            weights = model.backbone.layer_pooling.weights
+            normalized = torch.softmax(weights, dim=0)
+            return normalized.detach().cpu().tolist()
+    except Exception:
+        pass
+    return None
+
+
 class Trainer:
-    """Training loop manager with checkpointing and early stopping.
+    """Training loop manager with checkpointing, early stopping, and comprehensive logging.
 
     Args:
         model: Model to train.
@@ -292,6 +443,12 @@ class Trainer:
         wandb_project: Wandb project name.
         wandb_entity: Wandb entity (team or username).
         wandb_run_name: Wandb run name.
+        wandb_tags: Optional list of wandb tags.
+        batch_sample_rate: Rate of batches to log in detail (0.0-1.0).
+        track_gradients: Whether to track gradient norms.
+        log_domain_breakdown_every: Epochs between per-domain metric computation.
+        codec_vocab: CODEC vocabulary for domain breakdown.
+        codec_q_vocab: CODEC_Q vocabulary for domain breakdown.
     """
 
     def __init__(
@@ -320,6 +477,12 @@ class Trainer:
         wandb_project: str = "asvspoof5-dann",
         wandb_entity: Optional[str] = None,
         wandb_run_name: Optional[str] = None,
+        wandb_tags: Optional[list[str]] = None,
+        batch_sample_rate: float = 0.02,
+        track_gradients: bool = True,
+        log_domain_breakdown_every: int = 5,
+        codec_vocab: Optional[dict] = None,
+        codec_q_vocab: Optional[dict] = None,
     ):
         self.model = model
         self.train_loader = train_loader
@@ -341,24 +504,31 @@ class Trainer:
         self.monitor_metric = monitor_metric
         self.monitor_mode = monitor_mode
         self.lambda_scheduler = lambda_scheduler
+        self.batch_sample_rate = batch_sample_rate
+        self.track_gradients = track_gradients
+        self.log_domain_breakdown_every = log_domain_breakdown_every
+        self.codec_vocab = codec_vocab
+        self.codec_q_vocab = codec_q_vocab
 
         self.scaler = GradScaler("cuda") if use_amp else None
 
-        # Wandb setup
-        self.use_wandb = use_wandb and WANDB_AVAILABLE
-        if self.use_wandb:
-            if not WANDB_AVAILABLE:
-                logger.warning("Wandb requested but not installed. Skipping.")
-                self.use_wandb = False
-            else:
-                wandb.init(
-                    project=wandb_project,
-                    entity=wandb_entity,
-                    name=wandb_run_name,
-                    config=config,
-                    dir=str(run_dir),
-                )
-                logger.info(f"Wandb initialized: {wandb.run.url}")
+        # Setup directories
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        (self.run_dir / "checkpoints").mkdir(exist_ok=True)
+
+        # Initialize ExperimentLogger
+        self.exp_logger = ExperimentLogger(
+            run_dir=self.run_dir,
+            run_name=wandb_run_name or self.run_dir.name,
+            config=config,
+            use_wandb=use_wandb and WANDB_AVAILABLE,
+            wandb_project=wandb_project,
+            wandb_entity=wandb_entity,
+            wandb_tags=wandb_tags,
+        )
+
+        # Log experiment start
+        self._log_experiment_start()
 
         # State
         self.best_metric = float("inf") if monitor_mode == "min" else float("-inf")
@@ -366,15 +536,61 @@ class Trainer:
         self.current_epoch = 0
         self.global_step = 0
 
-        # Logging
+        # Training log
         self.train_log = []
-
-        # Setup directories
-        self.run_dir.mkdir(parents=True, exist_ok=True)
-        (self.run_dir / "checkpoints").mkdir(exist_ok=True)
 
         # Save config
         save_config(config, self.run_dir / "config_resolved.yaml")
+
+    def _log_experiment_start(self) -> None:
+        """Log comprehensive experiment start event."""
+        # Model summary
+        total_params = sum(p.numel() for p in self.model.parameters())
+        trainable_params = sum(
+            p.numel() for p in self.model.parameters() if p.requires_grad
+        )
+
+        self.exp_logger.log_model_summary(self.model, watch_gradients=False)
+
+        # Dataset stats
+        train_size = len(self.train_loader.dataset)
+        val_size = len(self.val_loader.dataset)
+
+        self.exp_logger.log_dataset_stats(
+            train_size=train_size,
+            val_size=val_size,
+        )
+
+        # Log experiment start wide event
+        backbone_name = self.config.get("backbone", {}).get("name", "unknown")
+        start_event = {
+            "method": self.method,
+            "backbone": backbone_name,
+            "max_epochs": self.max_epochs,
+            "batch_size": self.config.get("dataloader", {}).get("batch_size", 32),
+            "learning_rate": self.config.get("training", {}).get("optimizer", {}).get("lr"),
+            "model": {
+                "total_params": total_params,
+                "trainable_params": trainable_params,
+            },
+            "dataset": {
+                "train_size": train_size,
+                "val_size": val_size,
+            },
+        }
+
+        if self.method == "dann":
+            start_event["dann"] = {
+                "lambda_init": self.config.get("dann", {}).get("lambda_", 0.1),
+                "lambda_schedule": self.config.get("dann", {}).get("lambda_schedule", {}),
+            }
+
+        self.exp_logger.log_wide_event("experiment_start", start_event)
+
+        logger.info(f"Starting training for {self.max_epochs} epochs")
+        logger.info(f"Run directory: {self.run_dir}")
+        logger.info(f"Model: {total_params:,} params ({trainable_params:,} trainable)")
+        logger.info(f"Dataset: train={train_size}, val={val_size}")
 
     def train(self) -> dict:
         """Run full training loop.
@@ -382,19 +598,18 @@ class Trainer:
         Returns:
             Dictionary of best metrics.
         """
-        logger.info(f"Starting training for {self.max_epochs} epochs")
-        logger.info(f"Run directory: {self.run_dir}")
-
         for epoch in range(self.max_epochs):
+            epoch_start_time = time.time()
             self.current_epoch = epoch
 
             # Update DANN lambda if scheduled
+            current_lambda = None
             if self.lambda_scheduler is not None and self.method == "dann":
-                new_lambda = self.lambda_scheduler.get_lambda(epoch)
-                self.model.set_lambda(new_lambda)
+                current_lambda = self.lambda_scheduler.get_lambda(epoch)
+                self.model.set_lambda(current_lambda)
                 if hasattr(self.loss_fn, "set_lambda"):
-                    self.loss_fn.set_lambda(new_lambda)
-                logger.info(f"Epoch {epoch}: lambda = {new_lambda:.4f}")
+                    self.loss_fn.set_lambda(current_lambda)
+                logger.info(f"Epoch {epoch}: lambda = {current_lambda:.4f}")
 
             # Train
             train_metrics = train_epoch(
@@ -408,7 +623,12 @@ class Trainer:
                 gradient_clip=self.gradient_clip,
                 method=self.method,
                 log_interval=self.log_interval,
+                batch_sample_rate=self.batch_sample_rate,
+                track_gradients=self.track_gradients,
             )
+
+            # Extract batch samples for separate logging
+            batch_samples = train_metrics.pop("_batch_samples", [])
 
             # Log training metrics
             logger.info(
@@ -417,22 +637,25 @@ class Trainer:
                 f"task_acc={train_metrics['task_acc']:.4f}"
             )
 
-            # Wandb logging - training
-            if self.use_wandb:
-                wandb_train = {f"train/{k}": v for k, v in train_metrics.items()}
-                wandb_train["epoch"] = epoch
-                if self.scheduler is not None:
-                    wandb_train["lr"] = self.scheduler.get_last_lr()[0]
-                wandb.log(wandb_train, step=epoch)
-
             # Validate
+            val_metrics = None
             if epoch % self.val_interval == 0:
+                # Compute domain breakdown periodically
+                compute_breakdown = (
+                    epoch % self.log_domain_breakdown_every == 0
+                    and self.codec_vocab is not None
+                    and self.codec_q_vocab is not None
+                )
+
                 val_metrics = validate_epoch(
                     self.model,
                     self.val_loader,
                     self.loss_fn,
                     self.device,
                     method=self.method,
+                    compute_domain_breakdown=compute_breakdown,
+                    codec_vocab=self.codec_vocab,
+                    codec_q_vocab=self.codec_q_vocab,
                 )
 
                 logger.info(
@@ -441,11 +664,6 @@ class Trainer:
                     f"eer={val_metrics['eer']:.4f}, "
                     f"min_dcf={val_metrics['min_dcf']:.4f}"
                 )
-
-                # Wandb logging - validation
-                if self.use_wandb:
-                    wandb_val = {f"val/{k}": v for k, v in val_metrics.items()}
-                    wandb.log(wandb_val, step=epoch)
 
                 # Check for improvement
                 current_metric = val_metrics[self.monitor_metric]
@@ -472,15 +690,63 @@ class Trainer:
                 else:
                     self.epochs_without_improvement += 1
 
-                # Record to log
-                log_entry = {
-                    "epoch": epoch,
-                    "train": train_metrics,
-                    "val": val_metrics,
+            # Build epoch-complete wide event
+            epoch_duration = time.time() - epoch_start_time
+            epoch_event = {
+                "epoch": epoch,
+                "duration_sec": round(epoch_duration, 2),
+                "train": {
+                    k: v for k, v in train_metrics.items()
+                    if isinstance(v, (int, float))
+                },
+                "is_best": val_metrics is not None and self.epochs_without_improvement == 0,
+            }
+
+            if val_metrics:
+                epoch_event["val"] = {
+                    k: v for k, v in val_metrics.items()
+                    if isinstance(v, (int, float)) and not k.startswith("per_")
                 }
-                if self.lambda_scheduler is not None and self.method == "dann":
-                    log_entry["lambda"] = self.lambda_scheduler.get_lambda(epoch)
-                self.train_log.append(log_entry)
+                # Include domain breakdown if computed
+                if "per_codec" in val_metrics:
+                    epoch_event["per_codec"] = val_metrics["per_codec"]
+                if "per_codec_q" in val_metrics:
+                    epoch_event["per_codec_q"] = val_metrics["per_codec_q"]
+
+            # Learning rate
+            if self.scheduler is not None:
+                epoch_event["learning_rate"] = self.scheduler.get_last_lr()[0]
+
+            # DANN lambda
+            if current_lambda is not None:
+                epoch_event["lambda_domain"] = current_lambda
+
+            # Layer weights
+            layer_weights = get_layer_weights(self.model)
+            if layer_weights:
+                epoch_event["layer_weights"] = layer_weights
+
+            # GPU memory
+            gpu_mem = get_gpu_memory_usage()
+            if gpu_mem is not None:
+                epoch_event["gpu_memory_gb"] = gpu_mem
+
+            # Log wide event
+            self.exp_logger.log_wide_event("epoch_complete", epoch_event)
+
+            # Record to log
+            log_entry = {
+                "epoch": epoch,
+                "train": train_metrics,
+            }
+            if val_metrics:
+                log_entry["val"] = {
+                    k: v for k, v in val_metrics.items()
+                    if not k.startswith("per_")
+                }
+            if current_lambda is not None:
+                log_entry["lambda"] = current_lambda
+            self.train_log.append(log_entry)
 
             # Periodic checkpoint
             if epoch % self.save_every_n_epochs == 0:
@@ -509,9 +775,9 @@ class Trainer:
         # Save training log
         with open(self.run_dir / "train_log.jsonl", "w") as f:
             for entry in self.train_log:
-                f.write(json.dumps(entry) + "\n")
+                f.write(json.dumps(entry, default=str) + "\n")
 
-        # Save final metrics
+        # Build final metrics
         final_metrics = {
             "best_epoch": self.current_epoch - self.epochs_without_improvement,
             f"best_{self.monitor_metric}": self.best_metric,
@@ -522,9 +788,17 @@ class Trainer:
 
         save_metrics(final_metrics, self.run_dir / "metrics_train.json")
 
-        # Wandb final logging
-        if self.use_wandb:
-            wandb.log(final_metrics)
-            wandb.finish()
+        # Log training complete wide event
+        self.exp_logger.log_wide_event("training_complete", final_metrics)
+
+        # Set wandb summary
+        self.exp_logger.set_summary({
+            "best_epoch": final_metrics["best_epoch"],
+            f"best_{self.monitor_metric}": self.best_metric,
+            "total_epochs": self.current_epoch + 1,
+        })
+
+        # Finish logging
+        self.exp_logger.finish()
 
         return final_metrics

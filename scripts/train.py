@@ -16,6 +16,9 @@ Usage:
 
     # Override run name
     python scripts/train.py --config configs/wavlm_dann.yaml --name my_experiment
+
+    # With wandb logging
+    python scripts/train.py --config configs/wavlm_dann.yaml --wandb
 """
 
 import argparse
@@ -49,14 +52,17 @@ from asvspoof5_domain_invariant_cm.training import (
 )
 from asvspoof5_domain_invariant_cm.utils import (
     get_device,
+    get_experiment_context,
     get_manifest_path,
     get_manifests_dir,
     get_run_dir,
     load_config,
     merge_configs,
     set_seed,
+    setup_logging,
 )
 
+# Setup basic logging first (will be reconfigured per-run)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -135,6 +141,12 @@ def parse_args():
         type=str,
         default=None,
         help="Wandb entity (team or username)",
+    )
+    parser.add_argument(
+        "--wandb-tags",
+        type=str,
+        default=None,
+        help="Comma-separated wandb tags",
     )
     return parser.parse_args()
 
@@ -254,6 +266,44 @@ def build_model(config: dict, num_codecs: int, num_codec_qs: int) -> torch.nn.Mo
     return model
 
 
+def get_dataset_distribution(dataset, codec_vocab: dict, codec_q_vocab: dict) -> dict:
+    """Get class and domain distribution from dataset."""
+    import pandas as pd
+
+    # Try to get manifest for stats
+    if hasattr(dataset, "manifest"):
+        df = dataset.manifest
+    elif hasattr(dataset, "dataset") and hasattr(dataset.dataset, "manifest"):
+        df = dataset.dataset.manifest
+    else:
+        return {}
+
+    distribution = {}
+
+    # Class distribution
+    if "y_task" in df.columns:
+        class_counts = df["y_task"].value_counts().to_dict()
+        distribution["class"] = {
+            "bonafide": class_counts.get(0, 0),
+            "spoof": class_counts.get(1, 0),
+        }
+    elif "key" in df.columns:
+        class_counts = df["key"].value_counts().to_dict()
+        distribution["class"] = class_counts
+
+    # CODEC distribution (top 10)
+    if "codec" in df.columns:
+        codec_counts = df["codec"].value_counts().head(10).to_dict()
+        distribution["codec_top10"] = codec_counts
+
+    # CODEC_Q distribution (top 10)
+    if "codec_q" in df.columns:
+        codec_q_counts = df["codec_q"].value_counts().head(10).to_dict()
+        distribution["codec_q_top10"] = codec_q_counts
+
+    return distribution
+
+
 def main():
     args = parse_args()
 
@@ -278,7 +328,15 @@ def main():
         run_name = f"{backbone_name}_{method}_{timestamp}"
 
     run_dir = get_run_dir(run_name)
+
+    # Reconfigure logging with JSON output to run directory
+    setup_logging(run_dir, json_output=True)
     logger.info(f"Run directory: {run_dir}")
+
+    # Log experiment context
+    context = get_experiment_context(config)
+    logger.info(f"Git commit: {context['git'].get('commit', 'N/A')[:8]}")
+    logger.info(f"Hardware: {context['hardware'].get('gpu_name', 'CPU')}")
 
     # Load vocabularies
     manifests_dir = get_manifests_dir()
@@ -323,6 +381,11 @@ def main():
 
     logger.info(f"Train samples: {len(train_dataset)}")
     logger.info(f"Val samples: {len(val_dataset)}")
+
+    # Get dataset distribution for logging
+    train_distribution = get_dataset_distribution(train_dataset, codec_vocab, codec_q_vocab)
+    if train_distribution:
+        logger.info(f"Train class distribution: {train_distribution.get('class', {})}")
 
     # Create dataloaders
     fixed_length = int(max_duration * sample_rate)
@@ -409,7 +472,25 @@ def main():
                 total_epochs=training_cfg.get("max_epochs", 50),
             )
 
-    # Create trainer
+    # Logging config
+    logging_cfg = config.get("logging", {})
+    wandb_cfg = config.get("wandb", {})
+
+    # Parse wandb tags
+    wandb_tags = None
+    if args.wandb_tags:
+        wandb_tags = [t.strip() for t in args.wandb_tags.split(",")]
+    elif wandb_cfg.get("tags"):
+        wandb_tags = wandb_cfg.get("tags")
+    else:
+        # Generate tags from config
+        wandb_tags = [
+            config.get("backbone", {}).get("name", "unknown"),
+            method,
+            "track1",
+        ]
+
+    # Create trainer with enhanced logging
     trainer = Trainer(
         model=model,
         train_loader=train_loader,
@@ -425,28 +506,40 @@ def main():
         patience=training_cfg.get("patience", 10),
         gradient_clip=training_cfg.get("gradient_clip", 1.0),
         use_amp=args.amp,
-        log_interval=config.get("logging", {}).get("log_every_n_steps", 50),
-        val_interval=config.get("logging", {}).get("val_every_n_epochs", 1),
+        log_interval=logging_cfg.get("log_every_n_steps", 50),
+        val_interval=logging_cfg.get("val_every_n_epochs", 1),
         save_every_n_epochs=training_cfg.get("save_every_n_epochs", 5),
         monitor_metric=training_cfg.get("monitor_metric", "eer"),
         monitor_mode=training_cfg.get("monitor_mode", "min"),
         lambda_scheduler=lambda_scheduler,
-        use_wandb=args.wandb,
-        wandb_project=args.wandb_project,
-        wandb_entity=args.wandb_entity,
+        # Enhanced logging options
+        use_wandb=args.wandb or wandb_cfg.get("enabled", False),
+        wandb_project=args.wandb_project or wandb_cfg.get("project", "asvspoof5-dann"),
+        wandb_entity=args.wandb_entity or wandb_cfg.get("entity"),
         wandb_run_name=run_name,
+        wandb_tags=wandb_tags,
+        batch_sample_rate=logging_cfg.get("log_batch_samples", 0.02),
+        track_gradients=logging_cfg.get("track_gradients", True),
+        log_domain_breakdown_every=logging_cfg.get("log_domain_breakdown_every", 5),
+        codec_vocab=codec_vocab,
+        codec_q_vocab=codec_q_vocab,
     )
 
     # Train
     logger.info("=" * 60)
     logger.info(f"Training {method.upper()} model")
+    logger.info(f"Backbone: {config.get('backbone', {}).get('name', 'unknown')}")
+    logger.info(f"Seed: {seed}")
     logger.info("=" * 60)
 
     final_metrics = trainer.train()
 
     logger.info("=" * 60)
     logger.info("Training complete!")
-    logger.info(f"Best {training_cfg.get('monitor_metric', 'eer')}: {final_metrics.get('best_eer', 'N/A')}")
+    monitor_metric = training_cfg.get('monitor_metric', 'eer')
+    best_metric_key = f'best_{monitor_metric}'
+    best_value = final_metrics.get(best_metric_key, 'N/A')
+    logger.info(f"Best {monitor_metric}: {best_value}")
     logger.info(f"Run directory: {run_dir}")
     logger.info("=" * 60)
 

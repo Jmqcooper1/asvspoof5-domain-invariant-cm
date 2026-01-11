@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
 """Compute CKA (Centered Kernel Alignment) between ERM and DANN representations.
 
+This script computes CKA similarity between ERM and DANN model representations
+to analyze how domain-adversarial training changes the learned features.
+
 Usage:
     python scripts/run_cka.py \
         --erm-checkpoint runs/erm_run/checkpoints/best.pt \
         --dann-checkpoint runs/dann_run/checkpoints/best.pt
+
+    # With wandb logging
+    python scripts/run_cka.py \
+        --erm-checkpoint ... --dann-checkpoint ... --wandb
 """
 
 import argparse
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -30,7 +38,20 @@ from asvspoof5_domain_invariant_cm.models import (
     create_backbone,
     create_pooling,
 )
-from asvspoof5_domain_invariant_cm.utils import get_device, get_manifest_path
+from asvspoof5_domain_invariant_cm.utils import (
+    get_device,
+    get_experiment_context,
+    get_manifest_path,
+    setup_logging,
+)
+
+# Optional wandb import
+try:
+    import wandb
+
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -100,6 +121,12 @@ def parse_args():
         type=str,
         default="asvspoof5-dann",
         help="Wandb project name",
+    )
+    parser.add_argument(
+        "--wandb-entity",
+        type=str,
+        default=None,
+        help="Wandb entity (team or username)",
     )
     return parser.parse_args()
 
@@ -244,7 +271,7 @@ def plot_cka_heatmap(
     layers = sorted(cka_results["per_layer"].keys())
     cka_values = [cka_results["per_layer"][l]["cka"] for l in layers]
 
-    fig, ax = plt.subplots(figsize=(10, 3))
+    fig, ax = plt.subplots(figsize=(12, 3))
 
     # Create heatmap as a single row
     data = np.array(cka_values).reshape(1, -1)
@@ -259,9 +286,46 @@ def plot_cka_heatmap(
 
     # Add values
     for i, v in enumerate(cka_values):
-        ax.text(i, 0, f"{v:.2f}", ha="center", va="center", fontsize=9)
+        color = "white" if v < 0.5 else "black"
+        ax.text(i, 0, f"{v:.2f}", ha="center", va="center", fontsize=9, color=color)
 
     plt.colorbar(im, ax=ax, label="CKA")
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150)
+    plt.close()
+
+
+def plot_cka_line(
+    cka_results: dict,
+    output_path: Path,
+):
+    """Plot CKA similarity as line plot."""
+    layers = sorted(cka_results["per_layer"].keys())
+    cka_values = [cka_results["per_layer"][l]["cka"] for l in layers]
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    ax.plot(layers, cka_values, "o-", linewidth=2, markersize=8, color="steelblue")
+    ax.fill_between(layers, cka_values, alpha=0.3, color="steelblue")
+
+    ax.set_xlabel("Layer Index", fontsize=12)
+    ax.set_ylabel("CKA Similarity", fontsize=12)
+    ax.set_title("CKA Similarity (ERM vs DANN) by Layer", fontsize=14)
+    ax.set_ylim(0, 1)
+    ax.grid(True, alpha=0.3)
+
+    # Annotate min
+    min_idx = np.argmin(cka_values)
+    ax.annotate(
+        f"Min: {cka_values[min_idx]:.3f}",
+        (layers[min_idx], cka_values[min_idx]),
+        textcoords="offset points",
+        xytext=(0, -20),
+        ha="center",
+        fontsize=10,
+        color="red",
+    )
+
     plt.tight_layout()
     plt.savefig(output_path, dpi=150)
     plt.close()
@@ -294,6 +358,54 @@ def plot_cka_matrix(
     plt.close()
 
 
+def log_to_wandb(
+    args,
+    cka_results: dict,
+    output_dir: Path,
+) -> None:
+    """Log CKA results to wandb."""
+    if not WANDB_AVAILABLE:
+        logger.warning("Wandb not available, skipping logging")
+        return
+
+    try:
+        wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name="cka_analysis",
+            job_type="analysis",
+        )
+
+        # Log per-layer CKA
+        for layer, data in cka_results["per_layer"].items():
+            wandb.log({f"cka/layer_{layer}": data["cka"]})
+
+        # Log summary stats
+        wandb.log({
+            "cka/mean": cka_results["mean_cka"],
+            "cka/min": cka_results["min_cka"],
+            "cka/max": cka_results["max_cka"],
+            "cka/most_different_layer": cka_results["most_different_layer"],
+        })
+
+        # Log per-layer table
+        rows = []
+        for layer, data in cka_results["per_layer"].items():
+            rows.append([layer, data["cka"]])
+        table = wandb.Table(columns=["layer", "cka"], data=rows)
+        wandb.log({"cka/per_layer_table": table})
+
+        # Log plots
+        for plot_file in output_dir.glob("*.png"):
+            wandb.log({f"plots/{plot_file.stem}": wandb.Image(str(plot_file))})
+
+        wandb.finish()
+        logger.info("Logged CKA results to Wandb")
+
+    except Exception as e:
+        logger.warning(f"Wandb logging failed: {e}")
+
+
 def main():
     args = parse_args()
 
@@ -308,7 +420,14 @@ def main():
         output_dir = args.erm_checkpoint.parent.parent.parent / "cka_analysis"
 
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Setup logging with JSON output
+    setup_logging(output_dir, json_output=True)
     logger.info(f"Output directory: {output_dir}")
+
+    # Log experiment context
+    context = get_experiment_context()
+    logger.info(f"Git commit: {context['git'].get('commit', 'N/A')[:8] if context['git'].get('commit') else 'N/A'}")
 
     # Load ERM model
     logger.info(f"Loading ERM model: {args.erm_checkpoint}")
@@ -373,6 +492,10 @@ def main():
     plot_cka_heatmap(cka_results, output_dir / "cka_erm_vs_dann.png")
     logger.info(f"Saved CKA heatmap: {output_dir / 'cka_erm_vs_dann.png'}")
 
+    # Plot CKA line plot
+    plot_cka_line(cka_results, output_dir / "cka_erm_vs_dann_line.png")
+    logger.info(f"Saved CKA line plot: {output_dir / 'cka_erm_vs_dann_line.png'}")
+
     # Save per-layer CKA to CSV
     rows = []
     for layer, data in cka_results["per_layer"].items():
@@ -399,6 +522,20 @@ def main():
     plot_cka_matrix(erm_cka_matrix, layers, output_dir / "cka_matrix_erm.png", "ERM Layer-wise CKA")
     plot_cka_matrix(dann_cka_matrix, layers, output_dir / "cka_matrix_dann.png", "DANN Layer-wise CKA")
 
+    # Build analysis complete wide event
+    analysis_event = {
+        "analysis_type": "cka",
+        "erm_checkpoint": str(args.erm_checkpoint),
+        "dann_checkpoint": str(args.dann_checkpoint),
+        "split": args.split,
+        "n_samples": len(dataset),
+        "mean_cka": cka_results["mean_cka"],
+        "min_cka": cka_results["min_cka"],
+        "max_cka": cka_results["max_cka"],
+        "most_different_layer": cka_results["most_different_layer"],
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
     # Save full results
     results = {
         "erm_vs_dann": {
@@ -413,6 +550,7 @@ def main():
         },
         "n_samples": len(dataset),
         "split": args.split,
+        "analysis_event": analysis_event,
     }
 
     with open(output_dir / "cka_results.json", "w") as f:
@@ -422,28 +560,7 @@ def main():
 
     # Wandb logging
     if args.wandb:
-        try:
-            import wandb
-
-            wandb.init(
-                project=args.wandb_project,
-                name="cka_analysis",
-            )
-
-            # Log CKA values
-            if "layerwise_cka" in results:
-                for layer_name, cka_value in results["layerwise_cka"].items():
-                    wandb.log({f"cka/layer/{layer_name}": cka_value})
-
-            if "mean_cka" in results:
-                wandb.log({"cka/mean": results["mean_cka"]})
-
-            wandb.finish()
-            logger.info("Logged CKA results to Wandb")
-        except ImportError:
-            logger.warning("Wandb not installed, skipping logging")
-        except Exception as e:
-            logger.warning(f"Wandb logging failed: {e}")
+        log_to_wandb(args, cka_results, output_dir)
 
     return 0
 

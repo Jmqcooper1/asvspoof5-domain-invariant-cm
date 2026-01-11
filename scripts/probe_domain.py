@@ -13,11 +13,15 @@ Usage:
     python scripts/probe_domain.py \
         --erm-checkpoint runs/erm_run/checkpoints/best.pt \
         --dann-checkpoint runs/dann_run/checkpoints/best.pt
+
+    # With wandb logging
+    python scripts/probe_domain.py --erm-checkpoint ... --dann-checkpoint ... --wandb
 """
 
 import argparse
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -40,7 +44,20 @@ from asvspoof5_domain_invariant_cm.models import (
     create_backbone,
     create_pooling,
 )
-from asvspoof5_domain_invariant_cm.utils import get_device, get_manifest_path
+from asvspoof5_domain_invariant_cm.utils import (
+    get_device,
+    get_experiment_context,
+    get_manifest_path,
+    setup_logging,
+)
+
+# Optional wandb import
+try:
+    import wandb
+
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -141,6 +158,12 @@ def parse_args():
         type=str,
         default="asvspoof5-dann",
         help="Wandb project name",
+    )
+    parser.add_argument(
+        "--wandb-entity",
+        type=str,
+        default=None,
+        help="Wandb entity (team or username)",
     )
     return parser.parse_args()
 
@@ -323,13 +346,20 @@ def plot_probe_results(
     """Plot probe accuracy vs layer."""
     plt.figure(figsize=(10, 6))
 
-    layers = sorted(results["per_layer"].keys())
+    layers = sorted([k for k in results["per_layer"].keys() if k != "repr"])
     accuracies = [results["per_layer"][l]["accuracy"] for l in layers]
 
-    plt.plot(layers, accuracies, "o-", linewidth=2, markersize=8)
+    plt.plot(layers, accuracies, "o-", linewidth=2, markersize=8, label="Layers")
+
+    # Add repr point if available
+    if "repr" in results["per_layer"]:
+        repr_acc = results["per_layer"]["repr"]["accuracy"]
+        plt.axhline(y=repr_acc, color='r', linestyle='--', label=f'Repr ({repr_acc:.3f})')
+
     plt.xlabel("Layer Index", fontsize=12)
     plt.ylabel("Probe Accuracy", fontsize=12)
     plt.title(title, fontsize=14)
+    plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(output_path, dpi=150)
@@ -345,12 +375,22 @@ def plot_comparison(
     """Plot ERM vs DANN probe comparison."""
     plt.figure(figsize=(10, 6))
 
-    layers = sorted(erm_results["per_layer"].keys())
+    layers = sorted([k for k in erm_results["per_layer"].keys() if k != "repr"])
     erm_acc = [erm_results["per_layer"][l]["accuracy"] for l in layers]
     dann_acc = [dann_results["per_layer"][l]["accuracy"] for l in layers]
 
     plt.plot(layers, erm_acc, "o-", linewidth=2, markersize=8, label="ERM")
     plt.plot(layers, dann_acc, "s-", linewidth=2, markersize=8, label="DANN")
+
+    # Add repr points if available
+    if "repr" in erm_results["per_layer"]:
+        erm_repr = erm_results["per_layer"]["repr"]["accuracy"]
+        dann_repr = dann_results["per_layer"]["repr"]["accuracy"]
+        max_layer = max(layers)
+        plt.scatter([max_layer + 1], [erm_repr], marker='o', s=100, color='C0', edgecolor='black', zorder=5)
+        plt.scatter([max_layer + 1], [dann_repr], marker='s', s=100, color='C1', edgecolor='black', zorder=5)
+        plt.annotate('ERM repr', (max_layer + 1.2, erm_repr), fontsize=9)
+        plt.annotate('DANN repr', (max_layer + 1.2, dann_repr), fontsize=9)
 
     plt.xlabel("Layer Index", fontsize=12)
     plt.ylabel("Probe Accuracy", fontsize=12)
@@ -360,6 +400,76 @@ def plot_comparison(
     plt.tight_layout()
     plt.savefig(output_path, dpi=150)
     plt.close()
+
+
+def log_to_wandb(
+    args,
+    all_results: dict,
+    output_dir: Path,
+    mode: str,
+    comparison_results: dict = None,
+) -> None:
+    """Log probe results to wandb."""
+    if not WANDB_AVAILABLE:
+        logger.warning("Wandb not available, skipping logging")
+        return
+
+    try:
+        wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name=f"probes_{mode}",
+            job_type="analysis",
+        )
+
+        # Log per-model, per-domain results
+        for model_name, model_results in all_results.items():
+            for domain, results in model_results.items():
+                # Log per-layer accuracies
+                for layer, layer_data in results["per_layer"].items():
+                    wandb.log({
+                        f"probe/{model_name}/{domain}/layer_{layer}": layer_data["accuracy"],
+                    })
+
+                # Log summary stats
+                wandb.log({
+                    f"probe/{model_name}/{domain}/max_leakage_layer": results.get("max_leakage_layer"),
+                    f"probe/{model_name}/{domain}/max_leakage_accuracy": results.get("max_leakage_accuracy"),
+                })
+
+        # Log comparison results
+        if comparison_results:
+            for domain, comparison in comparison_results.items():
+                wandb.log({
+                    f"probe_comparison/{domain}/avg_erm_accuracy": comparison["avg_erm_accuracy"],
+                    f"probe_comparison/{domain}/avg_dann_accuracy": comparison["avg_dann_accuracy"],
+                    f"probe_comparison/{domain}/avg_reduction": comparison["avg_reduction"],
+                })
+
+                # Log comparison table
+                rows = []
+                for layer, data in comparison["per_layer"].items():
+                    rows.append([
+                        str(layer),
+                        data["erm_accuracy"],
+                        data["dann_accuracy"],
+                        data["reduction"],
+                    ])
+                table = wandb.Table(
+                    columns=["layer", "erm_accuracy", "dann_accuracy", "reduction"],
+                    data=rows,
+                )
+                wandb.log({f"probe_comparison/{domain}/table": table})
+
+        # Log plots
+        for plot_file in output_dir.glob("*.png"):
+            wandb.log({f"plots/{plot_file.stem}": wandb.Image(str(plot_file))})
+
+        wandb.finish()
+        logger.info("Logged probe results to Wandb")
+
+    except Exception as e:
+        logger.warning(f"Wandb logging failed: {e}")
 
 
 def main():
@@ -400,7 +510,14 @@ def main():
             output_dir = args.checkpoint.parent.parent / "probes"
 
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Setup logging with JSON output
+    setup_logging(output_dir, json_output=True)
     logger.info(f"Output directory: {output_dir}")
+
+    # Log experiment context
+    context = get_experiment_context()
+    logger.info(f"Git commit: {context['git'].get('commit', 'N/A')[:8] if context['git'].get('commit') else 'N/A'}")
 
     # Load first model to get config/vocabs
     first_ckpt = list(checkpoints.values())[0]
@@ -510,6 +627,7 @@ def main():
     logger.info(f"Saved results: {results_path}")
 
     # If comparison mode, create comparison plots and CSV
+    comparison_results = {}
     if mode == "comparison":
         for domain in domains:
             erm_results = all_results["erm"][domain]
@@ -521,6 +639,7 @@ def main():
 
             # Comparison CSV
             comparison = compare_probe_accuracies(erm_results, dann_results)
+            comparison_results[domain] = comparison
 
             rows = []
             for layer, data in comparison["per_layer"].items():
@@ -541,41 +660,37 @@ def main():
             logger.info(f"  Avg DANN accuracy: {comparison['avg_dann_accuracy']:.4f}")
             logger.info(f"  Avg reduction: {comparison['avg_reduction']:.4f}")
 
+    # Build analysis complete wide event
+    analysis_event = {
+        "analysis_type": "domain_probes",
+        "mode": mode,
+        "split": args.split,
+        "n_samples": len(dataset),
+        "domains": domains,
+        "classifier": args.classifier,
+        "cv_folds": args.cv_folds,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+    if comparison_results:
+        analysis_event["comparison_summary"] = {
+            domain: {
+                "avg_erm_accuracy": comp["avg_erm_accuracy"],
+                "avg_dann_accuracy": comp["avg_dann_accuracy"],
+                "avg_reduction": comp["avg_reduction"],
+            }
+            for domain, comp in comparison_results.items()
+        }
+
+    # Save analysis event
+    with open(output_dir / "analysis_event.json", "w") as f:
+        json.dump(analysis_event, f, indent=2, default=str)
+
     logger.info(f"\nAll results saved to: {output_dir}")
 
     # Wandb logging
     if args.wandb:
-        try:
-            import wandb
-
-            wandb.init(
-                project=args.wandb_project,
-                name="domain_probes",
-            )
-
-            # Log probe results
-            for domain in ["codec", "codec_q"]:
-                if domain in all_results:
-                    for layer_name, acc in all_results[domain].items():
-                        wandb.log({
-                            f"probe/{domain}/{layer_name}": acc,
-                        })
-
-            # Log comparison if available
-            if comparison_results:
-                for domain, comparison in comparison_results.items():
-                    wandb.log({
-                        f"probe_comparison/{domain}/avg_erm_accuracy": comparison["avg_erm_accuracy"],
-                        f"probe_comparison/{domain}/avg_dann_accuracy": comparison["avg_dann_accuracy"],
-                        f"probe_comparison/{domain}/avg_reduction": comparison["avg_reduction"],
-                    })
-
-            wandb.finish()
-            logger.info("Logged probe results to Wandb")
-        except ImportError:
-            logger.warning("Wandb not installed, skipping logging")
-        except Exception as e:
-            logger.warning(f"Wandb logging failed: {e}")
+        log_to_wandb(args, all_results, output_dir, mode, comparison_results)
 
     return 0
 
