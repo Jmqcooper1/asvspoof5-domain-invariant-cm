@@ -526,17 +526,6 @@ waveform → backbone → layer_mix → stats_pool → projection → repr (256d
 If you use this code, please cite:
 
 ```bibtex
-@inproceedings{asvspoof5,
-  title={ASVspoof 5: Automatic Speaker Verification Spoofing and Deepfake Detection Challenge},
-  year={2024}
-}
-
-@article{ganin2016dann,
-  title={Domain-Adversarial Training of Neural Networks},
-  author={Ganin, Yaroslav and others},
-  journal={JMLR},
-  year={2016}
-}
 ```
 
 ---
