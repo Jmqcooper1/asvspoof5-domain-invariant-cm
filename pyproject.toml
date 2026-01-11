@@ -76,3 +76,6 @@ extend-select = ["I"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "slow: marks tests as slow (downloads models, requires network)",
+]
