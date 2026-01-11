@@ -19,7 +19,7 @@ def compute_eer(
 
     Args:
         scores: Detection scores (higher = more likely bonafide).
-        labels: Binary labels (1 = bonafide, 0 = spoof).
+        labels: Binary labels (0 = bonafide, 1 = spoof).
 
     Returns:
         Tuple of (EER, threshold at EER).
@@ -70,7 +70,7 @@ def compute_min_dcf(
 
     Args:
         scores: Detection scores (higher = more likely bonafide).
-        labels: Binary labels (1 = bonafide, 0 = spoof).
+        labels: Binary labels (0 = bonafide, 1 = spoof).
         c_miss: Cost of miss (false rejection).
         c_fa: Cost of false alarm (false acceptance).
         p_target: Prior probability of target (bonafide).
@@ -115,7 +115,7 @@ def compute_cllr(
 
     Args:
         scores: Log-likelihood ratio scores.
-        labels: Binary labels (1 = bonafide, 0 = spoof).
+        labels: Binary labels (0 = bonafide, 1 = spoof).
 
     Returns:
         Cllr value.

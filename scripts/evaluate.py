@@ -100,6 +100,17 @@ def parse_args():
         action="store_true",
         help="Generate official-format score file",
     )
+    parser.add_argument(
+        "--wandb",
+        action="store_true",
+        help="Log metrics to Wandb",
+    )
+    parser.add_argument(
+        "--wandb-project",
+        type=str,
+        default="asvspoof5-dann",
+        help="Wandb project name",
+    )
     return parser.parse_args()
 
 
@@ -353,6 +364,27 @@ def main():
             logger.info(domain_df.to_string(index=False))
 
     logger.info(f"\nResults saved to: {output_dir}")
+
+    # Wandb logging
+    if args.wandb:
+        try:
+            import wandb
+
+            run_name = args.checkpoint.parent.parent.name
+            wandb.init(
+                project=args.wandb_project,
+                name=f"eval_{run_name}_{args.split}",
+                config=config,
+            )
+            wandb.log({
+                f"eval/{args.split}/eer": metrics["eer"],
+                f"eval/{args.split}/min_dcf": metrics["min_dcf"],
+                f"eval/{args.split}/n_samples": metrics["n_samples"],
+            })
+            wandb.finish()
+            logger.info("Logged metrics to Wandb")
+        except ImportError:
+            logger.warning("Wandb not installed, skipping logging")
 
     return 0
 

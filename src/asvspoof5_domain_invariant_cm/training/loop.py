@@ -7,13 +7,21 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from ..utils.io import save_checkpoint, save_config, save_metrics
 
 logger = logging.getLogger(__name__)
+
+# Optional wandb import
+try:
+    import wandb
+
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
 
 
 def compute_accuracy(logits: torch.Tensor, labels: torch.Tensor) -> float:
@@ -76,7 +84,8 @@ def train_epoch(
 
         # Forward pass
         use_amp = scaler is not None
-        with autocast(enabled=use_amp):
+        device_type = "cuda" if device.type == "cuda" else "cpu"
+        with autocast(device_type=device_type, enabled=use_amp):
             outputs = model(waveform, attention_mask, lengths)
 
             if method == "dann":
@@ -279,6 +288,10 @@ class Trainer:
         monitor_metric: Metric to monitor for best model.
         monitor_mode: 'min' or 'max'.
         lambda_scheduler: Optional DANN lambda scheduler.
+        use_wandb: Whether to use wandb logging.
+        wandb_project: Wandb project name.
+        wandb_entity: Wandb entity (team or username).
+        wandb_run_name: Wandb run name.
     """
 
     def __init__(
@@ -303,6 +316,10 @@ class Trainer:
         monitor_metric: str = "eer",
         monitor_mode: str = "min",
         lambda_scheduler=None,
+        use_wandb: bool = False,
+        wandb_project: str = "asvspoof5-dann",
+        wandb_entity: Optional[str] = None,
+        wandb_run_name: Optional[str] = None,
     ):
         self.model = model
         self.train_loader = train_loader
@@ -325,12 +342,29 @@ class Trainer:
         self.monitor_mode = monitor_mode
         self.lambda_scheduler = lambda_scheduler
 
-        self.scaler = GradScaler() if use_amp else None
+        self.scaler = GradScaler("cuda") if use_amp else None
+
+        # Wandb setup
+        self.use_wandb = use_wandb and WANDB_AVAILABLE
+        if self.use_wandb:
+            if not WANDB_AVAILABLE:
+                logger.warning("Wandb requested but not installed. Skipping.")
+                self.use_wandb = False
+            else:
+                wandb.init(
+                    project=wandb_project,
+                    entity=wandb_entity,
+                    name=wandb_run_name,
+                    config=config,
+                    dir=str(run_dir),
+                )
+                logger.info(f"Wandb initialized: {wandb.run.url}")
 
         # State
         self.best_metric = float("inf") if monitor_mode == "min" else float("-inf")
         self.epochs_without_improvement = 0
         self.current_epoch = 0
+        self.global_step = 0
 
         # Logging
         self.train_log = []
@@ -383,6 +417,14 @@ class Trainer:
                 f"task_acc={train_metrics['task_acc']:.4f}"
             )
 
+            # Wandb logging - training
+            if self.use_wandb:
+                wandb_train = {f"train/{k}": v for k, v in train_metrics.items()}
+                wandb_train["epoch"] = epoch
+                if self.scheduler is not None:
+                    wandb_train["lr"] = self.scheduler.get_last_lr()[0]
+                wandb.log(wandb_train, step=epoch)
+
             # Validate
             if epoch % self.val_interval == 0:
                 val_metrics = validate_epoch(
@@ -399,6 +441,11 @@ class Trainer:
                     f"eer={val_metrics['eer']:.4f}, "
                     f"min_dcf={val_metrics['min_dcf']:.4f}"
                 )
+
+                # Wandb logging - validation
+                if self.use_wandb:
+                    wandb_val = {f"val/{k}": v for k, v in val_metrics.items()}
+                    wandb.log(wandb_val, step=epoch)
 
                 # Check for improvement
                 current_metric = val_metrics[self.monitor_metric]
@@ -474,5 +521,10 @@ class Trainer:
             final_metrics["final_val"] = self.train_log[-1].get("val", {})
 
         save_metrics(final_metrics, self.run_dir / "metrics_train.json")
+
+        # Wandb final logging
+        if self.use_wandb:
+            wandb.log(final_metrics)
+            wandb.finish()
 
         return final_metrics

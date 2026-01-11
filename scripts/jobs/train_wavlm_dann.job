@@ -1,0 +1,52 @@
+#!/bin/bash
+#SBATCH --partition=gpu_h100
+#SBATCH --gpus=1
+#SBATCH --job-name=WavLM_DANN
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=9
+#SBATCH --time=24:00:00
+#SBATCH --output=./scripts/jobs/out/%x_%A.out
+
+# =============================================================================
+# Train WavLM + DANN Model
+# =============================================================================
+
+module purge
+module load 2025
+
+cd $HOME/asvspoof5-domain-invariant-cm
+
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+uv sync --locked
+
+# Verify CUDA availability
+uv run python - <<'EOF'
+import torch
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"GPU device count: {torch.cuda.device_count()}")
+    print(f"Active GPU: {torch.cuda.get_device_name(0)}")
+EOF
+echo ""
+
+# Load environment variables from .env if it exists
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
+
+# Set project-specific environment variables
+export ASVSPOOF5_ROOT=${ASVSPOOF5_ROOT:-/scratch-shared/$USER/asvspoof5}
+export WANDB_PROJECT=${WANDB_PROJECT:-asvspoof5-dann}
+export HF_HOME=${HF_HOME:-/scratch-shared/$USER/.cache/huggingface}
+
+echo "=== Training WavLM + DANN ==="
+
+srun uv run python scripts/train.py \
+    --config configs/wavlm_dann.yaml \
+    --name wavlm_dann \
+    --wandb \
+    --amp
+
+echo "Training complete!"

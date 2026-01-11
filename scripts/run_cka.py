@@ -90,6 +90,17 @@ def parse_args():
         default=42,
         help="Random seed",
     )
+    parser.add_argument(
+        "--wandb",
+        action="store_true",
+        help="Log results to Wandb",
+    )
+    parser.add_argument(
+        "--wandb-project",
+        type=str,
+        default="asvspoof5-dann",
+        help="Wandb project name",
+    )
     return parser.parse_args()
 
 
@@ -408,6 +419,32 @@ def main():
         json.dump(results, f, indent=2)
 
     logger.info(f"\nAll results saved to: {output_dir}")
+
+    # Wandb logging
+    if args.wandb:
+        try:
+            import wandb
+
+            wandb.init(
+                project=args.wandb_project,
+                name="cka_analysis",
+            )
+
+            # Log CKA values
+            if "layerwise_cka" in results:
+                for layer_name, cka_value in results["layerwise_cka"].items():
+                    wandb.log({f"cka/layer/{layer_name}": cka_value})
+
+            if "mean_cka" in results:
+                wandb.log({"cka/mean": results["mean_cka"]})
+
+            wandb.finish()
+            logger.info("Logged CKA results to Wandb")
+        except ImportError:
+            logger.warning("Wandb not installed, skipping logging")
+        except Exception as e:
+            logger.warning(f"Wandb logging failed: {e}")
+
     return 0
 
 

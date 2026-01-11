@@ -131,6 +131,17 @@ def parse_args():
         default=42,
         help="Random seed",
     )
+    parser.add_argument(
+        "--wandb",
+        action="store_true",
+        help="Log results to Wandb",
+    )
+    parser.add_argument(
+        "--wandb-project",
+        type=str,
+        default="asvspoof5-dann",
+        help="Wandb project name",
+    )
     return parser.parse_args()
 
 
@@ -531,6 +542,41 @@ def main():
             logger.info(f"  Avg reduction: {comparison['avg_reduction']:.4f}")
 
     logger.info(f"\nAll results saved to: {output_dir}")
+
+    # Wandb logging
+    if args.wandb:
+        try:
+            import wandb
+
+            wandb.init(
+                project=args.wandb_project,
+                name="domain_probes",
+            )
+
+            # Log probe results
+            for domain in ["codec", "codec_q"]:
+                if domain in all_results:
+                    for layer_name, acc in all_results[domain].items():
+                        wandb.log({
+                            f"probe/{domain}/{layer_name}": acc,
+                        })
+
+            # Log comparison if available
+            if comparison_results:
+                for domain, comparison in comparison_results.items():
+                    wandb.log({
+                        f"probe_comparison/{domain}/avg_erm_accuracy": comparison["avg_erm_accuracy"],
+                        f"probe_comparison/{domain}/avg_dann_accuracy": comparison["avg_dann_accuracy"],
+                        f"probe_comparison/{domain}/avg_reduction": comparison["avg_reduction"],
+                    })
+
+            wandb.finish()
+            logger.info("Logged probe results to Wandb")
+        except ImportError:
+            logger.warning("Wandb not installed, skipping logging")
+        except Exception as e:
+            logger.warning(f"Wandb logging failed: {e}")
+
     return 0
 
 

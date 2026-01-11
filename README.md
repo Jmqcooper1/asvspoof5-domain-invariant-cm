@@ -20,12 +20,14 @@ This repository implements:
 2. [Installation](#installation)
 3. [Dataset Setup](#dataset-setup)
 4. [Quickstart: Full Pipeline](#quickstart-full-pipeline)
-5. [Detailed Usage](#detailed-usage)
-6. [Repository Structure](#repository-structure)
-7. [Configuration](#configuration)
-8. [Reproducibility](#reproducibility)
-9. [Testing](#testing)
-10. [Citation](#citation)
+5. [Running on Snellius Cluster](#running-on-snellius-cluster)
+6. [Detailed Usage](#detailed-usage)
+7. [Experiment Tracking with Wandb](#experiment-tracking-with-wandb)
+8. [Repository Structure](#repository-structure)
+9. [Configuration](#configuration)
+10. [Reproducibility](#reproducibility)
+11. [Testing](#testing)
+12. [Citation](#citation)
 
 ---
 
@@ -201,6 +203,80 @@ python scripts/run_patching.py \
 
 ---
 
+## Running on Snellius Cluster
+
+For running the full experiment pipeline on the Snellius HPC cluster (or similar SLURM-based systems), we provide pre-configured job scripts.
+
+### Setup
+
+1. **Copy environment template:**
+
+```bash
+cp .env.example .env
+# Edit .env with your paths and Wandb API key
+```
+
+2. **Configure your paths in `.env`:**
+
+```bash
+# .env
+ASVSPOOF5_ROOT=/scratch-shared/myuser/asvspoof5
+WANDB_API_KEY=your_api_key_here
+WANDB_PROJECT=asvspoof5-dann
+HF_HOME=/scratch-shared/myuser/.cache/huggingface
+```
+
+### Job Scripts
+
+The `scripts/jobs/` directory contains SLURM job files:
+
+| Script | Purpose | Time |
+|--------|---------|------|
+| `setup_environment.job` | Download models, create manifests | 2h |
+| `train_wavlm_erm.job` | Train WavLM + ERM | 24h |
+| `train_wavlm_dann.job` | Train WavLM + DANN | 24h |
+| `train_w2v2_erm.job` | Train Wav2Vec2 + ERM | 24h |
+| `train_w2v2_dann.job` | Train Wav2Vec2 + DANN | 24h |
+| `evaluate_models.job` | Evaluate all trained models | 4h |
+| `run_analysis.job` | Domain probes, CKA, patching | 8h |
+| `run_baselines.job` | TRILLsson + LFCC-GMM | 8h |
+| `run_held_out.job` | Held-out codec experiment | 48h |
+
+### Submit All Jobs
+
+The master launcher script handles dependency management:
+
+```bash
+# Dry-run to see what would be submitted
+./scripts/jobs/submit_all.sh --dry-run
+
+# Submit all jobs with proper dependencies
+./scripts/jobs/submit_all.sh
+
+# Skip baselines or held-out experiment
+./scripts/jobs/submit_all.sh --skip-baselines --skip-held-out
+```
+
+### Job Dependency Chain
+
+```
+Setup → Training (4 parallel jobs) → Evaluation → Analysis
+     ↘ Baselines (parallel)
+     ↘ Held-Out Experiment (independent)
+```
+
+### Monitor Jobs
+
+```bash
+# Check job status
+squeue -u $USER
+
+# Cancel all submitted jobs
+scancel <job_ids>
+```
+
+---
+
 ## Detailed Usage
 
 ### Training
@@ -330,6 +406,64 @@ python scripts/extract_lfcc.py --split dev --output-dir data/features/lfcc
 python scripts/train_lfcc_gmm.py --n-components 512 --output-dir runs/lfcc_gmm
 ```
 
+### Held-Out Codec Experiment
+
+This experiment measures domain generalization by training models with one CODEC held out:
+
+```bash
+# Run held-out experiment with top 5 codecs
+python scripts/run_held_out_codec.py \
+    --config configs/wavlm_dann.yaml \
+    --top-n 5 \
+    --output-dir runs/held_out_codec
+
+# With Wandb logging
+python scripts/run_held_out_codec.py \
+    --config configs/wavlm_dann.yaml \
+    --wandb --wandb-project asvspoof5-held-out
+```
+
+This compares ERM vs DANN on unseen codecs to demonstrate domain invariance.
+
+---
+
+## Experiment Tracking with Wandb
+
+All training and analysis scripts support [Weights & Biases](https://wandb.ai/) logging.
+
+### Enable Wandb
+
+```bash
+# Training with Wandb
+python scripts/train.py --config configs/wavlm_dann.yaml --wandb --wandb-project myproject
+
+# Evaluation with Wandb
+python scripts/evaluate.py --checkpoint runs/model/checkpoints/best.pt --wandb
+
+# Analysis with Wandb
+python scripts/probe_domain.py --checkpoint runs/model/checkpoints/best.pt --wandb
+python scripts/run_cka.py --erm-checkpoint ... --dann-checkpoint ... --wandb
+```
+
+### Logged Metrics
+
+| Script | Metrics Logged |
+|--------|----------------|
+| `train.py` | loss, task_acc, eer, min_dcf, lr, lambda (per epoch) |
+| `evaluate.py` | eer, min_dcf, n_samples |
+| `probe_domain.py` | probe accuracy per layer, avg reduction |
+| `run_cka.py` | CKA values per layer, mean CKA |
+
+### Environment Variable
+
+Alternatively, set your API key as an environment variable:
+
+```bash
+export WANDB_API_KEY=your_api_key_here
+```
+
+Or add to `.env` file for cluster jobs.
+
 ---
 
 ## Repository Structure
@@ -348,16 +482,24 @@ python scripts/train_lfcc_gmm.py --n-components 512 --output-dir runs/lfcc_gmm
 ├── scripts/
 │   ├── download_asvspoof5.sh   # Download dataset from Zenodo
 │   ├── unpack_asvspoof5.sh     # Unpack downloaded archives
-│   ├── make_manifest.py        # Create parquet manifests
+│   ├── prepare_asvspoof5.py    # Create parquet manifests (full version)
+│   ├── make_manifest.py        # Create parquet manifests (simple version)
 │   ├── train.py                # Training entrypoint
 │   ├── evaluate.py             # Evaluation entrypoint
 │   ├── probe_domain.py         # Layer-wise domain probes
 │   ├── run_cka.py              # CKA analysis
 │   ├── run_patching.py         # Activation patching
+│   ├── run_held_out_codec.py   # Held-out codec experiment
 │   ├── extract_trillsson.py    # TRILLsson embedding extraction
 │   ├── train_trillsson.py      # TRILLsson classifier training
 │   ├── extract_lfcc.py         # LFCC feature extraction
-│   └── train_lfcc_gmm.py       # LFCC-GMM baseline
+│   ├── train_lfcc_gmm.py       # LFCC-GMM baseline
+│   └── jobs/                   # SLURM job scripts for cluster
+│       ├── submit_all.sh       # Master job launcher
+│       ├── setup_environment.job
+│       ├── train_wavlm_erm.job
+│       ├── train_wavlm_dann.job
+│       └── ...
 ├── src/asvspoof5_domain_invariant_cm/
 │   ├── data/                   # Dataset, audio loading, collation
 │   ├── models/                 # Backbones, heads, DANN, ERM models

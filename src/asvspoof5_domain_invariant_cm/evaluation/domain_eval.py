@@ -19,7 +19,7 @@ def evaluate_per_domain(
     Args:
         df: DataFrame with scores, labels, and domain column.
         score_col: Name of score column.
-        label_col: Name of label column (1=bonafide, 0=spoof).
+        label_col: Name of label column (0=bonafide, 1=spoof).
         domain_col: Name of domain column.
 
     Returns:
@@ -38,8 +38,8 @@ def evaluate_per_domain(
             {
                 "domain": domain_val,
                 "n_samples": len(group),
-                "n_bonafide": int(np.sum(labels == 1)),
-                "n_spoof": int(np.sum(labels == 0)),
+                "n_bonafide": int(np.sum(labels == 0)),
+                "n_spoof": int(np.sum(labels == 1)),
                 "eer": eer,
                 "eer_threshold": eer_threshold,
                 "min_dcf": min_dcf,

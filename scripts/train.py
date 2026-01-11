@@ -119,6 +119,23 @@ def parse_args():
         action="store_true",
         help="Use automatic mixed precision",
     )
+    parser.add_argument(
+        "--wandb",
+        action="store_true",
+        help="Enable Wandb logging",
+    )
+    parser.add_argument(
+        "--wandb-project",
+        type=str,
+        default="asvspoof5-dann",
+        help="Wandb project name",
+    )
+    parser.add_argument(
+        "--wandb-entity",
+        type=str,
+        default=None,
+        help="Wandb entity (team or username)",
+    )
     return parser.parse_args()
 
 
@@ -414,6 +431,10 @@ def main():
         monitor_metric=training_cfg.get("monitor_metric", "eer"),
         monitor_mode=training_cfg.get("monitor_mode", "min"),
         lambda_scheduler=lambda_scheduler,
+        use_wandb=args.wandb,
+        wandb_project=args.wandb_project,
+        wandb_entity=args.wandb_entity,
+        wandb_run_name=run_name,
     )
 
     # Train
