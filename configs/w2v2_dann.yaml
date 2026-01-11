@@ -1,0 +1,110 @@
+# Wav2Vec 2.0 Base DANN Configuration
+# Single-file config for DANN training with Wav2Vec 2.0 backbone
+
+# Backbone
+backbone:
+  name: wav2vec2_base
+  pretrained: facebook/wav2vec2-base
+  num_layers: 12
+  hidden_size: 768
+  freeze: true
+
+  layer_selection:
+    method: weighted
+    k: 6
+    init_lower_bias: true
+
+# Pooling
+pooling:
+  method: stats  # mean+std concatenation
+
+# Projection head
+projection:
+  input_dim: 1536  # 768 * 2 for stats pooling
+  hidden_dim: 512
+  output_dim: 256
+  num_layers: 2
+  dropout: 0.1
+
+# Task classifier
+classifier:
+  input_dim: 256
+  num_classes: 2
+  hidden_dim: 0  # Direct linear
+  dropout: 0.1
+
+# Training
+training:
+  method: dann
+
+  optimizer:
+    name: adamw
+    lr: 1.0e-4
+    weight_decay: 0.01
+    betas: [0.9, 0.999]
+
+  scheduler:
+    name: cosine
+    warmup_steps: 500
+    min_lr: 1.0e-6
+
+  max_epochs: 50
+  patience: 10
+  gradient_clip: 1.0
+
+  save_every_n_epochs: 5
+  save_best_only: true
+  monitor_metric: eer
+  monitor_mode: min
+
+# Loss
+loss:
+  task:
+    name: cross_entropy
+    weight: 1.0
+    label_smoothing: 0.0
+
+  domain:
+    codec:
+      name: cross_entropy
+      weight: 1.0
+    codec_q:
+      name: cross_entropy
+      weight: 1.0
+
+# DANN-specific settings
+dann:
+  lambda_: 0.1
+
+  lambda_schedule:
+    enabled: true
+    type: linear
+    start: 0.0
+    end: 1.0
+    warmup_epochs: 5
+
+  discriminator:
+    hidden_dim: 256
+    dropout: 0.1
+
+# Audio
+audio:
+  sample_rate: 16000
+  max_duration_sec: 6.0
+
+# Dataloader
+dataloader:
+  batch_size: 32
+  num_workers: 4
+  pin_memory: true
+  drop_last: true
+
+# Logging
+logging:
+  log_every_n_steps: 50
+  val_every_n_epochs: 1
+  log_domain_accuracy: true
+
+# Reproducibility
+seed: 42
+deterministic: true

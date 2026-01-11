@@ -6,21 +6,20 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoModel, Wav2Vec2Model, WavLMModel
+from transformers import Wav2Vec2Model, WavLMModel
 
 
 class LayerWeightedPooling(nn.Module):
     """Learn weighted combination of layer outputs.
 
     Args:
-        num_layers: Number of transformer layers.
+        num_layers: Number of layers to weight.
         init_lower_bias: If True, initialize with higher weights for lower layers.
     """
 
     def __init__(self, num_layers: int, init_lower_bias: bool = True):
         super().__init__()
         if init_lower_bias:
-            # Higher weights for lower layers
             weights = torch.linspace(1.0, 0.1, num_layers)
         else:
             weights = torch.ones(num_layers)
@@ -57,7 +56,7 @@ class SSLBackbone(ABC, nn.Module):
             attention_mask: Optional attention mask.
 
         Returns:
-            Tuple of (final_output, all_hidden_states).
+            Tuple of (layer_mixed_output [B, T', D], all_hidden_states).
         """
         pass
 
@@ -74,22 +73,55 @@ class SSLBackbone(ABC, nn.Module):
         pass
 
 
+def select_layers(
+    hidden_states: tuple[torch.Tensor, ...],
+    method: str,
+    k: int = 6,
+    layer_indices: Optional[list[int]] = None,
+) -> list[torch.Tensor]:
+    """Select layers according to method.
+
+    Args:
+        hidden_states: Tuple of hidden states (includes embedding layer at index 0).
+        method: Selection method ('weighted', 'first_k', 'last_k', 'specific').
+        k: Number of layers for first_k/last_k.
+        layer_indices: Explicit layer indices for 'specific' method.
+
+    Returns:
+        List of selected hidden states (excludes embedding layer).
+    """
+    # Skip embedding layer (index 0)
+    transformer_states = list(hidden_states[1:])
+
+    if method == "first_k":
+        return transformer_states[:k]
+    elif method == "last_k":
+        return transformer_states[-k:]
+    elif method == "specific" and layer_indices is not None:
+        return [transformer_states[i] for i in layer_indices if i < len(transformer_states)]
+    else:  # weighted or all
+        return transformer_states
+
+
 class WavLMBackbone(SSLBackbone):
     """WavLM backbone wrapper.
 
     Args:
         pretrained: HuggingFace model name or path.
         freeze: If True, freeze backbone parameters.
-        layer_selection: Method for selecting layers ('all', 'first_k', 'last_k').
+        layer_selection: Method for selecting layers ('weighted', 'first_k', 'last_k', 'specific').
         k: Number of layers for first_k/last_k selection.
+        layer_indices: Explicit layer indices for 'specific' method.
+        init_lower_bias: If True, initialize layer weights with higher values for lower layers.
     """
 
     def __init__(
         self,
         pretrained: str = "microsoft/wavlm-base-plus",
         freeze: bool = True,
-        layer_selection: str = "all",
+        layer_selection: str = "weighted",
         k: int = 6,
+        layer_indices: Optional[list[int]] = None,
         init_lower_bias: bool = True,
     ):
         super().__init__()
@@ -106,17 +138,18 @@ class WavLMBackbone(SSLBackbone):
 
         self.layer_selection = layer_selection
         self.k = k
+        self.layer_indices = layer_indices
 
-        # Layer weighting
-        if layer_selection == "all":
-            num_weighted_layers = self._num_layers
-        elif layer_selection in ("first_k", "last_k"):
-            num_weighted_layers = k
+        # Determine number of layers for weighting
+        if layer_selection == "first_k" or layer_selection == "last_k":
+            num_weighted = k
+        elif layer_selection == "specific" and layer_indices:
+            num_weighted = len(layer_indices)
         else:
-            num_weighted_layers = self._num_layers
+            num_weighted = self._num_layers
 
         self.layer_pooling = LayerWeightedPooling(
-            num_weighted_layers,
+            num_weighted,
             init_lower_bias=init_lower_bias,
         )
 
@@ -131,18 +164,18 @@ class WavLMBackbone(SSLBackbone):
             output_hidden_states=True,
         )
 
-        hidden_states = outputs.hidden_states[1:]  # skip embedding layer
+        all_hidden_states = list(outputs.hidden_states[1:])  # skip embedding
 
-        if self.layer_selection == "first_k":
-            selected = list(hidden_states[: self.k])
-        elif self.layer_selection == "last_k":
-            selected = list(hidden_states[-self.k :])
-        else:
-            selected = list(hidden_states)
+        selected = select_layers(
+            outputs.hidden_states,
+            self.layer_selection,
+            self.k,
+            self.layer_indices,
+        )
 
-        pooled = self.layer_pooling(selected)
+        mixed = self.layer_pooling(selected)
 
-        return pooled, list(hidden_states)
+        return mixed, all_hidden_states
 
     @property
     def hidden_size(self) -> int:
@@ -161,14 +194,17 @@ class Wav2Vec2Backbone(SSLBackbone):
         freeze: If True, freeze backbone parameters.
         layer_selection: Method for selecting layers.
         k: Number of layers for first_k/last_k selection.
+        layer_indices: Explicit layer indices for 'specific' method.
+        init_lower_bias: If True, initialize layer weights with higher values for lower layers.
     """
 
     def __init__(
         self,
         pretrained: str = "facebook/wav2vec2-base",
         freeze: bool = True,
-        layer_selection: str = "all",
+        layer_selection: str = "weighted",
         k: int = 6,
+        layer_indices: Optional[list[int]] = None,
         init_lower_bias: bool = True,
     ):
         super().__init__()
@@ -185,17 +221,18 @@ class Wav2Vec2Backbone(SSLBackbone):
 
         self.layer_selection = layer_selection
         self.k = k
+        self.layer_indices = layer_indices
 
-        # Layer weighting
-        if layer_selection == "all":
-            num_weighted_layers = self._num_layers
-        elif layer_selection in ("first_k", "last_k"):
-            num_weighted_layers = k
+        # Determine number of layers for weighting
+        if layer_selection == "first_k" or layer_selection == "last_k":
+            num_weighted = k
+        elif layer_selection == "specific" and layer_indices:
+            num_weighted = len(layer_indices)
         else:
-            num_weighted_layers = self._num_layers
+            num_weighted = self._num_layers
 
         self.layer_pooling = LayerWeightedPooling(
-            num_weighted_layers,
+            num_weighted,
             init_lower_bias=init_lower_bias,
         )
 
@@ -210,18 +247,18 @@ class Wav2Vec2Backbone(SSLBackbone):
             output_hidden_states=True,
         )
 
-        hidden_states = outputs.hidden_states[1:]  # skip embedding layer
+        all_hidden_states = list(outputs.hidden_states[1:])  # skip embedding
 
-        if self.layer_selection == "first_k":
-            selected = list(hidden_states[: self.k])
-        elif self.layer_selection == "last_k":
-            selected = list(hidden_states[-self.k :])
-        else:
-            selected = list(hidden_states)
+        selected = select_layers(
+            outputs.hidden_states,
+            self.layer_selection,
+            self.k,
+            self.layer_indices,
+        )
 
-        pooled = self.layer_pooling(selected)
+        mixed = self.layer_pooling(selected)
 
-        return pooled, list(hidden_states)
+        return mixed, all_hidden_states
 
     @property
     def hidden_size(self) -> int:
@@ -230,3 +267,48 @@ class Wav2Vec2Backbone(SSLBackbone):
     @property
     def num_layers(self) -> int:
         return self._num_layers
+
+
+def create_backbone(
+    name: str,
+    pretrained: str,
+    freeze: bool = True,
+    layer_selection: str = "weighted",
+    k: int = 6,
+    layer_indices: Optional[list[int]] = None,
+    init_lower_bias: bool = True,
+) -> SSLBackbone:
+    """Factory function to create SSL backbone.
+
+    Args:
+        name: Backbone name ('wavlm_base_plus', 'wav2vec2_base').
+        pretrained: HuggingFace model name or path.
+        freeze: Whether to freeze backbone.
+        layer_selection: Layer selection method.
+        k: Number of layers for first_k/last_k.
+        layer_indices: Explicit layer indices for 'specific'.
+        init_lower_bias: Initialize with lower layer bias.
+
+    Returns:
+        SSL backbone instance.
+    """
+    if "wavlm" in name.lower():
+        return WavLMBackbone(
+            pretrained=pretrained,
+            freeze=freeze,
+            layer_selection=layer_selection,
+            k=k,
+            layer_indices=layer_indices,
+            init_lower_bias=init_lower_bias,
+        )
+    elif "wav2vec" in name.lower():
+        return Wav2Vec2Backbone(
+            pretrained=pretrained,
+            freeze=freeze,
+            layer_selection=layer_selection,
+            k=k,
+            layer_indices=layer_indices,
+            init_lower_bias=init_lower_bias,
+        )
+    else:
+        raise ValueError(f"Unknown backbone: {name}")

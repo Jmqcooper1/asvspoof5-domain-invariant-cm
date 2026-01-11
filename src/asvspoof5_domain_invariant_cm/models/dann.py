@@ -3,7 +3,10 @@
 Implements:
 - Gradient Reversal Layer (GRL)
 - Multi-head domain discriminator for CODEC and CODEC_Q
+- DANNModel: complete model wrapper
 """
+
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -53,7 +56,7 @@ class MultiHeadDomainDiscriminator(nn.Module):
     """Multi-head domain discriminator for CODEC and CODEC_Q.
 
     Args:
-        input_dim: Input feature dimension.
+        input_dim: Input feature dimension (repr dimension).
         num_codecs: Number of unique CODEC values.
         num_codec_qs: Number of unique CODEC_Q values.
         hidden_dim: Shared hidden layer dimension.
@@ -73,6 +76,9 @@ class MultiHeadDomainDiscriminator(nn.Module):
         # Shared layers
         self.shared = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Dropout(dropout),
         )
@@ -101,37 +107,41 @@ class MultiHeadDomainDiscriminator(nn.Module):
 class DANNModel(nn.Module):
     """Complete DANN model for domain-invariant deepfake detection.
 
+    Pipeline: backbone -> layer_mix -> stats_pool -> projection -> repr
+              task_head(repr) -> task_logits
+              domain_disc(GRL(repr)) -> codec_logits, codec_q_logits
+
     Args:
-        backbone: SSL backbone (WavLM, Wav2Vec2, etc.).
-        projection: Projection head.
-        classifier: Task classifier (bonafide/spoof).
+        backbone: SSL backbone (WavLM, Wav2Vec2).
+        pooling: Temporal pooling module (stats pooling recommended).
+        projection: Projection head (produces repr).
+        task_head: Task classifier (bonafide/spoof).
         domain_discriminator: Multi-head domain discriminator.
-        pooling: Temporal pooling module.
         lambda_: Initial GRL lambda value.
     """
 
     def __init__(
         self,
         backbone: nn.Module,
-        projection: nn.Module,
-        classifier: nn.Module,
-        domain_discriminator: nn.Module,
         pooling: nn.Module,
+        projection: nn.Module,
+        task_head: nn.Module,
+        domain_discriminator: nn.Module,
         lambda_: float = 0.1,
     ):
         super().__init__()
         self.backbone = backbone
-        self.projection = projection
-        self.classifier = classifier
-        self.domain_discriminator = domain_discriminator
         self.pooling = pooling
+        self.projection = projection
+        self.task_head = task_head
+        self.domain_discriminator = domain_discriminator
         self.grl = GradientReversalLayer(lambda_)
 
     def forward(
         self,
         waveform: torch.Tensor,
-        attention_mask: torch.Tensor = None,
-        lengths: torch.Tensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        lengths: Optional[torch.Tensor] = None,
     ) -> dict[str, torch.Tensor]:
         """Forward pass.
 
@@ -141,24 +151,41 @@ class DANNModel(nn.Module):
             lengths: Optional sequence lengths.
 
         Returns:
-            Dictionary with task_logits, codec_logits, codec_q_logits.
+            Dictionary with:
+                - task_logits: (B, 2)
+                - codec_logits: (B, num_codecs)
+                - codec_q_logits: (B, num_codec_qs)
+                - repr: (B, repr_dim)
+                - all_hidden_states: list of (B, T', D) per layer
         """
-        features, all_hidden_states = self.backbone(waveform, attention_mask)
-        projected = self.projection(features)
-        pooled = self.pooling(projected, lengths)
-        task_logits = self.classifier(pooled)
+        # Backbone: hidden_states -> layer_mix
+        mixed, all_hidden_states = self.backbone(waveform, attention_mask)
 
-        reversed_features = self.grl(pooled)
-        codec_logits, codec_q_logits = self.domain_discriminator(reversed_features)
+        # Stats pooling
+        pooled = self.pooling(mixed, lengths)  # (B, 2*D) for stats
+
+        # Projection -> repr
+        repr_ = self.projection(pooled)  # (B, repr_dim)
+
+        # Task head
+        task_logits = self.task_head(repr_)
+
+        # Domain discriminator with GRL
+        reversed_repr = self.grl(repr_)
+        codec_logits, codec_q_logits = self.domain_discriminator(reversed_repr)
 
         return {
             "task_logits": task_logits,
             "codec_logits": codec_logits,
             "codec_q_logits": codec_q_logits,
-            "pooled_features": pooled,
+            "repr": repr_,
             "all_hidden_states": all_hidden_states,
         }
 
     def set_lambda(self, lambda_: float) -> None:
         """Update GRL lambda value."""
         self.grl.set_lambda(lambda_)
+
+    def get_lambda(self) -> float:
+        """Get current GRL lambda value."""
+        return self.grl.lambda_
