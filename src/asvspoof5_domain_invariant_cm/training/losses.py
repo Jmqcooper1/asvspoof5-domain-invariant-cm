@@ -97,10 +97,14 @@ class CombinedDANNLoss(nn.Module):
 
     L_total = L_task + lambda * (L_codec + L_codec_q)
 
+    When codec is NONE (uncoded), CODEC_Q loss is masked because quality is undefined.
+
     Args:
         task_label_smoothing: Label smoothing for task loss.
         task_class_weights: Optional class weights for task loss.
         lambda_domain: Weight for domain losses.
+        none_codec_id: Class ID for NONE/uncoded codec (default 0).
+        mask_codec_q_for_none: If True, mask CODEC_Q loss when codec is NONE.
     """
 
     def __init__(
@@ -108,6 +112,8 @@ class CombinedDANNLoss(nn.Module):
         task_label_smoothing: float = 0.0,
         task_class_weights: Optional[torch.Tensor] = None,
         lambda_domain: float = 0.1,
+        none_codec_id: int = 0,
+        mask_codec_q_for_none: bool = True,
     ):
         super().__init__()
         self.task_loss = TaskLoss(
@@ -117,6 +123,8 @@ class CombinedDANNLoss(nn.Module):
         self.codec_loss = DomainLoss(num_classes=0)  # num_classes not needed
         self.codec_q_loss = DomainLoss(num_classes=0)
         self.lambda_domain = lambda_domain
+        self.none_codec_id = none_codec_id
+        self.mask_codec_q_for_none = mask_codec_q_for_none
 
     def forward(
         self,
@@ -134,7 +142,20 @@ class CombinedDANNLoss(nn.Module):
         """
         l_task = self.task_loss(task_logits, task_labels)
         l_codec = self.codec_loss(codec_logits, codec_labels)
-        l_codec_q = self.codec_q_loss(codec_q_logits, codec_q_labels)
+
+        # Mask CODEC_Q loss when codec is NONE (quality undefined for uncoded)
+        if self.mask_codec_q_for_none:
+            mask = codec_labels != self.none_codec_id
+            if mask.any():
+                l_codec_q = self.codec_q_loss(
+                    codec_q_logits[mask],
+                    codec_q_labels[mask],
+                )
+            else:
+                # All samples are uncoded, no CODEC_Q loss
+                l_codec_q = torch.tensor(0.0, device=task_logits.device)
+        else:
+            l_codec_q = self.codec_q_loss(codec_q_logits, codec_q_labels)
 
         # GRL already negates gradients, so we add (not subtract)
         total_loss = l_task + self.lambda_domain * (l_codec + l_codec_q)
@@ -193,6 +214,8 @@ def build_loss(
     task_label_smoothing: float = 0.0,
     task_class_weights: Optional[torch.Tensor] = None,
     lambda_domain: float = 0.1,
+    none_codec_id: int = 0,
+    mask_codec_q_for_none: bool = True,
 ) -> nn.Module:
     """Build loss function from config.
 
@@ -201,6 +224,8 @@ def build_loss(
         task_label_smoothing: Label smoothing.
         task_class_weights: Class weights for task loss.
         lambda_domain: Domain loss weight (for DANN).
+        none_codec_id: Class ID for NONE/uncoded codec (for DANN).
+        mask_codec_q_for_none: If True, mask CODEC_Q loss when codec is NONE.
 
     Returns:
         Loss module.
@@ -210,6 +235,8 @@ def build_loss(
             task_label_smoothing=task_label_smoothing,
             task_class_weights=task_class_weights,
             lambda_domain=lambda_domain,
+            none_codec_id=none_codec_id,
+            mask_codec_q_for_none=mask_codec_q_for_none,
         )
     else:
         return CombinedERMLoss(

@@ -94,9 +94,9 @@ def process_protocol(
     df = load_protocol(protocol_path)
     logger.info(f"  Loaded {len(df)} samples")
 
-    # Normalize domain values: '-' -> 'NONE'
-    df["codec"] = df["codec"].apply(normalize_domain_value)
-    df["codec_q"] = df["codec_q"].apply(normalize_domain_value)
+    # Normalize domain values: '-' -> 'NONE', and '0' -> 'NONE' for codec_q
+    df["codec"] = df["codec"].apply(lambda x: normalize_domain_value(x, is_codec_q=False))
+    df["codec_q"] = df["codec_q"].apply(lambda x: normalize_domain_value(x, is_codec_q=True))
 
     # Map KEY to task label: bonafide=0, spoof=1
     df["y_task"] = df["key"].map(KEY_TO_LABEL)
