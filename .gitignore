@@ -207,7 +207,11 @@ marimo/_lsp/
 __marimo__/
 
 # Project-specific
+
+# Ignore top-level data/ (not src/asvspoof5_domain_invariant_cm/data/)
 data/
+!src/asvspoof5_domain_invariant_cm/data/
+
 datasets/
 experiments/
 runs/
@@ -234,3 +238,4 @@ logs/
 *.opus
 !.env.example
 .DS_Store
+.cursor/

@@ -1,5 +1,9 @@
 # WavLM Base+ DANN Configuration
 # Single-file config for DANN training with WavLM backbone
+#
+# IMPORTANT: ASVspoof5 train/dev have NO codec diversity (all samples are uncoded).
+# DANN is meaningless without synthetic codec augmentation to create domain labels.
+# See augmentation section below.
 
 # Backbone
 backbone:
@@ -71,6 +75,7 @@ loss:
     codec_q:
       name: cross_entropy
       weight: 1.0
+      mask_for_none: true  # Mask CODEC_Q loss when codec is NONE
 
 # DANN-specific settings
 dann:
@@ -86,6 +91,15 @@ dann:
   discriminator:
     hidden_dim: 256
     dropout: 0.1
+
+# Synthetic codec augmentation (REQUIRED for meaningful DANN on ASVspoof5)
+augmentation:
+  enabled: true
+  codec_prob: 0.5
+  codecs: [MP3, AAC, OPUS]
+  qualities: [1, 2, 3, 4, 5]
+  cache_dir: null
+  use_synthetic_labels: true
 
 # Audio
 audio:

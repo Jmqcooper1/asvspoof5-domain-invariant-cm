@@ -30,21 +30,74 @@ class TestLabelMapping:
 
 
 class TestDomainNormalization:
-    """Test domain value normalization."""
+    """Test domain value normalization.
+
+    ASVspoof5 protocol files use different conventions:
+    - Train/dev: CODEC="-", CODEC_Q="-" for uncoded
+    - Eval: CODEC="-", CODEC_Q="0" for uncoded
+
+    Both "-" and "0" (for CODEC_Q only) should normalize to "NONE".
+    """
 
     def test_dash_becomes_none(self):
+        """Both CODEC and CODEC_Q: '-' -> 'NONE'."""
         assert normalize_domain_value("-") == "NONE"
+        assert normalize_domain_value("-", is_codec_q=False) == "NONE"
+        assert normalize_domain_value("-", is_codec_q=True) == "NONE"
+
+    def test_zero_becomes_none_for_codec_q(self):
+        """CODEC_Q: '0' -> 'NONE' (eval uncoded convention)."""
+        # For CODEC_Q, "0" means uncoded
+        assert normalize_domain_value("0", is_codec_q=True) == "NONE"
+
+    def test_zero_unchanged_for_codec(self):
+        """CODEC: '0' should NOT become 'NONE' (not valid for CODEC anyway)."""
+        # For CODEC, "0" is not a special value (though it shouldn't appear)
+        assert normalize_domain_value("0", is_codec_q=False) == "0"
 
     def test_normal_value_unchanged(self):
+        """Regular codec names should be preserved."""
         assert normalize_domain_value("opus") == "opus"
         assert normalize_domain_value("mp3") == "mp3"
+        assert normalize_domain_value("C01") == "C01"
+        assert normalize_domain_value("C11") == "C11"
+
+    def test_quality_values_unchanged(self):
+        """Quality values 1-8 should be preserved."""
+        for q in ["1", "2", "3", "4", "5", "6", "7", "8"]:
+            assert normalize_domain_value(q, is_codec_q=True) == q
 
     def test_none_becomes_none_string(self):
         assert normalize_domain_value(None) == "NONE"
+        assert normalize_domain_value(None, is_codec_q=True) == "NONE"
 
     def test_nan_becomes_none(self):
         import numpy as np
         assert normalize_domain_value(float("nan")) == "NONE"
+        assert normalize_domain_value(float("nan"), is_codec_q=True) == "NONE"
+
+    def test_train_dev_normalization(self):
+        """Train/dev: CODEC='-', CODEC_Q='-' both -> 'NONE'."""
+        # Simulating train/dev protocol values
+        codec = "-"
+        codec_q = "-"
+        assert normalize_domain_value(codec, is_codec_q=False) == "NONE"
+        assert normalize_domain_value(codec_q, is_codec_q=True) == "NONE"
+
+    def test_eval_uncoded_normalization(self):
+        """Eval uncoded: CODEC='-', CODEC_Q='0' both -> 'NONE'."""
+        # Simulating eval protocol values for uncoded samples
+        codec = "-"
+        codec_q = "0"
+        assert normalize_domain_value(codec, is_codec_q=False) == "NONE"
+        assert normalize_domain_value(codec_q, is_codec_q=True) == "NONE"
+
+    def test_eval_coded_preserved(self):
+        """Eval coded: CODEC='C05', CODEC_Q='3' both preserved."""
+        codec = "C05"
+        codec_q = "3"
+        assert normalize_domain_value(codec, is_codec_q=False) == "C05"
+        assert normalize_domain_value(codec_q, is_codec_q=True) == "3"
 
 
 class TestAudioPathPrefix:
