@@ -8,11 +8,16 @@ Usage:
     python scripts/run_patching.py \
         --source runs/dann_run/checkpoints/best.pt \
         --target runs/erm_run/checkpoints/best.pt
+
+    # With wandb logging
+    python scripts/run_patching.py \
+        --source ... --target ... --wandb
 """
 
 import argparse
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -30,7 +35,20 @@ from asvspoof5_domain_invariant_cm.models import (
     create_backbone,
     create_pooling,
 )
-from asvspoof5_domain_invariant_cm.utils import get_device, get_manifest_path
+from asvspoof5_domain_invariant_cm.utils import (
+    get_device,
+    get_experiment_context,
+    get_manifest_path,
+    setup_logging,
+)
+
+# Optional wandb import
+try:
+    import wandb
+
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -102,6 +120,23 @@ def parse_args():
         type=int,
         default=42,
         help="Random seed",
+    )
+    parser.add_argument(
+        "--wandb",
+        action="store_true",
+        help="Log results to Wandb",
+    )
+    parser.add_argument(
+        "--wandb-project",
+        type=str,
+        default="asvspoof5-dann",
+        help="Wandb project name",
+    )
+    parser.add_argument(
+        "--wandb-entity",
+        type=str,
+        default=None,
+        help="Wandb entity (team or username)",
     )
     return parser.parse_args()
 
@@ -220,6 +255,7 @@ def run_repr_patching(
     baseline_scores = []
     patched_scores = []
     all_labels = []
+    score_changes = []
     n_samples = 0
 
     for batch in tqdm(dataloader, desc="Patching repr"):
@@ -251,27 +287,30 @@ def run_repr_patching(
         baseline_scores.append(baseline_probs.cpu().numpy())
         patched_scores.append(patched_probs.cpu().numpy())
         all_labels.append(y_task.numpy())
+        score_changes.append((patched_probs - baseline_probs).cpu().numpy())
 
         n_samples += batch_size
 
     baseline_scores = np.concatenate(baseline_scores)[:max_samples]
     patched_scores = np.concatenate(patched_scores)[:max_samples]
     all_labels = np.concatenate(all_labels)[:max_samples]
+    score_changes = np.concatenate(score_changes)[:max_samples]
 
     # Compute metrics
     baseline_eer, _ = compute_eer(baseline_scores, all_labels)
     patched_eer, _ = compute_eer(patched_scores, all_labels)
 
-    # Score change
-    score_change = patched_scores - baseline_scores
-
     return {
         "baseline_eer": float(baseline_eer),
         "patched_eer": float(patched_eer),
         "eer_change": float(patched_eer - baseline_eer),
-        "mean_score_change": float(np.mean(score_change)),
-        "std_score_change": float(np.std(score_change)),
+        "eer_change_percent": float((patched_eer - baseline_eer) / baseline_eer * 100) if baseline_eer > 0 else 0,
+        "mean_score_change": float(np.mean(score_changes)),
+        "std_score_change": float(np.std(score_changes)),
+        "median_score_change": float(np.median(score_changes)),
         "n_samples": len(all_labels),
+        "n_positive_change": int(np.sum(score_changes > 0)),
+        "n_negative_change": int(np.sum(score_changes < 0)),
     }
 
 
@@ -403,6 +442,79 @@ def run_layer_patching(
     return results
 
 
+def log_to_wandb(
+    args,
+    results: dict,
+    output_dir: Path,
+) -> None:
+    """Log patching results to wandb."""
+    if not WANDB_AVAILABLE:
+        logger.warning("Wandb not available, skipping logging")
+        return
+
+    try:
+        wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name=f"patching_{args.patch_type}",
+            job_type="analysis",
+        )
+
+        # Log configuration
+        wandb.config.update({
+            "source": str(args.source),
+            "target": str(args.target),
+            "patch_type": args.patch_type,
+            "n_samples": results.get("n_samples", args.n_samples),
+        })
+
+        if args.patch_type == "repr":
+            repr_results = results.get("repr_patching", {})
+            wandb.log({
+                "patching/repr/baseline_eer": repr_results.get("baseline_eer"),
+                "patching/repr/patched_eer": repr_results.get("patched_eer"),
+                "patching/repr/eer_change": repr_results.get("eer_change"),
+                "patching/repr/eer_change_percent": repr_results.get("eer_change_percent"),
+                "patching/repr/mean_score_change": repr_results.get("mean_score_change"),
+            })
+
+            # Summary
+            wandb.run.summary["repr_patching_eer_change"] = repr_results.get("eer_change")
+            wandb.run.summary["repr_patching_direction"] = (
+                "improved" if repr_results.get("eer_change", 0) < 0 else "degraded"
+            )
+
+        elif args.patch_type == "layer":
+            layer_results = results.get("layer_patching", {})
+            for layer_name, layer_data in layer_results.items():
+                wandb.log({
+                    f"patching/{layer_name}/baseline_eer": layer_data.get("baseline_eer"),
+                    f"patching/{layer_name}/patched_eer": layer_data.get("patched_eer"),
+                    f"patching/{layer_name}/eer_change": layer_data.get("eer_change"),
+                })
+
+            # Create table
+            rows = []
+            for layer_name, layer_data in layer_results.items():
+                rows.append([
+                    layer_name,
+                    layer_data.get("baseline_eer"),
+                    layer_data.get("patched_eer"),
+                    layer_data.get("eer_change"),
+                ])
+            table = wandb.Table(
+                columns=["layer", "baseline_eer", "patched_eer", "eer_change"],
+                data=rows,
+            )
+            wandb.log({"patching/layer_table": table})
+
+        wandb.finish()
+        logger.info("Logged patching results to Wandb")
+
+    except Exception as e:
+        logger.warning(f"Wandb logging failed: {e}")
+
+
 def main():
     args = parse_args()
 
@@ -417,7 +529,14 @@ def main():
         output_dir = args.target.parent.parent.parent / "patching_analysis"
 
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Setup logging with JSON output
+    setup_logging(output_dir, json_output=True)
     logger.info(f"Output directory: {output_dir}")
+
+    # Log experiment context
+    context = get_experiment_context()
+    logger.info(f"Git commit: {context['git'].get('commit', 'N/A')[:8] if context['git'].get('commit') else 'N/A'}")
 
     # Load models
     logger.info(f"Loading source (DANN): {args.source}")
@@ -467,6 +586,7 @@ def main():
         "split": args.split,
         "n_samples": len(dataset),
         "patch_type": args.patch_type,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
     }
 
     # Run patching
@@ -480,8 +600,15 @@ def main():
         logger.info("\nRepresentation patching results:")
         logger.info(f"  Baseline EER: {repr_results['baseline_eer']:.4f}")
         logger.info(f"  Patched EER: {repr_results['patched_eer']:.4f}")
-        logger.info(f"  EER change: {repr_results['eer_change']:.4f}")
+        logger.info(f"  EER change: {repr_results['eer_change']:.4f} ({repr_results['eer_change_percent']:.1f}%)")
         logger.info(f"  Mean score change: {repr_results['mean_score_change']:.4f}")
+        logger.info(f"  Samples affected: {repr_results['n_positive_change']} positive, {repr_results['n_negative_change']} negative")
+
+        # Interpretation
+        if repr_results['eer_change'] < 0:
+            logger.info("  -> Patching DANN repr into ERM IMPROVED EER (domain invariance helps)")
+        else:
+            logger.info("  -> Patching DANN repr into ERM DEGRADED EER")
 
     elif args.patch_type == "layer":
         layer_indices = [int(x) for x in args.layer_indices.split(",")]
@@ -505,6 +632,11 @@ def main():
         json.dump(results, f, indent=2)
 
     logger.info(f"\nResults saved to: {output_path}")
+
+    # Wandb logging
+    if args.wandb:
+        log_to_wandb(args, results, output_dir)
+
     return 0
 
 

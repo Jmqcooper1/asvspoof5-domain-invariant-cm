@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluation entrypoint for trained models.
+"""Evaluation entrypoint for trained models with comprehensive logging.
 
 Usage:
     # Evaluate on dev set
@@ -8,15 +8,21 @@ Usage:
     # Evaluate with per-domain breakdown
     python scripts/evaluate.py --checkpoint runs/my_run/checkpoints/best.pt --split dev --per-domain
 
-    # Evaluate on eval set
-    python scripts/evaluate.py --checkpoint runs/my_run/checkpoints/best.pt --split eval
+    # Evaluate on eval set with wandb logging
+    python scripts/evaluate.py --checkpoint runs/my_run/checkpoints/best.pt --split eval --wandb
 """
 
 import argparse
+import json
 import logging
+from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+import seaborn as sns
 import torch
 from tqdm import tqdm
 
@@ -37,7 +43,21 @@ from asvspoof5_domain_invariant_cm.models import (
     create_backbone,
     create_pooling,
 )
-from asvspoof5_domain_invariant_cm.utils import get_device, get_manifest_path, load_config
+from asvspoof5_domain_invariant_cm.utils import (
+    get_device,
+    get_experiment_context,
+    get_manifest_path,
+    load_config,
+    setup_logging,
+)
+
+# Optional wandb import
+try:
+    import wandb
+
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -110,6 +130,12 @@ def parse_args():
         type=str,
         default="asvspoof5-dann",
         help="Wandb project name",
+    )
+    parser.add_argument(
+        "--wandb-entity",
+        type=str,
+        default=None,
+        help="Wandb entity (team or username)",
     )
     return parser.parse_args()
 
@@ -262,6 +288,188 @@ def run_inference(
     return predictions
 
 
+def plot_score_distribution(
+    df: pd.DataFrame,
+    output_path: Path,
+    title: str = "Score Distribution",
+) -> None:
+    """Plot score distribution by class."""
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+    # Histogram
+    ax = axes[0]
+    bonafide_scores = df[df["y_task"] == 0]["score"]
+    spoof_scores = df[df["y_task"] == 1]["score"]
+
+    ax.hist(bonafide_scores, bins=50, alpha=0.7, label="Bonafide", density=True)
+    ax.hist(spoof_scores, bins=50, alpha=0.7, label="Spoof", density=True)
+    ax.set_xlabel("Score (P(bonafide))")
+    ax.set_ylabel("Density")
+    ax.set_title("Score Distribution by Class")
+    ax.legend()
+
+    # Box plot
+    ax = axes[1]
+    data = [bonafide_scores, spoof_scores]
+    ax.boxplot(data, labels=["Bonafide", "Spoof"])
+    ax.set_ylabel("Score")
+    ax.set_title("Score Box Plot")
+
+    plt.suptitle(title)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150)
+    plt.close()
+
+
+def plot_per_domain_eer(
+    domain_metrics: dict,
+    output_path: Path,
+    domain_name: str = "CODEC",
+) -> None:
+    """Plot EER by domain."""
+    if not domain_metrics:
+        return
+
+    domains = list(domain_metrics.keys())
+    eers = [domain_metrics[d].get("eer", 0) * 100 for d in domains]  # Convert to %
+    samples = [domain_metrics[d].get("n_samples", 0) for d in domains]
+
+    # Sort by EER
+    sorted_idx = np.argsort(eers)[::-1]
+    domains = [domains[i] for i in sorted_idx]
+    eers = [eers[i] for i in sorted_idx]
+    samples = [samples[i] for i in sorted_idx]
+
+    # Limit to top 20 for readability
+    if len(domains) > 20:
+        domains = domains[:20]
+        eers = eers[:20]
+        samples = samples[:20]
+
+    fig, ax = plt.subplots(figsize=(10, max(6, len(domains) * 0.3)))
+
+    colors = plt.cm.RdYlGn_r(np.array(eers) / max(eers) if max(eers) > 0 else np.zeros_like(eers))
+
+    bars = ax.barh(domains, eers, color=colors)
+
+    # Add sample counts as text
+    for i, (bar, n) in enumerate(zip(bars, samples)):
+        ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height()/2,
+                f'n={n}', va='center', fontsize=8)
+
+    ax.set_xlabel("EER (%)")
+    ax.set_title(f"EER by {domain_name}")
+    ax.invert_yaxis()
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150)
+    plt.close()
+
+
+def log_to_wandb(
+    args,
+    metrics: dict,
+    df: pd.DataFrame,
+    output_dir: Path,
+    config: dict,
+    codec_metrics: Optional[dict] = None,
+    codec_q_metrics: Optional[dict] = None,
+) -> None:
+    """Log comprehensive results to wandb."""
+    if not WANDB_AVAILABLE:
+        logger.warning("Wandb not available, skipping logging")
+        return
+
+    run_name = args.checkpoint.parent.parent.name
+
+    try:
+        wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name=f"eval_{run_name}_{args.split}",
+            config=config,
+            job_type="evaluation",
+        )
+
+        # Log overall metrics
+        wandb.log({
+            f"eval/{args.split}/eer": metrics["eer"],
+            f"eval/{args.split}/min_dcf": metrics["min_dcf"],
+            f"eval/{args.split}/n_samples": metrics["n_samples"],
+            f"eval/{args.split}/n_bonafide": metrics["n_bonafide"],
+            f"eval/{args.split}/n_spoof": metrics["n_spoof"],
+        })
+
+        # Log score distribution as histogram
+        bonafide_scores = df[df["y_task"] == 0]["score"].tolist()
+        spoof_scores = df[df["y_task"] == 1]["score"].tolist()
+
+        wandb.log({
+            f"eval/{args.split}/bonafide_scores": wandb.Histogram(bonafide_scores),
+            f"eval/{args.split}/spoof_scores": wandb.Histogram(spoof_scores),
+        })
+
+        # Log score distribution plot
+        score_plot_path = output_dir / "score_distribution.png"
+        if score_plot_path.exists():
+            wandb.log({
+                f"eval/{args.split}/score_distribution": wandb.Image(str(score_plot_path))
+            })
+
+        # Log per-domain metrics as tables
+        if codec_metrics:
+            codec_rows = [
+                {"codec": k, "eer": v["eer"], "n_samples": v["n_samples"]}
+                for k, v in codec_metrics.items()
+            ]
+            codec_table = wandb.Table(
+                columns=["codec", "eer", "n_samples"],
+                data=[[r["codec"], r["eer"], r["n_samples"]] for r in codec_rows]
+            )
+            wandb.log({f"eval/{args.split}/per_codec": codec_table})
+
+            # Log codec EER plot
+            codec_plot_path = output_dir / "eer_by_codec.png"
+            if codec_plot_path.exists():
+                wandb.log({
+                    f"eval/{args.split}/eer_by_codec_plot": wandb.Image(str(codec_plot_path))
+                })
+
+        if codec_q_metrics:
+            codec_q_rows = [
+                {"codec_q": k, "eer": v["eer"], "n_samples": v["n_samples"]}
+                for k, v in codec_q_metrics.items()
+            ]
+            codec_q_table = wandb.Table(
+                columns=["codec_q", "eer", "n_samples"],
+                data=[[r["codec_q"], r["eer"], r["n_samples"]] for r in codec_q_rows]
+            )
+            wandb.log({f"eval/{args.split}/per_codec_q": codec_q_table})
+
+            # Log codec_q EER plot
+            codec_q_plot_path = output_dir / "eer_by_codec_q.png"
+            if codec_q_plot_path.exists():
+                wandb.log({
+                    f"eval/{args.split}/eer_by_codec_q_plot": wandb.Image(str(codec_q_plot_path))
+                })
+
+        # Log predictions sample as table (first 100)
+        sample_df = df.head(100)[["flac_file", "score", "prediction", "y_task"]]
+        if "codec" in df.columns:
+            sample_df = df.head(100)[["flac_file", "score", "prediction", "y_task", "codec"]]
+        pred_table = wandb.Table(dataframe=sample_df)
+        wandb.log({f"eval/{args.split}/predictions_sample": pred_table})
+
+        # Set summary
+        wandb.run.summary[f"{args.split}_eer"] = metrics["eer"]
+        wandb.run.summary[f"{args.split}_min_dcf"] = metrics["min_dcf"]
+
+        wandb.finish()
+        logger.info("Logged metrics to Wandb")
+
+    except Exception as e:
+        logger.warning(f"Wandb logging failed: {e}")
+
+
 def main():
     args = parse_args()
 
@@ -282,7 +490,13 @@ def main():
         output_dir = args.checkpoint.parent.parent / f"eval_{args.split}"
 
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Setup logging with JSON output
+    setup_logging(output_dir, json_output=True)
     logger.info(f"Output directory: {output_dir}")
+
+    # Log experiment context
+    context = get_experiment_context(config)
 
     # Load dataset
     audio_cfg = config.get("audio", {})
@@ -350,7 +564,17 @@ def main():
     # Save overall metrics
     save_metrics_report(metrics, output_dir / "metrics.json")
 
+    # Plot score distribution
+    plot_score_distribution(
+        df,
+        output_dir / "score_distribution.png",
+        title=f"Score Distribution ({args.split})",
+    )
+
     # Per-domain breakdown
+    codec_metrics = None
+    codec_q_metrics = None
+
     if args.per_domain:
         tables_dir = output_dir / "tables"
         table_paths = save_domain_tables(df, tables_dir)
@@ -363,28 +587,88 @@ def main():
             logger.info(f"\n{domain.upper()} breakdown:")
             logger.info(domain_df.to_string(index=False))
 
+        # Compute per-domain metrics for wandb
+        from asvspoof5_domain_invariant_cm.evaluation.metrics import compute_eer
+
+        codec_id_to_name = {v: k for k, v in codec_vocab.items()}
+        codec_q_id_to_name = {v: k for k, v in codec_q_vocab.items()}
+
+        # Per-CODEC metrics
+        codec_metrics = {}
+        for codec_id in df["y_codec"].unique():
+            mask = df["y_codec"] == codec_id
+            if mask.sum() > 10:
+                codec_scores = df.loc[mask, "score"].values
+                codec_labels = df.loc[mask, "y_task"].values
+                if len(np.unique(codec_labels)) == 2:
+                    codec_eer, _ = compute_eer(codec_scores, codec_labels)
+                    codec_name = codec_id_to_name.get(codec_id, str(codec_id))
+                    codec_metrics[codec_name] = {
+                        "eer": float(codec_eer),
+                        "n_samples": int(mask.sum()),
+                    }
+
+        # Plot EER by CODEC
+        if codec_metrics:
+            plot_per_domain_eer(
+                codec_metrics,
+                output_dir / "eer_by_codec.png",
+                "CODEC",
+            )
+
+        # Per-CODEC_Q metrics
+        codec_q_metrics = {}
+        for codec_q_id in df["y_codec_q"].unique():
+            mask = df["y_codec_q"] == codec_q_id
+            if mask.sum() > 10:
+                cq_scores = df.loc[mask, "score"].values
+                cq_labels = df.loc[mask, "y_task"].values
+                if len(np.unique(cq_labels)) == 2:
+                    cq_eer, _ = compute_eer(cq_scores, cq_labels)
+                    cq_name = codec_q_id_to_name.get(codec_q_id, str(codec_q_id))
+                    codec_q_metrics[cq_name] = {
+                        "eer": float(cq_eer),
+                        "n_samples": int(mask.sum()),
+                    }
+
+        # Plot EER by CODEC_Q
+        if codec_q_metrics:
+            plot_per_domain_eer(
+                codec_q_metrics,
+                output_dir / "eer_by_codec_q.png",
+                "CODEC_Q",
+            )
+
     logger.info(f"\nResults saved to: {output_dir}")
+
+    # Build evaluation complete wide event
+    eval_event = {
+        "split": args.split,
+        "checkpoint": str(args.checkpoint),
+        "metrics": metrics,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+    if codec_metrics:
+        eval_event["n_codecs_evaluated"] = len(codec_metrics)
+    if codec_q_metrics:
+        eval_event["n_codec_qs_evaluated"] = len(codec_q_metrics)
+
+    # Save evaluation wide event
+    with open(output_dir / "evaluation_event.json", "w") as f:
+        json.dump(eval_event, f, indent=2, default=str)
 
     # Wandb logging
     if args.wandb:
-        try:
-            import wandb
-
-            run_name = args.checkpoint.parent.parent.name
-            wandb.init(
-                project=args.wandb_project,
-                name=f"eval_{run_name}_{args.split}",
-                config=config,
-            )
-            wandb.log({
-                f"eval/{args.split}/eer": metrics["eer"],
-                f"eval/{args.split}/min_dcf": metrics["min_dcf"],
-                f"eval/{args.split}/n_samples": metrics["n_samples"],
-            })
-            wandb.finish()
-            logger.info("Logged metrics to Wandb")
-        except ImportError:
-            logger.warning("Wandb not installed, skipping logging")
+        log_to_wandb(
+            args,
+            metrics,
+            df,
+            output_dir,
+            config,
+            codec_metrics=codec_metrics,
+            codec_q_metrics=codec_q_metrics,
+        )
 
     return 0
 

@@ -22,5 +22,16 @@ evaluation:
   compute_per_domain: true
   bootstrap_ci: false
 
+# Logging
+logging:
+  json_logs: true  # Write JSON logs to file
+
+# Wandb
+wandb:
+  enabled: true
+  project: asvspoof5-dann
+  entity: null
+  tags: ["trillsson", "baseline", "track1"]
+
 # Reproducibility
 seed: 42

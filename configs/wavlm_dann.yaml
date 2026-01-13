@@ -104,6 +104,20 @@ logging:
   log_every_n_steps: 50
   val_every_n_epochs: 1
   log_domain_accuracy: true
+  log_domain_breakdown_every: 5  # Per-domain metrics frequency
+  json_logs: true  # Write JSON logs to file
+  log_batch_samples: 0.02  # Sample 2% of batches for detailed logging
+  track_gradients: true  # Log gradient norms
+  track_layer_weights: true  # Log layer mixing weights
+
+# Wandb
+wandb:
+  enabled: true
+  project: asvspoof5-dann
+  entity: null
+  tags: ["wavlm", "dann", "track1"]
+  log_model: false  # Save model as artifact
+  log_code: true  # Log code snapshot
 
 # Reproducibility
 seed: 42
