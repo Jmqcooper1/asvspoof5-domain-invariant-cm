@@ -1,0 +1,26 @@
+# TRILLsson Non-Semantic Baseline Configuration
+# Uses pre-extracted TRILLsson embeddings with a simple classifier
+
+# Feature extraction settings
+features:
+  type: trillsson
+  model: trillsson3
+  embedding_dim: 1024
+  features_dir: data/features/trillsson
+
+# Classifier
+classifier:
+  type: logistic  # or mlp
+
+  # MLP settings (used if type: mlp)
+  mlp:
+    hidden_dims: [256, 128]
+    dropout: 0.1
+
+# Evaluation
+evaluation:
+  compute_per_domain: true
+  bootstrap_ci: false
+
+# Reproducibility
+seed: 42

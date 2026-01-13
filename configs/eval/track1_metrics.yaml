@@ -1,0 +1,49 @@
+# ASVspoof 5 Track 1 Evaluation Metrics Configuration
+
+metrics:
+  # Primary metric
+  primary: min_dcf
+  
+  # All metrics to compute
+  compute:
+    - eer
+    - min_dcf
+    - cllr
+    - act_dcf
+  
+  # minDCF parameters
+  min_dcf:
+    c_miss: 1.0
+    c_fa: 1.0
+    p_target: 0.05
+  
+  act_dcf:
+    threshold: 0.5
+    c_miss: 1.0
+    c_fa: 1.0
+    p_target: 0.05
+
+# Output
+output:
+  save_scores: true
+  scores_file: predictions.tsv
+  metrics_file: metrics.json
+  
+  score_columns:
+    - utterance_id
+    - score
+    - label
+    - prediction
+    - codec
+    - codec_q
+
+# Statistical reliability
+statistics:
+  bootstrap:
+    enabled: true
+    n_samples: 1000
+    confidence_level: 0.95
+  
+  aggregate_seeds:
+    compute_mean: true
+    compute_std: true

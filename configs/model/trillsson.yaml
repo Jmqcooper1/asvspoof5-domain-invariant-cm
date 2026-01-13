@@ -1,0 +1,21 @@
+# TRILLsson Non-Semantic Baseline Configuration
+
+backbone:
+  name: trillsson
+  embedding_dim: 1024
+  embedding_dir: data/embeddings/trillsson
+  freeze: true
+
+classifier:
+  input_dim: 1024
+  num_classes: 2
+  type: mlp
+  
+  mlp:
+    hidden_dims: [256, 128]
+    dropout: 0.1
+    activation: relu
+  
+  svm:
+    kernel: rbf
+    C: 1.0

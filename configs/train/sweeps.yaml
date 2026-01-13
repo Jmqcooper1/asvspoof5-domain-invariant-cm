@@ -1,0 +1,27 @@
+# Hyperparameter Sweep Configuration
+
+base_config: dann.yaml
+
+sweeps:
+  lambda_sweep:
+    parameter: dann.lambda_
+    values: [0.01, 0.05, 0.1, 0.25, 0.5, 1.0]
+  
+  lr_sweep:
+    parameter: training.optimizer.lr
+    values: [5.0e-5, 1.0e-4, 2.0e-4, 5.0e-4]
+  
+  layer_sweep:
+    parameter: backbone.layer_selection.k
+    values: [4, 6, 8, 12]
+
+combined:
+  enabled: false
+  parameters:
+    - dann.lambda_: [0.1, 0.5]
+    - training.optimizer.lr: [1.0e-4, 2.0e-4]
+
+tracking:
+  project: asvspoof5-dann-sweeps
+  group: null
+  tags: [sweep, dann]

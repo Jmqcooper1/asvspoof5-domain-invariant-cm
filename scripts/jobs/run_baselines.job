@@ -1,0 +1,72 @@
+#!/bin/bash
+#SBATCH --partition=gpu
+#SBATCH --gpus=1
+#SBATCH --job-name=Baselines
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=9
+#SBATCH --time=08:00:00
+#SBATCH --output=./scripts/jobs/out/%x_%A.out
+
+# =============================================================================
+# Run Non-Semantic Baselines (TRILLsson + LFCC-GMM)
+# =============================================================================
+
+module purge
+module load 2025
+
+cd $HOME/asvspoof5-domain-invariant-cm
+
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+uv sync --locked
+
+# Verify CUDA availability
+uv run python - <<'EOF'
+import torch
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"GPU device count: {torch.cuda.device_count()}")
+    print(f"Active GPU: {torch.cuda.get_device_name(0)}")
+EOF
+echo ""
+
+# Load environment variables from .env if it exists
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
+
+# Set project-specific environment variables
+export ASVSPOOF5_ROOT=${ASVSPOOF5_ROOT:-/scratch-shared/$USER/asvspoof5}
+
+echo "=== Running Non-Semantic Baselines ==="
+
+# Extract LFCC features
+echo ""
+echo "--- Extracting LFCC Features ---"
+srun uv run python scripts/extract_lfcc.py --split train
+srun uv run python scripts/extract_lfcc.py --split dev
+
+# Train LFCC-GMM
+echo ""
+echo "--- Training LFCC-GMM ---"
+srun uv run python scripts/train_lfcc_gmm.py --n-components 32
+
+# Extract TRILLsson embeddings (if TensorFlow Hub is available)
+echo ""
+echo "--- Extracting TRILLsson Embeddings ---"
+srun uv run python scripts/extract_trillsson.py --split train || echo "TRILLsson extraction failed (TensorFlow may not be available)"
+srun uv run python scripts/extract_trillsson.py --split dev || echo "TRILLsson extraction failed"
+
+# Train TRILLsson classifier (if embeddings exist)
+if [ -f "data/features/trillsson/train.npy" ]; then
+    echo ""
+    echo "--- Training TRILLsson Classifier ---"
+    srun uv run python scripts/train_trillsson.py --classifier logistic
+    srun uv run python scripts/train_trillsson.py --classifier mlp
+else
+    echo "Skipping TRILLsson classifier (embeddings not found)"
+fi
+
+echo ""
+echo "Baselines complete!"

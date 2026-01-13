@@ -1,0 +1,31 @@
+# Wav2Vec 2.0 Base Model Configuration
+
+backbone:
+  name: wav2vec2_base
+  pretrained: facebook/wav2vec2-base
+  num_layers: 12
+  hidden_size: 768
+  freeze: true  # Start with frozen backbone
+  
+  layer_selection:
+    method: weighted  # weighted, first_k, last_k, specific
+    k: 6
+    init_lower_bias: true
+
+# Projection head
+projection:
+  input_dim: 768
+  hidden_dim: 512
+  output_dim: 256
+  num_layers: 2
+  dropout: 0.1
+  activation: relu
+
+classifier:
+  input_dim: 256
+  num_classes: 2
+  hidden_dim: 128
+  dropout: 0.1
+
+pooling:
+  method: mean  # mean, attention, stats

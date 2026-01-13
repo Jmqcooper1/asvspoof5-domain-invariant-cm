@@ -1,0 +1,91 @@
+#!/bin/bash
+#SBATCH --partition=gpu_h100
+#SBATCH --gpus=1
+#SBATCH --job-name=Analysis
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=9
+#SBATCH --time=08:00:00
+#SBATCH --output=./scripts/jobs/out/%x_%A.out
+
+# =============================================================================
+# Run Interpretability Analysis (Probes, CKA, Patching)
+# =============================================================================
+
+module purge
+module load 2025
+
+cd $HOME/asvspoof5-domain-invariant-cm
+
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+uv sync --locked
+
+# Verify CUDA availability
+uv run python - <<'EOF'
+import torch
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"GPU device count: {torch.cuda.device_count()}")
+    print(f"Active GPU: {torch.cuda.get_device_name(0)}")
+EOF
+echo ""
+
+# Load environment variables from .env if it exists
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
+
+# Set project-specific environment variables
+export ASVSPOOF5_ROOT=${ASVSPOOF5_ROOT:-/scratch-shared/$USER/asvspoof5}
+export WANDB_PROJECT=${WANDB_PROJECT:-asvspoof5-dann}
+
+echo "=== Running Interpretability Analysis ==="
+
+# Domain Probes - Compare WavLM ERM vs DANN
+echo ""
+echo "--- Domain Probes (WavLM) ---"
+srun uv run python scripts/probe_domain.py \
+    --erm-checkpoint runs/wavlm_erm/checkpoints/best.pt \
+    --dann-checkpoint runs/wavlm_dann/checkpoints/best.pt \
+    --output-dir runs/analysis/probes_wavlm \
+    --wandb
+
+# Domain Probes - Compare Wav2Vec2 ERM vs DANN
+echo ""
+echo "--- Domain Probes (Wav2Vec2) ---"
+srun uv run python scripts/probe_domain.py \
+    --erm-checkpoint runs/w2v2_erm/checkpoints/best.pt \
+    --dann-checkpoint runs/w2v2_dann/checkpoints/best.pt \
+    --output-dir runs/analysis/probes_w2v2 \
+    --wandb
+
+# CKA Analysis - WavLM
+echo ""
+echo "--- CKA Analysis (WavLM) ---"
+srun uv run python scripts/run_cka.py \
+    --erm-checkpoint runs/wavlm_erm/checkpoints/best.pt \
+    --dann-checkpoint runs/wavlm_dann/checkpoints/best.pt \
+    --output-dir runs/analysis/cka_wavlm \
+    --wandb
+
+# CKA Analysis - Wav2Vec2
+echo ""
+echo "--- CKA Analysis (Wav2Vec2) ---"
+srun uv run python scripts/run_cka.py \
+    --erm-checkpoint runs/w2v2_erm/checkpoints/best.pt \
+    --dann-checkpoint runs/w2v2_dann/checkpoints/best.pt \
+    --output-dir runs/analysis/cka_w2v2 \
+    --wandb
+
+# Activation Patching - WavLM
+echo ""
+echo "--- Activation Patching (WavLM) ---"
+srun uv run python scripts/run_patching.py \
+    --source-checkpoint runs/wavlm_dann/checkpoints/best.pt \
+    --target-checkpoint runs/wavlm_erm/checkpoints/best.pt \
+    --output-dir runs/analysis/patching_wavlm \
+    --n-samples 500
+
+echo ""
+echo "Analysis complete!"

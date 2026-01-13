@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+title: "ASVspoof 5 Domain-Invariant CM"
+message: "If you use this code, please cite the repository and the ASVspoof 5 papers."
+type: software
+authors:
+  - given-names: Mike
+    family-names: Cooper
+    email: mike.cooper@student.uva.nl
+repository-code: "https://github.com/jmqcooper/asvspoof5-domain-invariant-cm"
+license: MIT
+keywords:
+  - speech
+  - deepfake
+  - spoofing
+  - ASVspoof
+  - domain adversarial training
+  - interpretability
