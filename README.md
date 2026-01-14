@@ -37,6 +37,31 @@ This repository implements:
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
 - ~100GB disk space for full ASVspoof 5 dataset
 - GPU with 16GB+ VRAM recommended (A100/H100 for fastest training)
+- **FFmpeg with codec support** (required for DANN training)
+
+### FFmpeg Requirements
+
+DANN training requires synthetic codec augmentation via ffmpeg. At minimum, you need:
+
+```bash
+# Check available encoders
+ffmpeg -encoders 2>/dev/null | grep -E 'mp3|aac|opus'
+
+# Required: libmp3lame, aac, libopus
+# Optional: libspeex, libopencore_amrnb (for additional domain diversity)
+```
+
+**Install on Ubuntu/Debian:**
+```bash
+sudo apt install ffmpeg
+```
+
+**Install on macOS:**
+```bash
+brew install ffmpeg
+```
+
+**Note:** ERM training does not require ffmpeg (no augmentation needed).
 
 ### Install uv (if not already installed)
 
@@ -160,6 +185,32 @@ This creates:
 - `$ASVSPOOF5_ROOT/manifests/eval.parquet` (if eval protocols available)
 - `$ASVSPOOF5_ROOT/manifests/codec_vocab.json`
 - `$ASVSPOOF5_ROOT/manifests/codec_q_vocab.json`
+
+---
+
+## Smoke Test (Verify Installation)
+
+Run these quick tests to verify your setup before full experiments:
+
+```bash
+# 1. Run unit tests (no dataset required)
+uv run pytest tests/ -v --tb=short
+
+# 2. Smoke test ERM training (requires dataset)
+uv run python scripts/train.py \
+    --config configs/smoke_test.yaml \
+    --name smoke_erm
+
+# 3. Smoke test DANN training with augmentation (requires dataset + ffmpeg)
+uv run python scripts/train.py \
+    --config configs/smoke_test_dann.yaml \
+    --name smoke_dann
+
+# 4. Verify domain statistics
+uv run python scripts/inspect_domains.py
+```
+
+Smoke tests run for 1 epoch with small batches (~5-10 minutes each).
 
 ---
 

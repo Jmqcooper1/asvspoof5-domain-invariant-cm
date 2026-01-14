@@ -32,8 +32,12 @@ Secondary metric. The point where False Acceptance Rate equals False Rejection R
 
 ```python
 def compute_eer(scores: np.ndarray, labels: np.ndarray) -> tuple[float, float]:
-    """Compute Equal Error Rate and threshold."""
-    # labels: 1 for bonafide, 0 for spoof
+    """Compute Equal Error Rate and threshold.
+    
+    Args:
+        scores: Detection scores (higher = more likely bonafide).
+        labels: Binary labels (0 = bonafide, 1 = spoof).
+    """
     ...
 ```
 
@@ -54,6 +58,27 @@ To assess domain robustness, we report metrics broken down by:
 1. **CODEC:** Performance per codec type
 2. **CODEC_Q:** Performance per codec quality setting
 3. **Combined:** CODEC x CODEC_Q combinations
+
+### Important: Per-Domain Breakdown Scope
+
+**Per-domain evaluation is meaningful only on the eval split.**
+
+| Split | CODEC diversity | Per-domain breakdown |
+|-------|----------------|---------------------|
+| Train | None (all `"-"`) | Trivial (single domain) |
+| Dev | None (all `"-"`) | Trivial (single domain) |
+| Eval | C01-C11 + uncoded | Meaningful |
+
+For train/dev validation during training, only overall metrics (EER, minDCF) are reported.
+Per-domain breakdown tables are generated for eval set analysis only.
+
+### Domain Normalization for Reporting
+
+When generating per-domain tables, domain values are normalized:
+- `"-"` (train/dev uncoded) → `"NONE"`
+- `"0"` (eval uncoded CODEC_Q) → `"NONE"`
+
+This ensures consistent domain labels across plots and tables.
 
 ```python
 def evaluate_per_domain(
