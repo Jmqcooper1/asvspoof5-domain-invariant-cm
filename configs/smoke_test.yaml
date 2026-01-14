@@ -1,0 +1,77 @@
+# Smoke test config - minimal training to verify pipeline works
+# Usage: uv run python scripts/train.py --config configs/smoke_test.yaml --name smoke_erm
+
+backbone:
+  name: wavlm_base_plus
+  pretrained: microsoft/wavlm-base-plus
+  num_layers: 12
+  hidden_size: 768
+  freeze: true
+  layer_selection:
+    method: weighted
+    k: 6
+    init_lower_bias: true
+
+pooling:
+  method: stats
+
+projection:
+  input_dim: 1536
+  hidden_dim: 512
+  output_dim: 256
+  num_layers: 2
+  dropout: 0.1
+
+classifier:
+  input_dim: 256
+  num_classes: 2
+  hidden_dim: 0
+  dropout: 0.1
+
+training:
+  method: erm
+  optimizer:
+    name: adamw
+    lr: 1.0e-4
+    weight_decay: 0.01
+    betas: [0.9, 0.999]
+  scheduler:
+    name: cosine
+    warmup_steps: 10
+    min_lr: 1.0e-6
+  max_epochs: 1          # SMOKE: just 1 epoch
+  patience: 1
+  gradient_clip: 1.0
+  save_every_n_epochs: 1
+  monitor_metric: eer
+  monitor_mode: min
+
+loss:
+  task:
+    name: cross_entropy
+    weight: 1.0
+    label_smoothing: 0.0
+
+audio:
+  sample_rate: 16000
+  max_duration_sec: 4.0  # SMOKE: shorter clips
+
+dataloader:
+  batch_size: 8          # SMOKE: smaller batch
+  num_workers: 2
+  pin_memory: true
+  drop_last: true
+
+logging:
+  log_every_n_steps: 10
+  val_every_n_epochs: 1
+  log_domain_breakdown_every: 1
+  json_logs: true
+  log_batch_samples: 0.0
+  track_gradients: false
+
+wandb:
+  enabled: false         # SMOKE: no wandb
+
+seed: 42
+deterministic: true

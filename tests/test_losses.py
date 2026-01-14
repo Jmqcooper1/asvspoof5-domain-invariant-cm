@@ -129,6 +129,57 @@ class TestCombinedDANNLoss:
 
         assert loss_fn.lambda_domain == 1.0
 
+    def test_codec_q_loss_masked_when_codec_none(self):
+        """CODEC_Q loss should be 0 when all samples have codec=NONE."""
+        loss_fn = CombinedDANNLoss(
+            lambda_domain=1.0,
+            none_codec_id=0,
+            mask_codec_q_for_none=True,
+        )
+
+        # All samples have codec=NONE (id=0)
+        task_logits = torch.randn(4, 2)
+        codec_logits = torch.randn(4, 6)  # 6 synthetic codec classes
+        codec_q_logits = torch.randn(4, 6)  # 6 quality classes
+        y_task = torch.randint(0, 2, (4,))
+        y_codec = torch.zeros(4, dtype=torch.long)  # All NONE
+        y_codec_q = torch.randint(0, 6, (4,))
+
+        result = loss_fn(
+            task_logits, codec_logits, codec_q_logits,
+            y_task, y_codec, y_codec_q
+        )
+
+        assert result["codec_q_loss"].item() == 0.0, (
+            "CODEC_Q loss should be masked (0) when all codec labels are NONE"
+        )
+
+    def test_codec_q_loss_not_masked_for_coded_samples(self):
+        """CODEC_Q loss should be non-zero when samples have coded domains."""
+        loss_fn = CombinedDANNLoss(
+            lambda_domain=1.0,
+            none_codec_id=0,
+            mask_codec_q_for_none=True,
+        )
+
+        # Mix of NONE and coded samples
+        task_logits = torch.randn(4, 2)
+        codec_logits = torch.randn(4, 6)
+        codec_q_logits = torch.randn(4, 6)
+        y_task = torch.randint(0, 2, (4,))
+        y_codec = torch.tensor([0, 1, 2, 1])  # Some coded, some NONE
+        y_codec_q = torch.randint(1, 6, (4,))  # Non-zero quality
+
+        result = loss_fn(
+            task_logits, codec_logits, codec_q_logits,
+            y_task, y_codec, y_codec_q
+        )
+
+        # Should have non-zero loss because some samples are coded
+        assert result["codec_q_loss"].item() > 0.0, (
+            "CODEC_Q loss should be non-zero when some samples are coded"
+        )
+
 
 class TestBuildLoss:
     """Test loss factory function."""

@@ -32,6 +32,9 @@ import torch
 from asvspoof5_domain_invariant_cm.data import (
     ASVspoof5Dataset,
     AudioCollator,
+    SYNTHETIC_CODEC_VOCAB,
+    SYNTHETIC_QUALITY_VOCAB,
+    create_augmentor,
     load_vocab,
 )
 from asvspoof5_domain_invariant_cm.models import (
@@ -68,6 +71,18 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _worker_init_fn(worker_id: int) -> None:
+    """Seed random for reproducible augmentation in DataLoader workers.
+    
+    Must be at module level for multiprocessing pickling.
+    """
+    import random
+    import numpy as np
+    worker_seed = torch.initial_seed() % 2**32
+    random.seed(worker_seed + worker_id)
+    np.random.seed(worker_seed + worker_id)
 
 
 def parse_args():
@@ -354,11 +369,40 @@ def main():
     data_cfg = config.get("dataset", config.get("data", {}))
     audio_cfg = config.get("audio", {})
     dataloader_cfg = config.get("dataloader", {})
+    training_cfg = config.get("training", {})
 
     sample_rate = audio_cfg.get("sample_rate", 16000)
     max_duration = audio_cfg.get("max_duration_sec", 6.0)
     batch_size = dataloader_cfg.get("batch_size", 32)
     num_workers = dataloader_cfg.get("num_workers", 4)
+
+    # Create codec augmentor for DANN
+    method = training_cfg.get("method", "erm")
+    aug_cfg = config.get("augmentation", {})
+    augmentor = None
+
+    if method == "dann" and aug_cfg.get("enabled", False):
+        # Inject sample_rate into augmentation config
+        aug_cfg_with_sr = {**aug_cfg, "sample_rate": sample_rate}
+        augmentor = create_augmentor(aug_cfg_with_sr)
+
+        if augmentor is not None:
+            # Critical: DANN requires domain diversity
+            if len(augmentor.supported_codecs) < 2:
+                raise RuntimeError(
+                    f"DANN requires >=2 supported codecs, got {len(augmentor.supported_codecs)}. "
+                    f"Supported: {augmentor.supported_codecs}. "
+                    "Check ffmpeg encoder support: ffmpeg -encoders | grep -E 'mp3|aac|opus'"
+                )
+            logger.info(
+                f"Codec augmentor initialized: supported_codecs={augmentor.supported_codecs}, "
+                f"codec_prob={aug_cfg.get('codec_prob', 0.5)}"
+            )
+        else:
+            logger.warning(
+                "Augmentation enabled in config but augmentor is None - "
+                "DANN will train on constant NONE domain (degenerates to ERM)!"
+            )
 
     # Create datasets
     train_dataset = ASVspoof5Dataset(
@@ -368,6 +412,8 @@ def main():
         max_duration_sec=max_duration,
         sample_rate=sample_rate,
         mode="train",
+        augmentor=augmentor,
+        use_synthetic_labels=augmentor is not None,
     )
 
     val_dataset = ASVspoof5Dataset(
@@ -401,6 +447,7 @@ def main():
         collate_fn=train_collator,
         drop_last=True,
         pin_memory=True,
+        worker_init_fn=_worker_init_fn,
     )
 
     val_loader = torch.utils.data.DataLoader(
@@ -413,8 +460,19 @@ def main():
         pin_memory=True,
     )
 
-    # Build model
-    model = build_model(config, len(codec_vocab), len(codec_q_vocab))
+    # Build model - use synthetic vocab sizes for DANN with augmentation
+    if augmentor is not None:
+        num_codecs = len(SYNTHETIC_CODEC_VOCAB)
+        num_codec_qs = len(SYNTHETIC_QUALITY_VOCAB)
+        logger.info(
+            f"DANN with augmentation: domain discriminator sizes "
+            f"num_codecs={num_codecs}, num_codec_qs={num_codec_qs}"
+        )
+    else:
+        num_codecs = len(codec_vocab)
+        num_codec_qs = len(codec_q_vocab)
+
+    model = build_model(config, num_codecs, num_codec_qs)
     model = model.to(device)
 
     # Count parameters
@@ -423,9 +481,7 @@ def main():
     logger.info(f"Total parameters: {total_params:,}")
     logger.info(f"Trainable parameters: {trainable_params:,}")
 
-    # Training config
-    training_cfg = config.get("training", {})
-    method = training_cfg.get("method", "erm")
+    # Optimizer and scheduler configs (training_cfg and method already defined above)
     optimizer_cfg = training_cfg.get("optimizer", {})
     scheduler_cfg = training_cfg.get("scheduler", {})
 

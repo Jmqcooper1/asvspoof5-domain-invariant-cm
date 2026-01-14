@@ -89,6 +89,10 @@ def train_epoch(
     grad_clips_count = 0
     nan_grad_count = 0
 
+    # Augmentation rate tracking (for DANN)
+    total_aug_samples = 0
+    total_non_none_samples = 0
+
     # Batch-level logging samples
     batch_samples = []
 
@@ -101,8 +105,14 @@ def train_epoch(
         attention_mask = batch["attention_mask"].to(device)
         lengths = batch["lengths"].to(device)
         y_task = batch["y_task"].to(device)
-        y_codec = batch["y_codec"].to(device)
-        y_codec_q = batch["y_codec_q"].to(device)
+
+        # Use augmented domain labels when available (for DANN with synthetic augmentation)
+        if "y_codec_aug" in batch and batch["y_codec_aug"] is not None:
+            y_codec = batch["y_codec_aug"].to(device)
+            y_codec_q = batch["y_codec_q_aug"].to(device)
+        else:
+            y_codec = batch["y_codec"].to(device)
+            y_codec_q = batch["y_codec_q"].to(device)
 
         optimizer.zero_grad()
 
@@ -113,6 +123,17 @@ def train_epoch(
             outputs = model(waveform, attention_mask, lengths)
 
             if method == "dann":
+                # Fail-fast: DANN requires domain diversity in early training
+                # Check first 10 batches to catch wiring bugs immediately
+                if batch_idx < 10:
+                    unique_codecs = y_codec.unique().numel()
+                    if unique_codecs < 2:
+                        raise RuntimeError(
+                            f"DANN requires domain diversity but batch {batch_idx} has only "
+                            f"{unique_codecs} unique codec(s). Check: augmentor wired? "
+                            f"ffmpeg available? supported_codecs>=2? codec_prob>0?"
+                        )
+
                 losses = loss_fn(
                     outputs["task_logits"],
                     outputs["codec_logits"],
@@ -186,6 +207,25 @@ def train_epoch(
             total_codec_acc += codec_acc
             total_codec_q_acc += codec_q_acc
 
+            # Track augmentation rate (assuming 0 = NONE in synthetic vocab)
+            total_aug_samples += y_codec.numel()
+            total_non_none_samples += (y_codec != 0).sum().item()
+
+            # Log augmentation rate periodically and fail if too low
+            if batch_idx > 0 and batch_idx % 100 == 0:
+                aug_rate = total_non_none_samples / max(total_aug_samples, 1)
+                logger.info(
+                    f"Step {batch_idx}: cumulative augmentation rate = {aug_rate:.1%} "
+                    f"({total_non_none_samples}/{total_aug_samples} samples coded)"
+                )
+
+                # Fail if augmentation rate is near zero after sufficient steps
+                if batch_idx >= 500 and aug_rate < 0.05:
+                    raise RuntimeError(
+                        f"Augmentation rate {aug_rate:.1%} < 5% after {batch_idx} steps. "
+                        f"DANN requires domain diversity. Check codec_prob and ffmpeg codec support."
+                    )
+
         # Sample batches for detailed logging
         if batch_sample_rate > 0 and random.random() < batch_sample_rate:
             batch_duration = time.time() - batch_start_time
@@ -224,6 +264,9 @@ def train_epoch(
         metrics["codec_q_loss"] = total_codec_q_loss / num_batches
         metrics["codec_acc"] = total_codec_acc / num_batches
         metrics["codec_q_acc"] = total_codec_q_acc / num_batches
+        # Augmentation rate metric
+        if total_aug_samples > 0:
+            metrics["aug_rate"] = total_non_none_samples / total_aug_samples
 
     # Gradient statistics
     if track_gradients and grad_norms:

@@ -14,7 +14,7 @@ from asvspoof5_domain_invariant_cm.evaluation.metrics import (
 class TestEER:
     """Test Equal Error Rate computation.
 
-    Note: Label convention is 1 = bonafide, 0 = spoof
+    Note: Label convention is 0 = bonafide, 1 = spoof
     Score convention: higher = more likely bonafide
     """
 
@@ -22,7 +22,7 @@ class TestEER:
         """Perfect separation should give EER = 0."""
         # All bonafide scores high, all spoof scores low
         scores = np.array([0.9, 0.8, 0.85, 0.1, 0.05, 0.15])
-        labels = np.array([1, 1, 1, 0, 0, 0])  # bonafide=1, spoof=0
+        labels = np.array([0, 0, 0, 1, 1, 1])  # bonafide=0, spoof=1
 
         eer, threshold = compute_eer(scores, labels)
 
@@ -43,7 +43,7 @@ class TestEER:
         """Completely wrong scores should give EER close to 100%."""
         # All bonafide scores low, all spoof scores high
         scores = np.array([0.1, 0.15, 0.05, 0.9, 0.85, 0.95])
-        labels = np.array([1, 1, 1, 0, 0, 0])  # bonafide=1, spoof=0
+        labels = np.array([0, 0, 0, 1, 1, 1])  # bonafide=0, spoof=1
 
         eer, threshold = compute_eer(scores, labels)
 
@@ -68,7 +68,7 @@ class TestMinDCF:
     def test_perfect_separation(self):
         """Perfect separation should give minDCF = 0."""
         scores = np.array([0.9, 0.8, 0.85, 0.1, 0.05, 0.15])
-        labels = np.array([1, 1, 1, 0, 0, 0])  # bonafide=1, spoof=0
+        labels = np.array([0, 0, 0, 1, 1, 1])  # bonafide=0, spoof=1
 
         min_dcf = compute_min_dcf(scores, labels, p_target=0.05)
 
@@ -147,7 +147,7 @@ class TestActDCF:
     def test_actdcf_perfect_at_good_threshold(self):
         """Perfect scores at correct threshold should give low actDCF."""
         scores = np.array([0.9, 0.8, 0.85, 0.1, 0.05, 0.15])
-        labels = np.array([1, 1, 1, 0, 0, 0])
+        labels = np.array([0, 0, 0, 1, 1, 1])  # bonafide=0, spoof=1
 
         # At threshold 0.5, all samples correctly classified
         act_dcf = compute_act_dcf(scores, labels, threshold=0.5, p_target=0.05)

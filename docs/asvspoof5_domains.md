@@ -108,3 +108,41 @@ Target synthetic domains:
 ## Leakage Control
 
 When creating any custom splits (e.g., held-out codec analysis), group by `CODEC_SEED` to ensure coded variants of the same original utterance stay together.
+
+## CODEC_Q Semantic Mismatch (Important Limitation)
+
+The CODEC_Q domain has different semantics between synthetic augmentation and eval protocol:
+
+**Synthetic augmentation quality levels:** 1-5 (arbitrary bitrate tiers per codec)
+
+**Eval protocol quality levels:** 0-8, where:
+- 0: Uncoded (CODEC="-")
+- 1-5: Codec bitrate tiers (per-codec, not globally comparable)
+- 6-8: C11 device/channel variants (Bluetooth, cable, MST)
+
+**Implication:** The CODEC_Q adversarial head trains on synthetic quality tiers
+(1-5) which do NOT directly correspond to eval quality levels. Quality levels
+are categorical (codec-specific), not ordinal across codec families.
+
+Per-CODEC_Q evaluation on the eval set is purely analytical - the model has
+never seen quality levels 6-8 during training (C11 device variants).
+
+## Codec Coverage Gaps (Important Limitation)
+
+**Synthetic augmentation covers:** MP3, AAC, OPUS, SPEEX, AMR
+
+**Eval codecs NOT covered by synthetic augmentation:**
+
+| Eval Codec | Description | Why Not Simulated |
+|------------|-------------|-------------------|
+| **C04 (Encodec)** | Neural codec | Fundamentally different artifacts; no ffmpeg encoder |
+| **C07 (MP3+Encodec)** | Cascaded codecs | Compound degradation not easily simulatable |
+| **C11 (Device/channel)** | Bluetooth, cable, microphone | Requires acoustic simulation, not codec |
+
+**Expected behavior:** DANN may NOT generalize to C04, C07, C11 domains since
+they were never seen during training. Per-domain evaluation should reveal
+where domain-invariant gains occur vs. where they don't.
+
+**Potential mitigations (out of scope for current work):**
+- For C11: Add channel simulation (bandwidth limit + noise + reverb)
+- For C04/C07: Would require neural codec implementation or pre-coded samples

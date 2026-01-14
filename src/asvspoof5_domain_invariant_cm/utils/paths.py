@@ -132,7 +132,7 @@ def build_audio_path(flac_filename: str, asvspoof5_root: Path = None) -> Path:
     """Build absolute audio path from FLAC filename.
 
     Args:
-        flac_filename: FLAC filename (e.g., 'T_0001.flac').
+        flac_filename: FLAC filename (e.g., 'T_0001' or 'T_0001.flac').
         asvspoof5_root: ASVspoof5 root (uses env var if None).
 
     Returns:
@@ -140,6 +140,10 @@ def build_audio_path(flac_filename: str, asvspoof5_root: Path = None) -> Path:
     """
     if asvspoof5_root is None:
         asvspoof5_root = get_asvspoof5_root()
+
+    # Add .flac extension if missing
+    if not flac_filename.endswith(".flac"):
+        flac_filename = f"{flac_filename}.flac"
 
     prefix = flac_filename[:2]
     audio_dir = get_audio_dir_for_prefix(prefix)

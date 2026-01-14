@@ -311,8 +311,27 @@ class CodecAugmentor:
             self._supported_codecs = [
                 c for c in self.config.codecs if check_codec_support(c)
             ]
-            if not self._supported_codecs:
-                logger.warning("No configured codecs are supported by ffmpeg")
+            # Log informative warnings about codec support
+            if len(self._supported_codecs) < 2:
+                logger.error(
+                    "CRITICAL: Only %d codec(s) supported by ffmpeg! "
+                    "DANN requires domain diversity for meaningful training. "
+                    "Requested codecs: %s, Supported: %s. "
+                    "Check your ffmpeg installation:\n"
+                    "  ffmpeg -encoders | grep -E 'mp3|aac|opus|speex|amr'\n"
+                    "Consider installing ffmpeg with more codec support.",
+                    len(self._supported_codecs),
+                    self.config.codecs,
+                    self._supported_codecs or "(none)",
+                )
+            elif len(self._supported_codecs) < len(self.config.codecs):
+                unsupported = set(self.config.codecs) - set(self._supported_codecs)
+                logger.warning(
+                    "Some requested codecs not supported by ffmpeg: %s. "
+                    "Using: %s",
+                    unsupported,
+                    self._supported_codecs,
+                )
         return self._supported_codecs
 
     def augment(
@@ -361,14 +380,18 @@ class CodecAugmentor:
         # Apply augmentation
         augmented = self._apply_codec(waveform, sample_rate, codec, quality)
 
-        # Save to cache
+        # Save to cache (atomic write to avoid corruption)
         if self.cache_dir and audio_path and augmented is not None:
             cache_key = get_cache_key(audio_path, codec, quality)
             cache_path = self.cache_dir / f"{cache_key}.flac"
+            temp_path = cache_path.with_suffix(".tmp")
             try:
-                torchaudio.save(str(cache_path), augmented, sample_rate)
+                torchaudio.save(str(temp_path), augmented, sample_rate)
+                os.replace(str(temp_path), str(cache_path))  # Atomic on POSIX
             except Exception as e:
                 logger.debug(f"Failed to cache augmented audio: {e}")
+                if temp_path.exists():
+                    temp_path.unlink()
 
         if augmented is not None:
             return augmented, codec, quality

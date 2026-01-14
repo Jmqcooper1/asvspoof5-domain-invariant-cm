@@ -99,6 +99,27 @@ class TestDomainNormalization:
         assert normalize_domain_value(codec, is_codec_q=False) == "C05"
         assert normalize_domain_value(codec_q, is_codec_q=True) == "3"
 
+    def test_dash_and_zero_same_vocab_id(self):
+        """Both '-' and '0' (for CODEC_Q) should map to same vocab ID.
+
+        This is critical for cross-split consistency:
+        - Train/dev use '-' for uncoded
+        - Eval uses '0' for uncoded
+
+        Both must normalize to 'NONE' and thus get the same vocab ID.
+        """
+        # Simulated vocab (as would be built by prepare_asvspoof5.py)
+        vocab = {"NONE": 0, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8}
+
+        train_val = normalize_domain_value("-", is_codec_q=True)
+        eval_val = normalize_domain_value("0", is_codec_q=True)
+
+        # Both should normalize to "NONE"
+        assert train_val == eval_val == "NONE"
+
+        # Both should map to same vocab ID
+        assert vocab[train_val] == vocab[eval_val] == 0
+
 
 class TestAudioPathPrefix:
     """Test filename prefix to audio directory mapping."""

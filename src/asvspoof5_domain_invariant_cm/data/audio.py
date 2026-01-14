@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Literal, Optional
 
+import soundfile as sf
 import torch
 import torchaudio
 
@@ -11,7 +12,7 @@ def load_waveform(
     path: str | Path,
     target_sr: int = 16000,
 ) -> tuple[torch.Tensor, int]:
-    """Load audio waveform using torchaudio.
+    """Load audio waveform using soundfile.
 
     Args:
         path: Path to audio file.
@@ -20,7 +21,16 @@ def load_waveform(
     Returns:
         Tuple of (waveform [1, T], sample_rate).
     """
-    waveform, sr = torchaudio.load(str(path))
+    # Use soundfile directly to avoid torchcodec issues
+    data, sr = sf.read(str(path), dtype="float32")
+    waveform = torch.from_numpy(data)
+    
+    # Ensure shape is [C, T]
+    if waveform.ndim == 1:
+        waveform = waveform.unsqueeze(0)
+    else:
+        # soundfile returns [T, C], transpose to [C, T]
+        waveform = waveform.T
 
     # Ensure mono
     if waveform.shape[0] > 1:
