@@ -79,3 +79,10 @@ addopts = "-q"
 markers = [
     "slow: marks tests as slow (downloads models, requires network)",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "wandb>=0.23.1",
+]
