@@ -123,3 +123,101 @@ Track 1 uses:
 - **Optional:** Cllr, actDCF (calibration-aware)
 
 Use the official ASVspoof evaluation package for consistent scoring.
+
+---
+
+## FFmpeg Dependency (for DANN Training)
+
+DANN training requires synthetic codec augmentation, which uses ffmpeg.
+
+### Required Encoders
+
+| Codec | ffmpeg Encoder | Package/Library |
+|-------|----------------|-----------------|
+| MP3 | libmp3lame | LAME (usually included) |
+| AAC | aac | Built-in (or libfdk_aac) |
+| OPUS | libopus | libopus |
+
+### Optional Encoders
+
+| Codec | ffmpeg Encoder | Package/Library |
+|-------|----------------|-----------------|
+| SPEEX | libspeex | libspeex (often not included) |
+| AMR | libopencore_amrnb | opencore-amr |
+
+### Check Available Encoders
+
+```bash
+# List all available audio encoders
+ffmpeg -encoders 2>/dev/null | grep -E 'mp3|aac|opus|speex|amr'
+
+# Expected output for basic support:
+#  A..... aac              AAC (Advanced Audio Coding)
+#  A..... libmp3lame       libmp3lame MP3 (MPEG audio layer 3)
+#  A..... libopus          libopus Opus
+```
+
+### Installing Full Codec Support
+
+**macOS (Homebrew):**
+```bash
+brew install ffmpeg --with-libopus --with-speex
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt install ffmpeg libopus-dev libspeex-dev libopencore-amrnb-dev
+```
+
+**Note:** DANN will work with just MP3/AAC/OPUS. SPEEX and AMR are optional and provide additional domain diversity if available.
+
+---
+
+## Synthetic Augmentation Caching
+
+The codec augmentor can cache augmented audio to disk for faster subsequent epochs.
+
+### Configuration
+
+```yaml
+augmentation:
+  enabled: true
+  codec_prob: 0.5
+  codecs: ["MP3", "AAC", "OPUS"]
+  qualities: [1, 2, 3, 4, 5]
+  cache_dir: /path/to/cache  # Optional: set to cache augmented files
+```
+
+### Cache Behavior
+
+- **Cache key:** MD5 hash of original path + codec + quality
+- **Cache format:** FLAC files (lossless storage of augmented audio)
+- **Atomic writes:** Uses temp file + `os.replace()` to prevent corruption
+- **Cache hit:** Returns cached audio without re-encoding
+
+### Expected Disk Usage
+
+| Dataset Split | Approx. Samples | Cache Size (all codecs/qualities) |
+|---------------|-----------------|-----------------------------------|
+| Train | 182,357 | ~50-100 GB (depending on codec_prob) |
+| Dev | 140,950 | N/A (augmentation only during training) |
+
+### Recommendation
+
+For initial experiments, disable caching (`cache_dir: null`) to avoid disk usage. Enable caching for multi-epoch training runs to speed up data loading.
+
+---
+
+## Domain Label Normalization
+
+The protocol files use different conventions for "uncoded" samples:
+
+| Split | CODEC uncoded | CODEC_Q uncoded | Normalized to |
+|-------|---------------|-----------------|---------------|
+| Train | `"-"` | `"-"` | `"NONE"` |
+| Dev | `"-"` | `"-"` | `"NONE"` |
+| Eval | `"-"` | `"0"` | `"NONE"` |
+
+The `normalize_domain_value()` function handles this:
+- `"-"` always maps to `"NONE"`
+- `"0"` maps to `"NONE"` only for CODEC_Q (not CODEC)
