@@ -24,28 +24,27 @@ def compute_eer(
     Returns:
         Tuple of (EER, threshold at EER).
     """
-    # Sort scores
+    # Sort scores ascending
     sorted_indices = np.argsort(scores)
     sorted_scores = scores[sorted_indices]
     sorted_labels = labels[sorted_indices]
 
-    # Count positives and negatives
-    n_pos = np.sum(labels == 1)
-    n_neg = np.sum(labels == 0)
+    # Count classes (0 = bonafide, 1 = spoof)
+    n_bonafide = np.sum(labels == 0)
+    n_spoof = np.sum(labels == 1)
 
-    if n_pos == 0 or n_neg == 0:
+    if n_bonafide == 0 or n_spoof == 0:
         return 0.5, 0.0
 
-    # Compute FRR and FAR at each threshold
-    # FRR = FN / P (fraction of bonafide rejected)
-    # FAR = FP / N (fraction of spoof accepted)
-    fn = np.cumsum(sorted_labels == 1)  # False negatives
-    tp = n_pos - fn
-    frr = fn / n_pos
+    # At each threshold position i, samples 0..i are below threshold (rejected as spoof)
+    # FRR = fraction of bonafide incorrectly rejected (bonafide below threshold)
+    # FAR = fraction of spoof incorrectly accepted (spoof above threshold)
+    bonafide_below = np.cumsum(sorted_labels == 0)
+    frr = bonafide_below / n_bonafide
 
-    fp = np.cumsum(sorted_labels == 0)  # False positives
-    tn = n_neg - fp
-    far = 1 - fp / n_neg  # FAR at threshold
+    spoof_below = np.cumsum(sorted_labels == 1)
+    spoof_above = n_spoof - spoof_below
+    far = spoof_above / n_spoof
 
     # Find EER (where FRR = FAR)
     diff = frr - far
@@ -71,29 +70,32 @@ def compute_min_dcf(
     Args:
         scores: Detection scores (higher = more likely bonafide).
         labels: Binary labels (0 = bonafide, 1 = spoof).
-        c_miss: Cost of miss (false rejection).
-        c_fa: Cost of false alarm (false acceptance).
+        c_miss: Cost of miss (false rejection of bonafide).
+        c_fa: Cost of false alarm (false acceptance of spoof).
         p_target: Prior probability of target (bonafide).
 
     Returns:
         Minimum DCF value.
     """
-    n_pos = np.sum(labels == 1)
-    n_neg = np.sum(labels == 0)
+    n_bonafide = np.sum(labels == 0)
+    n_spoof = np.sum(labels == 1)
 
-    if n_pos == 0 or n_neg == 0:
+    if n_bonafide == 0 or n_spoof == 0:
         return 1.0
 
-    # Sort scores
+    # Sort scores ascending
     sorted_indices = np.argsort(scores)
     sorted_labels = labels[sorted_indices]
 
-    # Compute miss and FA rates at each threshold
-    fn = np.cumsum(sorted_labels == 1)
-    p_miss = fn / n_pos
+    # At each threshold, samples below are rejected (classified as spoof)
+    # p_miss = P(rejected | bonafide) = bonafide below threshold / total bonafide
+    # p_fa = P(accepted | spoof) = spoof above threshold / total spoof
+    bonafide_below = np.cumsum(sorted_labels == 0)
+    p_miss = bonafide_below / n_bonafide
 
-    fp = n_neg - np.cumsum(sorted_labels == 0)
-    p_fa = fp / n_neg
+    spoof_below = np.cumsum(sorted_labels == 1)
+    spoof_above = n_spoof - spoof_below
+    p_fa = spoof_above / n_spoof
 
     # Compute DCF at each threshold
     dcf = c_miss * p_target * p_miss + c_fa * (1 - p_target) * p_fa
@@ -114,22 +116,22 @@ def compute_cllr(
     Measures calibration quality of scores as likelihood ratios.
 
     Args:
-        scores: Log-likelihood ratio scores.
+        scores: Log-likelihood ratio scores (higher = more likely bonafide).
         labels: Binary labels (0 = bonafide, 1 = spoof).
 
     Returns:
         Cllr value.
     """
-    # Separate scores by class
-    bonafide_scores = scores[labels == 1]
-    spoof_scores = scores[labels == 0]
+    # Separate scores by class (0 = bonafide, 1 = spoof)
+    bonafide_scores = scores[labels == 0]
+    spoof_scores = scores[labels == 1]
 
     if len(bonafide_scores) == 0 or len(spoof_scores) == 0:
         return 1.0
 
     # Compute Cllr components
-    # For bonafide: average of log2(1 + e^(-score))
-    # For spoof: average of log2(1 + e^(score))
+    # For bonafide: average of log2(1 + e^(-score)) - penalizes low scores
+    # For spoof: average of log2(1 + e^(score)) - penalizes high scores
 
     def softplus_log2(x):
         # log2(1 + e^x) = x / log(2) + log2(1 + e^(-x))
@@ -155,27 +157,31 @@ def compute_act_dcf(
     """Compute actual DCF at a fixed threshold.
 
     Args:
-        scores: Detection scores.
-        labels: Binary labels.
-        threshold: Decision threshold.
-        c_miss: Cost of miss.
-        c_fa: Cost of false alarm.
-        p_target: Prior probability of target.
+        scores: Detection scores (higher = more likely bonafide).
+        labels: Binary labels (0 = bonafide, 1 = spoof).
+        threshold: Decision threshold (score >= threshold -> accept as bonafide).
+        c_miss: Cost of miss (false rejection of bonafide).
+        c_fa: Cost of false alarm (false acceptance of spoof).
+        p_target: Prior probability of target (bonafide).
 
     Returns:
         Actual DCF value.
     """
-    predictions = (scores >= threshold).astype(int)
+    # score >= threshold means accepted as bonafide
+    accepted = scores >= threshold
 
-    # Compute error rates
-    n_pos = np.sum(labels == 1)
-    n_neg = np.sum(labels == 0)
+    # Count classes (0 = bonafide, 1 = spoof)
+    n_bonafide = np.sum(labels == 0)
+    n_spoof = np.sum(labels == 1)
 
-    if n_pos == 0 or n_neg == 0:
+    if n_bonafide == 0 or n_spoof == 0:
         return 1.0
 
-    p_miss = np.sum((predictions == 0) & (labels == 1)) / n_pos
-    p_fa = np.sum((predictions == 1) & (labels == 0)) / n_neg
+    # p_miss = P(rejected | bonafide) = bonafide not accepted / total bonafide
+    p_miss = np.sum((~accepted) & (labels == 0)) / n_bonafide
+
+    # p_fa = P(accepted | spoof) = spoof accepted / total spoof
+    p_fa = np.sum(accepted & (labels == 1)) / n_spoof
 
     # Compute DCF
     dcf = c_miss * p_target * p_miss + c_fa * (1 - p_target) * p_fa

@@ -82,6 +82,22 @@ class LayerWeightedPooling(nn.Module):
 
 ## Domain-Adversarial Training (DANN)
 
+### Domain Labels: Training vs Evaluation
+
+**Critical distinction:**
+
+| Context | Domain Labels | Source |
+|---------|---------------|--------|
+| **Training** | Synthetic codec domains | Codec augmentation (MP3, AAC, OPUS, etc.) |
+| **Evaluation** | Protocol codec domains | ASVspoof5 metadata (C01-C11) |
+
+During DANN training, the domain discriminator learns to predict **synthetic** codec domains
+created by our augmentation pipeline. This is necessary because train/dev sets have no native
+codec diversity (all samples are uncoded).
+
+During evaluation, per-domain metrics use **protocol** metadata (CODEC, CODEC_Q) from the
+ASVspoof5 eval set. These are **different** domain taxonomies.
+
 ### Gradient Reversal Layer
 
 During forward pass: identity function
@@ -185,3 +201,77 @@ def linear_cka(X: np.ndarray, Y: np.ndarray) -> float:
 | Projection dim | 256 | After layer pooling |
 | Dropout | 0.1 | In projection head |
 | Max epochs | 50 | With early stopping |
+
+## Known Domain Mismatch
+
+The synthetic codec augmentation does not perfectly replicate ASVspoof5 eval codecs.
+
+### Synthetic vs ASVspoof5 Codec Mapping
+
+| Synthetic Codec | ASVspoof5 Codec IDs | Coverage |
+|-----------------|---------------------|----------|
+| NONE | `-` (uncoded) | ✅ Exact match |
+| MP3 | C05 (mp3_wb), C07 (partial) | ⚠️ Partial |
+| AAC | C06 (m4a_wb) | ✅ Good match |
+| OPUS | C01 (opus_wb), C08 (opus_nb) | ✅ Good match |
+| SPEEX | C03 (speex_wb), C10 (speex_nb) | ✅ Good match (if ffmpeg supports) |
+| AMR | C02 (amr_wb), C09 (amr_nb) | ✅ Good match (if ffmpeg supports) |
+
+### Not Covered by Synthetic Augmentation
+
+| Eval Codec | Description | Why Not Simulated |
+|------------|-------------|-------------------|
+| **C04** | Encodec (neural codec) | Fundamentally different artifacts; requires neural codec implementation |
+| **C07** | MP3 + Encodec cascade | Compound degradation; only MP3 portion approximated |
+| **C11** | Device/channel (BT, cable, MST) | Acoustic simulation, not codec; would require room impulse responses |
+
+### Expected Behavior
+
+DANN should show improvements for codecs covered by synthetic augmentation (C01, C02, C03, C05, C06, C08, C09, C10).
+Limited or no improvement expected for C04, C07, C11.
+
+## Reproducibility
+
+### Random Seed Policy
+
+Seeds are set for:
+- `torch.manual_seed(seed)`
+- `torch.cuda.manual_seed_all(seed)`
+- `numpy.random.seed(seed)`
+- `random.seed(seed)`
+
+### DataLoader Worker Seeding
+
+Augmentation uses `random.random()` which requires per-worker seeding:
+
+```python
+def worker_init_fn(worker_id: int) -> None:
+    worker_seed = torch.initial_seed() % 2**32
+    random.seed(worker_seed + worker_id)
+    numpy.random.seed(worker_seed + worker_id)
+```
+
+This ensures reproducible augmentation across runs.
+
+### Deterministic Evaluation
+
+- **Training mode:** Random crop for temporal augmentation
+- **Evaluation mode:** Center crop for deterministic inference
+
+### Cache Determinism
+
+If augmentation caching is enabled:
+- Cache key = hash(original_path, codec, quality)
+- Same sample + codec + quality → same cached file
+- Cache writes are atomic (temp file + `os.replace()`)
+
+### Multi-Seed Experiments
+
+For statistical reliability, run experiments with multiple seeds:
+
+```bash
+for seed in 42 123 456; do
+    python scripts/train.py --config configs/wavlm_dann.yaml \
+        --seed $seed --name wavlm_dann_seed${seed}
+done
+```

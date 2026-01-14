@@ -105,6 +105,89 @@ Target synthetic domains:
 - `SPEEX` - maps to C03, C10 families
 - `AMR` - maps to C02, C09 families
 
+## How We Operationalize Domains for Training
+
+Since train/dev sets have no native codec diversity, we create synthetic domains during training:
+
+### Synthetic Codec Families
+
+| Synthetic Domain | ffmpeg Encoder | Bitrate Tiers (kbps) | Maps to Eval Codecs |
+|------------------|----------------|----------------------|---------------------|
+| NONE (id=0) | - | - | Uncoded ("-") |
+| MP3 (id=1) | libmp3lame | 64, 96, 128, 192, 256 | C05, C07 (partial) |
+| AAC (id=2) | aac | 32, 64, 96, 128, 192 | C06 |
+| OPUS (id=3) | libopus | 12, 24, 48, 64, 96 | C01, C08 |
+| SPEEX (id=4) | libspeex | 8, 16, 24, 32, 44 | C03, C10 |
+| AMR (id=5) | libopencore_amrnb | 6, 9, 12, 18, 23 | C02, C09 |
+
+### Synthetic Quality Tiers
+
+Quality levels 1-5 correspond to bitrate tiers (1=lowest, 5=highest) within each codec family.
+These are **training constructs** and do not directly map to eval CODEC_Q values.
+
+### Augmentation Probability
+
+By default, `codec_prob=0.5` means:
+- 50% of training samples receive codec augmentation
+- 50% remain as NONE (clean)
+- Among augmented samples, codec and quality are uniformly sampled
+
+### Domain Discriminator Architecture
+
+```
+synthetic_domain_labels → domain_discriminator
+                         ├── codec_head (6 classes: NONE, MP3, AAC, OPUS, SPEEX, AMR)
+                         └── codec_q_head (6 classes: NONE, 1, 2, 3, 4, 5)
+```
+
+### Known Gaps in Synthetic Coverage
+
+| Eval Codec | Coverage | Notes |
+|------------|----------|-------|
+| C04 (Encodec) | ❌ Not covered | Neural codec; fundamentally different artifacts |
+| C07 (MP3+Encodec) | ⚠️ Partial | Only MP3 portion simulated |
+| C11 (Device) | ❌ Not covered | Requires acoustic simulation, not codec |
+
+**Expected Impact:** DANN may show limited improvement for C04, C07, C11 domains since they are never seen during training.
+
 ## Leakage Control
 
 When creating any custom splits (e.g., held-out codec analysis), group by `CODEC_SEED` to ensure coded variants of the same original utterance stay together.
+
+## CODEC_Q Semantic Mismatch (Important Limitation)
+
+The CODEC_Q domain has different semantics between synthetic augmentation and eval protocol:
+
+**Synthetic augmentation quality levels:** 1-5 (arbitrary bitrate tiers per codec)
+
+**Eval protocol quality levels:** 0-8, where:
+- 0: Uncoded (CODEC="-")
+- 1-5: Codec bitrate tiers (per-codec, not globally comparable)
+- 6-8: C11 device/channel variants (Bluetooth, cable, MST)
+
+**Implication:** The CODEC_Q adversarial head trains on synthetic quality tiers
+(1-5) which do NOT directly correspond to eval quality levels. Quality levels
+are categorical (codec-specific), not ordinal across codec families.
+
+Per-CODEC_Q evaluation on the eval set is purely analytical - the model has
+never seen quality levels 6-8 during training (C11 device variants).
+
+## Codec Coverage Gaps (Important Limitation)
+
+**Synthetic augmentation covers:** MP3, AAC, OPUS, SPEEX, AMR
+
+**Eval codecs NOT covered by synthetic augmentation:**
+
+| Eval Codec | Description | Why Not Simulated |
+|------------|-------------|-------------------|
+| **C04 (Encodec)** | Neural codec | Fundamentally different artifacts; no ffmpeg encoder |
+| **C07 (MP3+Encodec)** | Cascaded codecs | Compound degradation not easily simulatable |
+| **C11 (Device/channel)** | Bluetooth, cable, microphone | Requires acoustic simulation, not codec |
+
+**Expected behavior:** DANN may NOT generalize to C04, C07, C11 domains since
+they were never seen during training. Per-domain evaluation should reveal
+where domain-invariant gains occur vs. where they don't.
+
+**Potential mitigations (out of scope for current work):**
+- For C11: Add channel simulation (bandwidth limit + noise + reverb)
+- For C04/C07: Would require neural codec implementation or pre-coded samples

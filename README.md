@@ -37,6 +37,31 @@ This repository implements:
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
 - ~100GB disk space for full ASVspoof 5 dataset
 - GPU with 16GB+ VRAM recommended (A100/H100 for fastest training)
+- **FFmpeg with codec support** (required for DANN training)
+
+### FFmpeg Requirements
+
+DANN training requires synthetic codec augmentation via ffmpeg. At minimum, you need:
+
+```bash
+# Check available encoders
+ffmpeg -encoders 2>/dev/null | grep -E 'mp3|aac|opus'
+
+# Required: libmp3lame, aac, libopus
+# Optional: libspeex, libopencore_amrnb (for additional domain diversity)
+```
+
+**Install on Ubuntu/Debian:**
+```bash
+sudo apt install ffmpeg
+```
+
+**Install on macOS:**
+```bash
+brew install ffmpeg
+```
+
+**Note:** ERM training does not require ffmpeg (no augmentation needed).
 
 ### Install uv (if not already installed)
 
@@ -163,6 +188,32 @@ This creates:
 
 ---
 
+## Smoke Test (Verify Installation)
+
+Run these quick tests to verify your setup before full experiments:
+
+```bash
+# 1. Run unit tests (no dataset required)
+uv run pytest tests/ -v --tb=short
+
+# 2. Smoke test ERM training (requires dataset)
+uv run python scripts/train.py \
+    --config configs/smoke_test.yaml \
+    --name smoke_erm
+
+# 3. Smoke test DANN training with augmentation (requires dataset + ffmpeg)
+uv run python scripts/train.py \
+    --config configs/smoke_test_dann.yaml \
+    --name smoke_dann
+
+# 4. Verify domain statistics
+uv run python scripts/inspect_domains.py
+```
+
+Smoke tests run for 1 epoch with small batches (~5-10 minutes each).
+
+---
+
 ## Quickstart: Full Pipeline
 
 Here's the complete workflow from setup to analysis:
@@ -226,12 +277,26 @@ WANDB_PROJECT=asvspoof5-dann
 HF_HOME=/scratch-shared/myuser/.cache/huggingface
 ```
 
+### Important: ASVSPOOF5_ROOT is required + dataset must be pre-staged
+
+- `ASVSPOOF5_ROOT` **must** be set (in `.env` or exported) or `./scripts/jobs/submit_all.sh` will **exit without submitting any jobs**.
+- The pipeline assumes ASVspoof5 tarballs are **already present** under `$ASVSPOOF5_ROOT` (no cluster-side download by default):
+  - `ASVspoof5_protocols.tar.gz`
+  - `flac_T_*.tar`, `flac_D_*.tar`, `flac_E_*.tar`
+- The pipeline now submits a first job `scripts/jobs/stage_dataset.job` that:
+  - unpacks tarballs (via `scripts/unpack_asvspoof5.sh`)
+  - enforces `ASVspoof5_protocols/` layout
+  - generates `data/manifests/*.parquet`
+  - performs a full-coverage check that every `audio_path` exists
+- If dataset staging fails, downstream jobs are submitted with `afterok` dependencies and **will not run**.
+
 ### Job Scripts
 
 The `scripts/jobs/` directory contains SLURM job files:
 
 | Script | Purpose | Time |
 |--------|---------|------|
+| `stage_dataset.job` | Unpack dataset + full preflight validation | 12h |
 | `setup_environment.job` | Download models, create manifests | 2h |
 | `train_wavlm_erm.job` | Train WavLM + ERM | 24h |
 | `train_wavlm_dann.job` | Train WavLM + DANN | 24h |
@@ -260,7 +325,7 @@ The master launcher script handles dependency management:
 ### Job Dependency Chain
 
 ```
-Setup → Training (4 parallel jobs) → Evaluation → Analysis
+StageDataset → Setup → Training (4 parallel jobs) → Evaluation → Analysis
      ↘ Baselines (parallel)
      ↘ Held-Out Experiment (independent)
 ```

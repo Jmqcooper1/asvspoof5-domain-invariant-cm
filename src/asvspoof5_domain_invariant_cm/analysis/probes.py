@@ -4,7 +4,7 @@ from typing import Optional
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 
@@ -30,6 +30,38 @@ def train_domain_probe(
     Returns:
         Dictionary with accuracy and other metrics.
     """
+    unique_labels, label_counts = np.unique(domain_labels, return_counts=True)
+    n_classes = int(len(unique_labels))
+    if n_classes < 2:
+        return {
+            "status": "skipped",
+            "skip_reason": "only_one_class_in_labels",
+            "accuracy": float("nan"),
+            "accuracy_std": float("nan"),
+            "cv_scores": [],
+            "n_samples": int(len(embeddings)),
+            "n_classes": n_classes,
+            "cv_folds_requested": int(cv_folds),
+            "cv_folds_used": 0,
+            "class_counts": {int(k): int(v) for k, v in zip(unique_labels, label_counts)},
+        }
+
+    min_class_count = int(label_counts.min())
+    cv_folds_used = int(min(cv_folds, min_class_count))
+    if cv_folds_used < 2:
+        return {
+            "status": "skipped",
+            "skip_reason": "insufficient_samples_per_class_for_cv",
+            "accuracy": float("nan"),
+            "accuracy_std": float("nan"),
+            "cv_scores": [],
+            "n_samples": int(len(embeddings)),
+            "n_classes": n_classes,
+            "cv_folds_requested": int(cv_folds),
+            "cv_folds_used": cv_folds_used,
+            "class_counts": {int(k): int(v) for k, v in zip(unique_labels, label_counts)},
+        }
+
     # Standardize features
     scaler = StandardScaler()
     embeddings_scaled = scaler.fit_transform(embeddings)
@@ -50,20 +82,25 @@ def train_domain_probe(
         raise ValueError(f"Unknown classifier: {classifier}")
 
     # Cross-validation
+    cv = StratifiedKFold(n_splits=cv_folds_used, shuffle=True, random_state=seed)
     scores = cross_val_score(
         clf,
         embeddings_scaled,
         domain_labels,
-        cv=cv_folds,
+        cv=cv,
         scoring="accuracy",
     )
 
     return {
+        "status": "ok",
         "accuracy": float(np.mean(scores)),
         "accuracy_std": float(np.std(scores)),
         "cv_scores": scores.tolist(),
         "n_samples": len(embeddings),
-        "n_classes": len(np.unique(domain_labels)),
+        "n_classes": n_classes,
+        "cv_folds_requested": int(cv_folds),
+        "cv_folds_used": cv_folds_used,
+        "class_counts": {int(k): int(v) for k, v in zip(unique_labels, label_counts)},
     }
 
 
@@ -98,13 +135,23 @@ def layerwise_probing(
         )
         results[layer_idx] = result
 
-    # Find layer with max leakage
-    max_layer = max(results.keys(), key=lambda k: results[k]["accuracy"])
+    # Find layer with max leakage (ignore skipped/NaN)
+    valid_layers = [
+        k
+        for k, v in results.items()
+        if v.get("status") == "ok" and np.isfinite(v.get("accuracy", float("nan")))
+    ]
+    if valid_layers:
+        max_layer = max(valid_layers, key=lambda k: results[k]["accuracy"])
+        max_acc = results[max_layer]["accuracy"]
+    else:
+        max_layer = None
+        max_acc = float("nan")
 
     return {
         "per_layer": results,
         "max_leakage_layer": max_layer,
-        "max_leakage_accuracy": results[max_layer]["accuracy"],
+        "max_leakage_accuracy": max_acc,
     }
 
 

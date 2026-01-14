@@ -10,10 +10,16 @@ cd "$DATA_DIR"
 
 echo "Unpacking ASVspoof 5 archives in: $DATA_DIR"
 
-# Unpack protocols
+# Unpack protocols into ASVspoof5_protocols/ subfolder
 if [ -f "ASVspoof5_protocols.tar.gz" ]; then
     echo "Unpacking protocols..."
-    tar -xzf ASVspoof5_protocols.tar.gz
+    mkdir -p ASVspoof5_protocols
+    tar -xzf ASVspoof5_protocols.tar.gz -C ASVspoof5_protocols --strip-components=0
+    # If files extracted to root, move them to subfolder
+    if [ -f "ASVspoof5.train.tsv" ]; then
+        mv ASVspoof5.*.tsv ASVspoof5_protocols/ 2>/dev/null || true
+        mv ASVspoof5.*.csv ASVspoof5_protocols/ 2>/dev/null || true
+    fi
 fi
 
 # Unpack training audio
