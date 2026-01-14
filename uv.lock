@@ -238,13 +238,6 @@ xai = [
     { name = "captum" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "wandb" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "accelerate", specifier = ">=1.0" },
@@ -257,8 +250,8 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.0" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.9" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
@@ -270,16 +263,9 @@ requires-dist = [
     { name = "torchaudio", specifier = ">=2.5" },
     { name = "tqdm", specifier = ">=4.66" },
     { name = "transformers", specifier = ">=4.45" },
-    { name = "wandb", marker = "extra == 'tracking'", specifier = ">=0.18" },
+    { name = "wandb", marker = "extra == 'tracking'", specifier = ">=0.23.1" },
 ]
 provides-extras = ["dev", "xai", "tracking"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "wandb", specifier = ">=0.23.1" },
-]
 
 [[package]]
 name = "async-timeout"

@@ -54,15 +54,15 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ruff>=0.8",
-    "pytest>=8.3",
-    "pytest-cov>=6.0",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
     "pre-commit>=4.0",
 ]
 xai = [
     "captum>=0.7",
 ]
 tracking = [
-    "wandb>=0.18",
+    "wandb>=0.23.1",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -78,11 +78,4 @@ testpaths = ["tests"]
 addopts = "-q"
 markers = [
     "slow: marks tests as slow (downloads models, requires network)",
-]
-
-[dependency-groups]
-dev = [
-    "pytest>=9.0.2",
-    "pytest-cov>=7.0.0",
-    "wandb>=0.23.1",
 ]
