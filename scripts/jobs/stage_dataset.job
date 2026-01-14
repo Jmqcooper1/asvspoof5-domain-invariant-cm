@@ -1,0 +1,120 @@
+#!/bin/bash
+#SBATCH --partition=gpu
+#SBATCH --job-name=ASV_StageData
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=9
+#SBATCH --time=12:00:00
+#SBATCH --output=./scripts/jobs/out/%x_%A.out
+
+# =============================================================================
+# Dataset Staging + Preflight Job
+#
+# Assumptions:
+# - ASVSPOOF5_ROOT is explicitly set (in .env or exported)
+# - ASVspoof5 tarballs are already present under $ASVSPOOF5_ROOT
+#
+# Responsibilities:
+# - Unpack tarballs into expected folder layout
+# - Ensure protocol files exist under ASVspoof5_protocols/
+# - Ensure audio dirs exist and are non-empty
+# - Generate manifests (data/manifests/*.parquet) and vocab files
+# - Full-coverage validation: every audio_path in manifests exists on disk
+# =============================================================================
+
+set -euo pipefail
+
+module purge
+module load 2025
+
+cd "$HOME/asvspoof5-domain-invariant-cm"
+
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+uv sync --locked
+
+# Load env + require ASVSPOOF5_ROOT
+# shellcheck disable=SC1091
+source scripts/jobs/_job_common.sh
+load_and_require_asvspoof5_root
+
+echo "=== Dataset staging ==="
+echo "ASVSPOOF5_ROOT: $ASVSPOOF5_ROOT"
+echo ""
+
+# Check expected tarballs are present (pre-staged)
+echo "Checking for required tarballs under ASVSPOOF5_ROOT..."
+require_file "$ASVSPOOF5_ROOT/ASVspoof5_protocols.tar.gz"
+require_nonempty_glob "$ASVSPOOF5_ROOT/flac_T_*.tar"
+require_nonempty_glob "$ASVSPOOF5_ROOT/flac_D_*.tar"
+require_nonempty_glob "$ASVSPOOF5_ROOT/flac_E_*.tar"
+echo "Tarballs present."
+echo ""
+
+# Unpack
+echo "Unpacking dataset tarballs..."
+export ASVSPOOF5_DATA_ROOT="$ASVSPOOF5_ROOT"
+bash scripts/unpack_asvspoof5.sh
+echo ""
+
+# Validate protocol files in expected subfolder
+echo "Validating protocol folder layout..."
+require_dir "$ASVSPOOF5_ROOT/ASVspoof5_protocols"
+require_file "$ASVSPOOF5_ROOT/ASVspoof5_protocols/ASVspoof5.train.tsv"
+require_file "$ASVSPOOF5_ROOT/ASVspoof5_protocols/ASVspoof5.dev.track_1.tsv"
+require_file "$ASVSPOOF5_ROOT/ASVspoof5_protocols/ASVspoof5.eval.track_1.tsv"
+echo "Protocols OK."
+echo ""
+
+# Validate audio dirs are present and non-empty
+echo "Validating audio directories..."
+require_dir "$ASVSPOOF5_ROOT/flac_T"
+require_dir "$ASVSPOOF5_ROOT/flac_D"
+require_dir "$ASVSPOOF5_ROOT/flac_E_eval"
+require_nonempty_glob "$ASVSPOOF5_ROOT/flac_T/*.flac"
+require_nonempty_glob "$ASVSPOOF5_ROOT/flac_D/*.flac"
+require_nonempty_glob "$ASVSPOOF5_ROOT/flac_E_eval/*.flac"
+echo "Audio dirs OK."
+echo ""
+
+# Create manifests
+echo "Creating manifests..."
+srun uv run python scripts/prepare_asvspoof5.py \
+  --asvspoof5-root "$ASVSPOOF5_ROOT" \
+  --output-dir data/manifests \
+  --validate
+echo ""
+
+# Full coverage check: every audio_path exists
+echo "Running full-coverage audio_path existence check..."
+uv run python - <<'EOF'
+from __future__ import annotations
+
+from pathlib import Path
+
+import pandas as pd
+
+def fail_if_missing(split: str, limit: int = 50) -> None:
+    p = Path("data/manifests") / f"{split}.parquet"
+    df = pd.read_parquet(p, columns=["audio_path"])
+    missing = []
+    for ap in df["audio_path"].tolist():
+        if not Path(ap).exists():
+            missing.append(ap)
+            if len(missing) >= limit:
+                break
+    if missing:
+        print(f"ERROR: {split}: found missing audio paths (showing up to {limit}):")
+        for m in missing:
+            print(f"  {m}")
+        raise SystemExit(2)
+    print(f"{split}: OK (all {len(df)} audio paths exist)")
+
+fail_if_missing("train")
+fail_if_missing("dev")
+fail_if_missing("eval")
+EOF
+
+echo ""
+echo "Dataset staging complete!"
+

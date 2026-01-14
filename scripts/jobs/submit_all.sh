@@ -46,6 +46,20 @@ done
 cd "$(dirname "$0")/../.."
 PROJECT_ROOT=$(pwd)
 
+# Require ASVSPOOF5_ROOT before submitting any jobs
+if [ -f .env ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . ./.env
+    set +a
+fi
+if [ -z "${ASVSPOOF5_ROOT:-}" ]; then
+    echo -e "${RED}ERROR: ASVSPOOF5_ROOT is not set.${NC}"
+    echo -e "${RED}       Set it in .env or export it before running submit_all.sh.${NC}"
+    echo ""
+    exit 1
+fi
+
 if [ "$DRY_RUN" = true ]; then
     echo -e "${YELLOW}DRY RUN MODE - No jobs will be submitted${NC}"
     echo ""
@@ -60,6 +74,7 @@ echo "Project root: $PROJECT_ROOT"
 echo ""
 
 # Job scripts
+STAGE_SCRIPT="scripts/jobs/stage_dataset.job"
 SETUP_SCRIPT="scripts/jobs/setup_environment.job"
 TRAIN_SCRIPTS=(
     "scripts/jobs/train_wavlm_erm.job"
@@ -93,7 +108,10 @@ get_job_info() {
 echo "Jobs to submit:"
 echo "---------------"
 echo ""
-echo -e "  ${GREEN}Phase 1: Setup${NC}"
+echo -e "  ${GREEN}Phase 1: Dataset staging${NC}"
+echo "    - $(get_job_info $STAGE_SCRIPT)"
+echo ""
+echo -e "  ${GREEN}Phase 1b: Setup${NC}"
 echo "    - $(get_job_info $SETUP_SCRIPT)"
 echo ""
 echo -e "  ${GREEN}Phase 2: Training (parallel)${NC}"
@@ -133,21 +151,47 @@ echo "Submitting jobs..."
 echo "==================="
 echo ""
 
-# Phase 1: Setup
-echo -e "${BLUE}Phase 1: Setup${NC}"
+# Phase 1: Dataset staging
+echo -e "${BLUE}Phase 1: Dataset staging${NC}"
+STAGE_JOB_ID=""
+if [ -f "$STAGE_SCRIPT" ]; then
+    job_name=$(grep -m1 "#SBATCH --job-name=" "$STAGE_SCRIPT" | cut -d'=' -f2)
+
+    if [ "$DRY_RUN" = true ]; then
+        echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC}"
+        STAGE_JOB_ID="DRYRUN_STAGE"
+    else
+        output=$(sbatch "$STAGE_SCRIPT" 2>&1)
+        if [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
+            STAGE_JOB_ID="${BASH_REMATCH[1]}"
+            ALL_JOB_IDS+=("$STAGE_JOB_ID")
+            echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $STAGE_JOB_ID)"
+        else
+            echo -e "  ${RED}Failed to submit: $output${NC}"
+            exit 1
+        fi
+    fi
+else
+    echo -e "  ${RED}Stage script not found: $STAGE_SCRIPT${NC}"
+    exit 1
+fi
+echo ""
+
+# Phase 1b: Setup (depends on staging)
+echo -e "${BLUE}Phase 1b: Setup${NC}"
 SETUP_JOB_ID=""
 if [ -f "$SETUP_SCRIPT" ]; then
     job_name=$(grep -m1 "#SBATCH --job-name=" "$SETUP_SCRIPT" | cut -d'=' -f2)
-    
+
     if [ "$DRY_RUN" = true ]; then
-        echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC}"
+        echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after staging)"
         SETUP_JOB_ID="DRYRUN_SETUP"
     else
-        output=$(sbatch "$SETUP_SCRIPT" 2>&1)
+        output=$(sbatch --dependency=afterok:$STAGE_JOB_ID "$SETUP_SCRIPT" 2>&1)
         if [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
             SETUP_JOB_ID="${BASH_REMATCH[1]}"
             ALL_JOB_IDS+=("$SETUP_JOB_ID")
-            echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $SETUP_JOB_ID)"
+            echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $SETUP_JOB_ID, depends on: $STAGE_JOB_ID)"
         else
             echo -e "  ${RED}Failed to submit: $output${NC}"
             exit 1

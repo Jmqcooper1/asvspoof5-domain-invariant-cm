@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import soundfile as sf
 import torch
 import torchaudio
 from tqdm import tqdm
@@ -81,6 +82,12 @@ def parse_args():
         type=int,
         default=1,
         help="Batch size for extraction",
+    )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="Maximum number of samples to extract (None = all)",
     )
     return parser.parse_args()
 
@@ -166,6 +173,7 @@ def extract_split(
     split: str,
     extractor: MFCCExtractor,
     output_dir: Path,
+    max_items: int | None = None,
 ) -> None:
     """Extract MFCC features for a split.
 
@@ -187,11 +195,20 @@ def extract_split(
     features_list = []
     metadata_list = []
 
-    for idx, row in tqdm(df.iterrows(), total=len(df), desc=f"Extracting {split}"):
+    total = len(df) if max_items is None else min(len(df), max_items)
+    for i, (idx, row) in enumerate(tqdm(df.iterrows(), total=total, desc=f"Extracting {split}")):
+        if max_items is not None and i >= max_items:
+            break
         audio_path = row["audio_path"]
 
         try:
-            waveform, sr = torchaudio.load(audio_path)
+            # Use soundfile directly to avoid torchcodec dependency in torchaudio.load
+            data, sr = sf.read(str(audio_path), dtype="float32")
+            waveform = torch.from_numpy(data)
+            if waveform.ndim == 1:
+                waveform = waveform.unsqueeze(0)  # [1, T]
+            else:
+                waveform = waveform.T  # [T, C] -> [C, T]
 
             # Resample if needed
             if sr != extractor.sample_rate:
@@ -273,7 +290,7 @@ def main():
 
     # Extract features
     for split in splits:
-        extract_split(split, extractor, output_dir)
+        extract_split(split, extractor, output_dir, max_items=args.max_samples)
 
     logger.info("Done!")
     return 0

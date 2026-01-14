@@ -28,10 +28,32 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
+import soundfile as sf
 import torch
-import torchaudio
 
 logger = logging.getLogger(__name__)
+
+
+def _load_audio(path: str) -> tuple[torch.Tensor, int]:
+    """Load audio using soundfile (avoids torchcodec issues)."""
+    data, sr = sf.read(path, dtype="float32")
+    waveform = torch.from_numpy(data)
+    if waveform.ndim == 1:
+        waveform = waveform.unsqueeze(0)
+    else:
+        waveform = waveform.T  # [T, C] -> [C, T]
+    return waveform, sr
+
+
+def _save_audio(path: str, waveform: torch.Tensor, sample_rate: int) -> None:
+    """Save audio using soundfile (avoids torchcodec issues)."""
+    if waveform.ndim == 2:
+        # [C, T] -> [T, C] for soundfile
+        data = waveform.T.numpy()
+    else:
+        data = waveform.numpy()
+    sf.write(path, data, sample_rate)
 
 # Domain vocabulary for synthetic codecs
 SYNTHETIC_CODEC_VOCAB = {
@@ -372,7 +394,7 @@ class CodecAugmentor:
 
             if cache_path.exists():
                 try:
-                    cached_wav, _ = torchaudio.load(str(cache_path))
+                    cached_wav, _ = _load_audio(str(cache_path))
                     return cached_wav, codec, quality
                 except Exception:
                     pass
@@ -386,7 +408,7 @@ class CodecAugmentor:
             cache_path = self.cache_dir / f"{cache_key}.flac"
             temp_path = cache_path.with_suffix(".tmp")
             try:
-                torchaudio.save(str(temp_path), augmented, sample_rate)
+                _save_audio(str(temp_path), augmented, sample_rate)
                 os.replace(str(temp_path), str(cache_path))  # Atomic on POSIX
             except Exception as e:
                 logger.debug(f"Failed to cache augmented audio: {e}")
@@ -427,12 +449,12 @@ class CodecAugmentor:
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_out:
                 output_path = Path(tmp_out.name)
 
-            # Ensure 2D tensor for torchaudio.save
+            # Ensure 2D tensor for saving
             if waveform.ndim == 1:
                 waveform = waveform.unsqueeze(0)
 
             # Save input
-            torchaudio.save(str(input_path), waveform, sample_rate)
+            _save_audio(str(input_path), waveform, sample_rate)
 
             # Apply codec
             success = apply_codec_ffmpeg(
@@ -444,7 +466,7 @@ class CodecAugmentor:
             )
 
             if success and output_path.exists():
-                augmented, _ = torchaudio.load(str(output_path))
+                augmented, _ = _load_audio(str(output_path))
                 return augmented
             else:
                 return None

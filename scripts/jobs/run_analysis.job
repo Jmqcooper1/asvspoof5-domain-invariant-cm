@@ -31,13 +31,12 @@ if torch.cuda.is_available():
 EOF
 echo ""
 
-# Load environment variables from .env if it exists
-if [ -f .env ]; then
-    export $(grep -v '^#' .env | xargs)
-fi
+# Load env + require ASVSPOOF5_ROOT
+# shellcheck disable=SC1091
+source scripts/jobs/_job_common.sh
+load_and_require_asvspoof5_root
 
-# Set project-specific environment variables
-export ASVSPOOF5_ROOT=${ASVSPOOF5_ROOT:-/scratch-shared/$USER/asvspoof5}
+# Optional defaults
 export WANDB_PROJECT=${WANDB_PROJECT:-asvspoof5-dann}
 
 echo "=== Running Interpretability Analysis ==="
