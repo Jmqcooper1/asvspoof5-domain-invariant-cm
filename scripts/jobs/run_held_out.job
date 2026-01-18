@@ -14,7 +14,9 @@
 module purge
 module load 2025
 
-cd $HOME/asvspoof5-domain-invariant-cm
+# Navigate to repo root (works regardless of where repo is cloned)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/../.."
 
 # Install uv if not already installed
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -42,6 +44,12 @@ export WANDB_PROJECT=${WANDB_PROJECT:-asvspoof5-held-out}
 echo "=== Held-Out Codec Experiment ==="
 echo "This experiment trains models with one CODEC held out to measure"
 echo "domain generalization (ERM vs DANN comparison)."
+echo ""
+
+# Load FFmpeg module (required for DANN codec augmentation on HPC)
+load_ffmpeg_module
+check_ffmpeg_encoders_or_fail
+echo "ffmpeg encoders OK."
 echo ""
 
 srun uv run python scripts/run_held_out_codec.py \

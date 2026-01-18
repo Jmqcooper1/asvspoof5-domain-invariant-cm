@@ -75,6 +75,32 @@ print_env_diagnostics() {
   echo "==============================="
 }
 
+load_ffmpeg_module() {
+  # Load FFmpeg module on Snellius/SURF clusters.
+  # FFmpeg is not globally installed; must use environment modules.
+  # Note: 'module load ffmpeg' fails; must use exact version.
+  local ffmpeg_module="${FFMPEG_MODULE:-FFmpeg/7.1.1-GCCcore-14.2.0}"
+  
+  if command -v module >/dev/null 2>&1; then
+    echo "Loading FFmpeg module: $ffmpeg_module"
+    module load "$ffmpeg_module" 2>/dev/null || {
+      echo "WARNING: Failed to load module $ffmpeg_module" >&2
+      echo "         Trying to find available FFmpeg versions..." >&2
+      module spider FFmpeg 2>&1 | head -20 || true
+      echo "         Set FFMPEG_MODULE env var to override." >&2
+    }
+  else
+    echo "Note: 'module' command not available (not on HPC?). Assuming ffmpeg is in PATH."
+  fi
+  
+  # Verify ffmpeg is now available
+  if ! command -v ffmpeg >/dev/null 2>&1; then
+    echo "ERROR: ffmpeg not found after module load. DANN augmentation will fail." >&2
+    return 1
+  fi
+  echo "ffmpeg location: $(command -v ffmpeg)"
+}
+
 check_ffmpeg_encoders_or_fail() {
   # DANN augmentation needs at least 2 of these for MP3/AAC/OPUS.
   require_cmd ffmpeg
@@ -88,9 +114,20 @@ check_ffmpeg_encoders_or_fail() {
   fi
 }
 
+check_wandb_api_key() {
+  # Warn if WANDB_API_KEY is not set (wandb will be disabled)
+  if [[ -z "${WANDB_API_KEY:-}" ]]; then
+    echo "Note: WANDB_API_KEY not set. Wandb logging will be disabled."
+    echo "      To enable: add WANDB_API_KEY=your_key to .env"
+  else
+    echo "WANDB_API_KEY: set (wandb logging enabled)"
+  fi
+}
+
 load_and_require_asvspoof5_root() {
   load_dotenv_if_present
   require_env_var "ASVSPOOF5_ROOT"
+  check_wandb_api_key
   print_env_diagnostics
 }
 
