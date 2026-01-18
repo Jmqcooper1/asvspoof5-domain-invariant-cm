@@ -76,6 +76,7 @@ logger = logging.getLogger(__name__)
 def _worker_init_fn(worker_id: int) -> None:
     """Seed random for reproducible augmentation in DataLoader workers.
     
+    Seeds Python random, NumPy, and torch for full reproducibility.
     Must be at module level for multiprocessing pickling.
     """
     import random
@@ -83,6 +84,8 @@ def _worker_init_fn(worker_id: int) -> None:
     worker_seed = torch.initial_seed() % 2**32
     random.seed(worker_seed + worker_id)
     np.random.seed(worker_seed + worker_id)
+    # Also seed torch for any torch.randint calls (e.g., random crop in audio.py)
+    torch.manual_seed(worker_seed + worker_id)
 
 
 def parse_args():
@@ -358,12 +361,11 @@ def main():
     codec_vocab = load_vocab(manifests_dir / "codec_vocab.json")
     codec_q_vocab = load_vocab(manifests_dir / "codec_q_vocab.json")
 
-    logger.info(f"CODEC classes: {len(codec_vocab)}")
-    logger.info(f"CODEC_Q classes: {len(codec_q_vocab)}")
+    logger.info(f"CODEC classes (manifest): {len(codec_vocab)}")
+    logger.info(f"CODEC_Q classes (manifest): {len(codec_q_vocab)}")
 
-    # Copy vocabs to run dir
-    shutil.copy(manifests_dir / "codec_vocab.json", run_dir / "codec_vocab.json")
-    shutil.copy(manifests_dir / "codec_q_vocab.json", run_dir / "codec_q_vocab.json")
+    # Note: vocab files are saved to run_dir AFTER augmentor is created,
+    # so we know whether to use synthetic or manifest vocabs
 
     # Data config
     data_cfg = config.get("dataset", config.get("data", {}))
@@ -468,9 +470,19 @@ def main():
             f"DANN with augmentation: domain discriminator sizes "
             f"num_codecs={num_codecs}, num_codec_qs={num_codec_qs}"
         )
+        # Save synthetic vocabs so evaluate.py can rebuild model with correct head sizes
+        import json
+        with open(run_dir / "codec_vocab.json", "w") as f:
+            json.dump(SYNTHETIC_CODEC_VOCAB, f, indent=2)
+        with open(run_dir / "codec_q_vocab.json", "w") as f:
+            json.dump(SYNTHETIC_QUALITY_VOCAB, f, indent=2)
+        logger.info("Saved synthetic vocabs to run dir (DANN with augmentation)")
     else:
         num_codecs = len(codec_vocab)
         num_codec_qs = len(codec_q_vocab)
+        # Save manifest vocabs for ERM or DANN without augmentation
+        shutil.copy(manifests_dir / "codec_vocab.json", run_dir / "codec_vocab.json")
+        shutil.copy(manifests_dir / "codec_q_vocab.json", run_dir / "codec_q_vocab.json")
 
     model = build_model(config, num_codecs, num_codec_qs)
     model = model.to(device)
@@ -532,6 +544,18 @@ def main():
     logging_cfg = config.get("logging", {})
     wandb_cfg = config.get("wandb", {})
 
+    # Auto-enable wandb if API key is set (unless explicitly disabled)
+    wandb_api_key = os.environ.get("WANDB_API_KEY")
+    use_wandb = args.wandb or wandb_cfg.get("enabled", False)
+    if wandb_api_key and not use_wandb:
+        logger.info("WANDB_API_KEY detected, enabling wandb logging automatically")
+        use_wandb = True
+    elif args.wandb and not wandb_api_key:
+        logger.warning(
+            "Wandb enabled but WANDB_API_KEY not set. "
+            "Set it in .env or export before running."
+        )
+
     # Parse wandb tags
     wandb_tags = None
     if args.wandb_tags:
@@ -569,7 +593,7 @@ def main():
         monitor_mode=training_cfg.get("monitor_mode", "min"),
         lambda_scheduler=lambda_scheduler,
         # Enhanced logging options
-        use_wandb=args.wandb or wandb_cfg.get("enabled", False),
+        use_wandb=use_wandb,
         wandb_project=args.wandb_project or wandb_cfg.get("project", "asvspoof5-dann"),
         wandb_entity=args.wandb_entity or wandb_cfg.get("entity"),
         wandb_run_name=run_name,

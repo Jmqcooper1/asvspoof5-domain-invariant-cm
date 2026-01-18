@@ -14,7 +14,9 @@
 module purge
 module load 2025
 
-cd $HOME/asvspoof5-domain-invariant-cm
+# Navigate to repo root (works regardless of where repo is cloned)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/../.."
 
 # Install uv if not already installed
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -41,6 +43,9 @@ export WANDB_PROJECT=${WANDB_PROJECT:-asvspoof5-dann}
 export HF_HOME=${HF_HOME:-/scratch-shared/$USER/.cache/huggingface}
 
 echo "=== Training Wav2Vec2 + DANN ==="
+
+# Load FFmpeg module (required for codec augmentation on HPC)
+load_ffmpeg_module
 
 echo "Checking ffmpeg encoder support for codec augmentation..."
 check_ffmpeg_encoders_or_fail

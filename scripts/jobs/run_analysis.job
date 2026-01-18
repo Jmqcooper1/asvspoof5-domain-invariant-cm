@@ -14,7 +14,9 @@
 module purge
 module load 2025
 
-cd $HOME/asvspoof5-domain-invariant-cm
+# Navigate to repo root (works regardless of where repo is cloned)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/../.."
 
 # Install uv if not already installed
 curl -LsSf https://astral.sh/uv/install.sh | sh

@@ -252,6 +252,9 @@ def apply_codec_ffmpeg(
     config = codec_config[codec]
     target_sr = config.get("sample_rate", sample_rate)
 
+    # Initialize to None to avoid UnboundLocalError in finally
+    tmp_encoded = None
+
     try:
         with tempfile.NamedTemporaryFile(suffix=config["ext"], delete=False) as tmp:
             tmp_encoded = Path(tmp.name)
@@ -297,7 +300,7 @@ def apply_codec_ffmpeg(
         logger.warning(f"FFmpeg error for {codec}: {e.stderr.decode()[:200]}")
         return False
     finally:
-        if tmp_encoded.exists():
+        if tmp_encoded is not None and tmp_encoded.exists():
             tmp_encoded.unlink()
 
 
@@ -396,8 +399,13 @@ class CodecAugmentor:
                 try:
                     cached_wav, _ = _load_audio(str(cache_path))
                     return cached_wav, codec, quality
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Cache file is corrupted, delete it and re-augment
+                    logger.debug(f"Corrupted cache file {cache_path}, removing: {e}")
+                    try:
+                        cache_path.unlink()
+                    except OSError:
+                        pass
 
         # Apply augmentation
         augmented = self._apply_codec(waveform, sample_rate, codec, quality)
@@ -442,6 +450,10 @@ class CodecAugmentor:
         if bitrate is None:
             return None
 
+        # Initialize to None to avoid UnboundLocalError in finally
+        input_path = None
+        output_path = None
+
         try:
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_in:
                 input_path = Path(tmp_in.name)
@@ -476,9 +488,9 @@ class CodecAugmentor:
             return None
 
         finally:
-            if input_path.exists():
+            if input_path is not None and input_path.exists():
                 input_path.unlink()
-            if output_path.exists():
+            if output_path is not None and output_path.exists():
                 output_path.unlink()
 
     def get_domain_labels(

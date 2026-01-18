@@ -18,7 +18,8 @@
 set -euo pipefail
 
 ZENODO_RECORD="14498691"
-DATA_DIR="${ASVSPOOF5_DATA_ROOT:-data/raw/asvspoof5}"
+# Prefer ASVSPOOF5_ROOT (used by training scripts), fall back to legacy ASVSPOOF5_DATA_ROOT
+DATA_DIR="${ASVSPOOF5_ROOT:-${ASVSPOOF5_DATA_ROOT:-data/raw/asvspoof5}}"
 PARALLEL="${ASVSPOOF5_PARALLEL:-16}"
 FORCE_IPV4="${ASVSPOOF5_FORCE_IPV4:-0}"
 USER_AGENT="${ASVSPOOF5_USER_AGENT:-Wget/1.21.4}"

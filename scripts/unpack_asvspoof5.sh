@@ -4,7 +4,8 @@
 
 set -euo pipefail
 
-DATA_DIR="${ASVSPOOF5_DATA_ROOT:-data/raw/asvspoof5}"
+# Prefer ASVSPOOF5_ROOT (used by training scripts), fall back to legacy ASVSPOOF5_DATA_ROOT
+DATA_DIR="${ASVSPOOF5_ROOT:-${ASVSPOOF5_DATA_ROOT:-data/raw/asvspoof5}}"
 
 cd "$DATA_DIR"
 
