@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition=gpu
+#SBATCH --partition=gpu_a100
 #SBATCH --job-name=ASV_StageData
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9

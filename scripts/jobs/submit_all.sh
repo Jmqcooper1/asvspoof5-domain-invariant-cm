@@ -65,6 +65,15 @@ if [ "$DRY_RUN" = true ]; then
     echo ""
 fi
 
+if [ "$DRY_RUN" = false ]; then
+    if ! command -v sbatch >/dev/null 2>&1; then
+        echo -e "${RED}ERROR: sbatch is not available in this shell.${NC}"
+        echo -e "${RED}       Load your Slurm environment/module and try again.${NC}"
+        echo ""
+        exit 1
+    fi
+fi
+
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  ASVspoof 5 Domain-Invariant CM       ${NC}"
 echo -e "${BLUE}  Pipeline Job Submission              ${NC}"
@@ -161,8 +170,14 @@ if [ -f "$STAGE_SCRIPT" ]; then
         echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC}"
         STAGE_JOB_ID="DRYRUN_STAGE"
     else
+        set +e
         output=$(sbatch "$STAGE_SCRIPT" 2>&1)
-        if [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
+        sbatch_exit_code=$?
+        set -e
+        if [ $sbatch_exit_code -ne 0 ]; then
+            echo -e "  ${RED}Failed to submit: $output${NC}"
+            exit 1
+        elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
             STAGE_JOB_ID="${BASH_REMATCH[1]}"
             ALL_JOB_IDS+=("$STAGE_JOB_ID")
             echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $STAGE_JOB_ID)"
@@ -187,8 +202,14 @@ if [ -f "$SETUP_SCRIPT" ]; then
         echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after staging)"
         SETUP_JOB_ID="DRYRUN_SETUP"
     else
+        set +e
         output=$(sbatch --dependency=afterok:$STAGE_JOB_ID "$SETUP_SCRIPT" 2>&1)
-        if [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
+        sbatch_exit_code=$?
+        set -e
+        if [ $sbatch_exit_code -ne 0 ]; then
+            echo -e "  ${RED}Failed to submit: $output${NC}"
+            exit 1
+        elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
             SETUP_JOB_ID="${BASH_REMATCH[1]}"
             ALL_JOB_IDS+=("$SETUP_JOB_ID")
             echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $SETUP_JOB_ID, depends on: $STAGE_JOB_ID)"
@@ -212,8 +233,13 @@ for script in "${TRAIN_SCRIPTS[@]}"; do
         if [ "$DRY_RUN" = true ]; then
             echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after setup)"
         else
+            set +e
             output=$(sbatch --dependency=afterok:$SETUP_JOB_ID "$script" 2>&1)
-            if [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
+            sbatch_exit_code=$?
+            set -e
+            if [ $sbatch_exit_code -ne 0 ]; then
+                echo -e "  ${YELLOW}Failed to submit $job_name: $output${NC}"
+            elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
                 job_id="${BASH_REMATCH[1]}"
                 ALL_JOB_IDS+=("$job_id")
                 TRAIN_JOB_IDS+=("$job_id")
@@ -235,8 +261,13 @@ if [ "$SKIP_BASELINES" = false ]; then
         if [ "$DRY_RUN" = true ]; then
             echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after setup)"
         else
+            set +e
             output=$(sbatch --dependency=afterok:$SETUP_JOB_ID "$BASELINES_SCRIPT" 2>&1)
-            if [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
+            sbatch_exit_code=$?
+            set -e
+            if [ $sbatch_exit_code -ne 0 ]; then
+                echo -e "  ${YELLOW}Failed to submit $job_name: $output${NC}"
+            elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
                 job_id="${BASH_REMATCH[1]}"
                 ALL_JOB_IDS+=("$job_id")
                 echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id, depends on: $SETUP_JOB_ID)"
@@ -258,8 +289,13 @@ if [ -f "$EVAL_SCRIPT" ]; then
     else
         # Build dependency string for all training jobs
         TRAIN_DEPS=$(IFS=:; echo "${TRAIN_JOB_IDS[*]}")
+        set +e
         output=$(sbatch --dependency=afterok:$TRAIN_DEPS "$EVAL_SCRIPT" 2>&1)
-        if [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
+        sbatch_exit_code=$?
+        set -e
+        if [ $sbatch_exit_code -ne 0 ]; then
+            echo -e "  ${YELLOW}Failed to submit $job_name: $output${NC}"
+        elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
             job_id="${BASH_REMATCH[1]}"
             ALL_JOB_IDS+=("$job_id")
             echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id, depends on: $TRAIN_DEPS)"
@@ -279,8 +315,13 @@ if [ -f "$ANALYSIS_SCRIPT" ]; then
         echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after training)"
     else
         TRAIN_DEPS=$(IFS=:; echo "${TRAIN_JOB_IDS[*]}")
+        set +e
         output=$(sbatch --dependency=afterok:$TRAIN_DEPS "$ANALYSIS_SCRIPT" 2>&1)
-        if [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
+        sbatch_exit_code=$?
+        set -e
+        if [ $sbatch_exit_code -ne 0 ]; then
+            echo -e "  ${YELLOW}Failed to submit $job_name: $output${NC}"
+        elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
             job_id="${BASH_REMATCH[1]}"
             ALL_JOB_IDS+=("$job_id")
             echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id, depends on: $TRAIN_DEPS)"
@@ -300,8 +341,13 @@ if [ "$SKIP_HELD_OUT" = false ]; then
         if [ "$DRY_RUN" = true ]; then
             echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after setup)"
         else
+            set +e
             output=$(sbatch --dependency=afterok:$SETUP_JOB_ID "$HELD_OUT_SCRIPT" 2>&1)
-            if [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
+            sbatch_exit_code=$?
+            set -e
+            if [ $sbatch_exit_code -ne 0 ]; then
+                echo -e "  ${YELLOW}Failed to submit $job_name: $output${NC}"
+            elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
                 job_id="${BASH_REMATCH[1]}"
                 ALL_JOB_IDS+=("$job_id")
                 echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id, depends on: $SETUP_JOB_ID)"
