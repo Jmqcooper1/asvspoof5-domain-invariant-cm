@@ -313,11 +313,11 @@ def run_held_out_experiment(
                 manifest_path=temp_train_path,
                 codec_vocab=codec_vocab,
                 codec_q_vocab=codec_q_vocab,
-                batch_size=config["training"]["batch_size"],
+                batch_size=config["dataloader"]["batch_size"],
                 max_duration_sec=config["audio"]["max_duration_sec"],
                 sample_rate=config["audio"]["sample_rate"],
                 mode="train",
-                num_workers=config["training"].get("num_workers", 4),
+                num_workers=config["dataloader"].get("num_workers", 4),
                 shuffle=True,
                 drop_last=True,
             )
@@ -326,17 +326,17 @@ def run_held_out_experiment(
                 manifest_path=temp_val_path,
                 codec_vocab=codec_vocab,
                 codec_q_vocab=codec_q_vocab,
-                batch_size=config["training"]["batch_size"],
+                batch_size=config["dataloader"]["batch_size"],
                 max_duration_sec=config["audio"]["max_duration_sec"],
                 sample_rate=config["audio"]["sample_rate"],
                 mode="eval",
-                num_workers=config["training"].get("num_workers", 4),
+                num_workers=config["dataloader"].get("num_workers", 4),
                 shuffle=False,
                 drop_last=False,
             )
 
             # Build model
-            backbone_config = config["model"]["backbone"]
+            backbone_config = config["backbone"]
             backbone = create_backbone(
                 backbone_config["name"],
                 freeze=backbone_config.get("freeze", False),
@@ -345,25 +345,25 @@ def run_held_out_experiment(
             )
 
             pooling = create_pooling(
-                config["model"]["pooling"]["type"],
+                config["pooling"]["method"],
                 input_dim=backbone.hidden_size,
             )
 
             pooling_output_dim = (
                 backbone.hidden_size * 2
-                if config["model"]["pooling"]["type"] == "stats"
+                if config["pooling"]["method"] == "stats"
                 else backbone.hidden_size
             )
 
             projection = ProjectionHead(
                 input_dim=pooling_output_dim,
-                hidden_dim=config["model"]["projection"]["hidden_dim"],
-                output_dim=config["model"]["projection"]["output_dim"],
-                dropout=config["model"]["projection"].get("dropout", 0.1),
+                hidden_dim=config["projection"]["hidden_dim"],
+                output_dim=config["projection"]["output_dim"],
+                dropout=config["projection"].get("dropout", 0.1),
             )
 
             task_head = ClassifierHead(
-                input_dim=config["model"]["projection"]["output_dim"],
+                input_dim=config["projection"]["output_dim"],
                 num_classes=2,
             )
 
@@ -373,13 +373,13 @@ def run_held_out_experiment(
                     MultiHeadDomainDiscriminator,
                 )
 
-                grl = GradientReversalLayer(lambda_=config["training"]["dann"].get("lambda_init", 0.0))
+                grl = GradientReversalLayer(lambda_=config["dann"].get("lambda_", 0.0))
                 domain_discriminator = MultiHeadDomainDiscriminator(
-                    input_dim=config["model"]["projection"]["output_dim"],
-                    hidden_dim=config["model"]["domain_discriminator"]["hidden_dim"],
+                    input_dim=config["projection"]["output_dim"],
+                    hidden_dim=config["dann"]["discriminator"]["hidden_dim"],
                     num_codecs=len(codec_vocab),
                     num_codec_qs=len(codec_q_vocab),
-                    dropout=config["model"]["domain_discriminator"].get("dropout", 0.1),
+                    dropout=config["dann"]["discriminator"].get("dropout", 0.1),
                 )
 
                 model = DANNModel(
@@ -422,7 +422,7 @@ def run_held_out_experiment(
 
                 lambda_scheduler = LambdaScheduler(
                     max_epochs=config["training"]["max_epochs"],
-                    gamma=config["training"]["dann"].get("gamma", 10.0),
+                    gamma=config["dann"].get("gamma", 10.0),
                 )
 
             # Train
@@ -454,7 +454,7 @@ def run_held_out_experiment(
         checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
         # Rebuild model for loading
-        backbone_config = config["model"]["backbone"]
+        backbone_config = config["backbone"]
         backbone = create_backbone(
             backbone_config["name"],
             freeze=backbone_config.get("freeze", False),
@@ -463,25 +463,25 @@ def run_held_out_experiment(
         )
 
         pooling = create_pooling(
-            config["model"]["pooling"]["type"],
+            config["pooling"]["method"],
             input_dim=backbone.hidden_size,
         )
 
         pooling_output_dim = (
             backbone.hidden_size * 2
-            if config["model"]["pooling"]["type"] == "stats"
+            if config["pooling"]["method"] == "stats"
             else backbone.hidden_size
         )
 
         projection = ProjectionHead(
             input_dim=pooling_output_dim,
-            hidden_dim=config["model"]["projection"]["hidden_dim"],
-            output_dim=config["model"]["projection"]["output_dim"],
-            dropout=config["model"]["projection"].get("dropout", 0.1),
+            hidden_dim=config["projection"]["hidden_dim"],
+            output_dim=config["projection"]["output_dim"],
+            dropout=config["projection"].get("dropout", 0.1),
         )
 
         task_head = ClassifierHead(
-            input_dim=config["model"]["projection"]["output_dim"],
+            input_dim=config["projection"]["output_dim"],
             num_classes=2,
         )
 
@@ -493,8 +493,8 @@ def run_held_out_experiment(
 
             grl = GradientReversalLayer()
             domain_discriminator = MultiHeadDomainDiscriminator(
-                input_dim=config["model"]["projection"]["output_dim"],
-                hidden_dim=config["model"]["domain_discriminator"]["hidden_dim"],
+                input_dim=config["projection"]["output_dim"],
+                hidden_dim=config["dann"]["discriminator"]["hidden_dim"],
                 num_codecs=len(codec_vocab),
                 num_codec_qs=len(codec_q_vocab),
             )
