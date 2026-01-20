@@ -27,9 +27,16 @@ set -euo pipefail
 module purge
 module load 2025
 
-# Navigate to repo root
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/../.."
+# Navigate to repo root (avoid Slurm spool dir)
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  cd "$SLURM_SUBMIT_DIR"
+fi
+if [[ ! -f "pyproject.toml" ]]; then
+  echo "ERROR: pyproject.toml not found in $(pwd). Set SLURM_SUBMIT_DIR or run from repo root." >&2
+  exit 1
+fi
+echo "Repo root: $(pwd)"
+echo "SLURM_SUBMIT_DIR: ${SLURM_SUBMIT_DIR:-}"
 
 # Load .env and require ASVSPOOF5_ROOT
 # shellcheck disable=SC1091

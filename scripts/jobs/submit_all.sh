@@ -174,7 +174,7 @@ if [ -f "$STAGE_SCRIPT" ]; then
         STAGE_JOB_ID="DRYRUN_STAGE"
     else
         set +e
-        output=$(sbatch "$STAGE_SCRIPT" 2>&1)
+        output=$(sbatch --chdir="$PROJECT_ROOT" "$STAGE_SCRIPT" 2>&1)
         sbatch_exit_code=$?
         set -e
         if [ $sbatch_exit_code -ne 0 ]; then
@@ -206,7 +206,7 @@ if [ -f "$SETUP_SCRIPT" ]; then
         SETUP_JOB_ID="DRYRUN_SETUP"
     else
         set +e
-        output=$(sbatch --dependency=afterok:$STAGE_JOB_ID "$SETUP_SCRIPT" 2>&1)
+        output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$STAGE_JOB_ID "$SETUP_SCRIPT" 2>&1)
         sbatch_exit_code=$?
         set -e
         if [ $sbatch_exit_code -ne 0 ]; then
@@ -237,7 +237,7 @@ for script in "${TRAIN_SCRIPTS[@]}"; do
             echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after setup)"
         else
             set +e
-            output=$(sbatch --dependency=afterok:$SETUP_JOB_ID "$script" 2>&1)
+            output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$SETUP_JOB_ID "$script" 2>&1)
             sbatch_exit_code=$?
             set -e
             if [ $sbatch_exit_code -ne 0 ]; then
@@ -265,7 +265,7 @@ if [ "$SKIP_BASELINES" = false ]; then
             echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after setup)"
         else
             set +e
-            output=$(sbatch --dependency=afterok:$SETUP_JOB_ID "$BASELINES_SCRIPT" 2>&1)
+            output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$SETUP_JOB_ID "$BASELINES_SCRIPT" 2>&1)
             sbatch_exit_code=$?
             set -e
             if [ $sbatch_exit_code -ne 0 ]; then
@@ -293,7 +293,7 @@ if [ -f "$EVAL_SCRIPT" ]; then
         # Build dependency string for all training jobs
         TRAIN_DEPS=$(IFS=:; echo "${TRAIN_JOB_IDS[*]}")
         set +e
-        output=$(sbatch --dependency=afterok:$TRAIN_DEPS "$EVAL_SCRIPT" 2>&1)
+        output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$TRAIN_DEPS "$EVAL_SCRIPT" 2>&1)
         sbatch_exit_code=$?
         set -e
         if [ $sbatch_exit_code -ne 0 ]; then
@@ -319,7 +319,7 @@ if [ -f "$ANALYSIS_SCRIPT" ]; then
     else
         TRAIN_DEPS=$(IFS=:; echo "${TRAIN_JOB_IDS[*]}")
         set +e
-        output=$(sbatch --dependency=afterok:$TRAIN_DEPS "$ANALYSIS_SCRIPT" 2>&1)
+        output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$TRAIN_DEPS "$ANALYSIS_SCRIPT" 2>&1)
         sbatch_exit_code=$?
         set -e
         if [ $sbatch_exit_code -ne 0 ]; then
@@ -345,7 +345,7 @@ if [ "$SKIP_HELD_OUT" = false ]; then
             echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after setup)"
         else
             set +e
-            output=$(sbatch --dependency=afterok:$SETUP_JOB_ID "$HELD_OUT_SCRIPT" 2>&1)
+            output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$SETUP_JOB_ID "$HELD_OUT_SCRIPT" 2>&1)
             sbatch_exit_code=$?
             set -e
             if [ $sbatch_exit_code -ne 0 ]; then

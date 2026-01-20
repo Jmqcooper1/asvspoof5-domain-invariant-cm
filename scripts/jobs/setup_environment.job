@@ -15,9 +15,16 @@
 module purge
 module load 2025
 
-# Navigate to repo root (works regardless of where repo is cloned)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/../.."
+# Navigate to repo root (avoid Slurm spool dir)
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  cd "$SLURM_SUBMIT_DIR"
+fi
+if [[ ! -f "pyproject.toml" ]]; then
+  echo "ERROR: pyproject.toml not found in $(pwd). Set SLURM_SUBMIT_DIR or run from repo root." >&2
+  exit 1
+fi
+echo "Repo root: $(pwd)"
+echo "SLURM_SUBMIT_DIR: ${SLURM_SUBMIT_DIR:-}"
 
 # Install uv if not already installed
 curl -LsSf https://astral.sh/uv/install.sh | sh
