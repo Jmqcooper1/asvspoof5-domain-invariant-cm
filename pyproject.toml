@@ -49,6 +49,7 @@ dependencies = [
     "accelerate>=1.0",
     "einops>=0.8",
     "rich>=13.9",
+    "wandb>=0.18",
 ]
 
 [project.optional-dependencies]
@@ -60,9 +61,6 @@ dev = [
 ]
 xai = [
     "captum>=0.7",
-]
-tracking = [
-    "wandb>=0.23.1",
 ]
 
 [tool.hatch.build.targets.wheel]
