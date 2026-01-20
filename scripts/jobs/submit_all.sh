@@ -46,6 +46,9 @@ done
 cd "$(dirname "$0")/../.."
 PROJECT_ROOT=$(pwd)
 
+# Ensure job output directory exists
+mkdir -p ./scripts/jobs/out
+
 # Require ASVSPOOF5_ROOT before submitting any jobs
 if [ -f .env ]; then
     set -a
