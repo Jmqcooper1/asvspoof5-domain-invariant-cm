@@ -420,9 +420,13 @@ def run_held_out_experiment(
             if method == "dann":
                 from asvspoof5_domain_invariant_cm.training.sched import LambdaScheduler
 
+                lambda_sched_cfg = config["dann"].get("lambda_schedule", {})
                 lambda_scheduler = LambdaScheduler(
-                    max_epochs=config["training"]["max_epochs"],
-                    gamma=config["dann"].get("gamma", 10.0),
+                    total_epochs=config["training"]["max_epochs"],
+                    schedule_type=lambda_sched_cfg.get("type", "linear"),
+                    start_value=lambda_sched_cfg.get("start", 0.0),
+                    end_value=lambda_sched_cfg.get("end", 1.0),
+                    warmup_epochs=lambda_sched_cfg.get("warmup_epochs", 0),
                 )
 
             # Train
