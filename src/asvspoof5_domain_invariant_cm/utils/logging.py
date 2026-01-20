@@ -431,6 +431,28 @@ class ExperimentLogger:
                 if isinstance(v, (int, float)):
                     flat[f"val/{k}"] = v
 
+            # Per-domain metrics (CODEC breakdown)
+            per_codec = event.get("per_codec", {})
+            for codec_name, codec_data in per_codec.items():
+                if isinstance(codec_data, dict):
+                    eer = codec_data.get("eer")
+                    if eer is not None and isinstance(eer, (int, float)):
+                        flat[f"val/per_codec/{codec_name}_eer"] = eer
+                    n_samples = codec_data.get("n_samples")
+                    if n_samples is not None and isinstance(n_samples, (int, float)):
+                        flat[f"val/per_codec/{codec_name}_n"] = n_samples
+
+            # Per-domain metrics (CODEC_Q breakdown)
+            per_codec_q = event.get("per_codec_q", {})
+            for codec_q_name, cq_data in per_codec_q.items():
+                if isinstance(cq_data, dict):
+                    eer = cq_data.get("eer")
+                    if eer is not None and isinstance(eer, (int, float)):
+                        flat[f"val/per_codec_q/{codec_q_name}_eer"] = eer
+                    n_samples = cq_data.get("n_samples")
+                    if n_samples is not None and isinstance(n_samples, (int, float)):
+                        flat[f"val/per_codec_q/{codec_q_name}_n"] = n_samples
+
             # Other scalars
             for k in ["learning_rate", "lambda_domain", "grad_norm_mean", "grad_clips", "gpu_memory_gb"]:
                 if k in event and isinstance(event[k], (int, float)):
@@ -455,6 +477,31 @@ class ExperimentLogger:
         elif event_type == "experiment_start":
             # Just log config update, already done in init
             pass
+
+    def log_step_metrics(
+        self,
+        metrics: dict[str, Any],
+        step: int,
+        prefix: str = "",
+    ) -> None:
+        """Log step-level metrics to wandb (batch-level logging).
+
+        Args:
+            metrics: Dictionary of metrics to log.
+            step: Global step number.
+            prefix: Optional prefix for metric keys.
+        """
+        if not self.use_wandb:
+            return
+
+        flat = {}
+        for k, v in metrics.items():
+            if isinstance(v, (int, float)):
+                key = f"{prefix}{k}" if prefix else k
+                flat[key] = v
+
+        if flat:
+            wandb.log(flat, step=step)
 
     def log_metrics(self, metrics: dict[str, Any], step: Optional[int] = None) -> None:
         """Log metrics to wandb and console.

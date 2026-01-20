@@ -6,11 +6,13 @@ This provides a classical baseline using LFCC + GMM backend.
 Usage:
     python scripts/train_lfcc_gmm.py
     python scripts/train_lfcc_gmm.py --n-components 64
+    python scripts/train_lfcc_gmm.py --n-components 32 --wandb
 """
 
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
 
 import numpy as np
@@ -24,6 +26,14 @@ from asvspoof5_domain_invariant_cm.evaluation import (
     evaluate_per_domain,
 )
 from asvspoof5_domain_invariant_cm.utils import get_features_dir, get_run_dir
+
+# Optional wandb import
+try:
+    import wandb
+
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,6 +67,17 @@ def parse_args():
         type=int,
         default=42,
         help="Random seed",
+    )
+    parser.add_argument(
+        "--wandb",
+        action="store_true",
+        help="Enable Wandb logging",
+    )
+    parser.add_argument(
+        "--wandb-project",
+        type=str,
+        default="asvspoof5-dann",
+        help="Wandb project name",
     )
     return parser.parse_args()
 
@@ -201,6 +222,36 @@ def main():
 
     with open(output_dir / "metrics.json", "w") as f:
         json.dump(results, f, indent=2)
+
+    # Wandb logging
+    use_wandb = args.wandb and WANDB_AVAILABLE and os.environ.get("WANDB_API_KEY")
+    if use_wandb:
+        try:
+            wandb.init(
+                project=args.wandb_project,
+                name=f"lfcc_gmm_{args.n_components}",
+                config={
+                    "method": "lfcc_gmm",
+                    "n_components": args.n_components,
+                    "feature_dim": int(train_embeddings.shape[1]),
+                    "seed": args.seed,
+                },
+                tags=["baseline", "lfcc-gmm"],
+            )
+            wandb.log({
+                "val/accuracy": accuracy,
+                "val/eer": eer,
+                "val/min_dcf": min_dcf,
+                "train/n_samples": len(train_embeddings),
+                "train/n_bonafide": len(train_bonafide),
+                "train/n_spoof": len(train_spoof),
+            })
+            wandb.run.summary["val_eer"] = eer
+            wandb.run.summary["val_min_dcf"] = min_dcf
+            wandb.finish()
+            logger.info("Logged results to Wandb")
+        except Exception as e:
+            logger.warning(f"Wandb logging failed: {e}")
 
     # Save predictions
     val_df.to_csv(output_dir / "predictions_dev.tsv", sep="\t", index=False)

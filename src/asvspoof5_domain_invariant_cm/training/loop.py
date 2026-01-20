@@ -53,7 +53,10 @@ def train_epoch(
     log_interval: int = 50,
     batch_sample_rate: float = 0.0,
     track_gradients: bool = True,
-) -> dict:
+    exp_logger: Optional[ExperimentLogger] = None,
+    global_step_start: int = 0,
+    log_step_interval: int = 100,
+) -> tuple[dict, int]:
     """Train for one epoch.
 
     Args:
@@ -66,12 +69,15 @@ def train_epoch(
         scaler: Optional gradient scaler for AMP.
         gradient_clip: Gradient clipping value.
         method: Training method ('erm' or 'dann').
-        log_interval: Logging interval.
+        log_interval: Logging interval for progress bar.
         batch_sample_rate: Rate of batches to log detailed info (0.0-1.0).
         track_gradients: Whether to track gradient norms.
+        exp_logger: Optional ExperimentLogger for step-level wandb logging.
+        global_step_start: Starting global step for this epoch.
+        log_step_interval: Interval for step-level wandb logging.
 
     Returns:
-        Dictionary of average metrics for the epoch.
+        Tuple of (metrics dict, final global step).
     """
     model.train()
 
@@ -95,6 +101,9 @@ def train_epoch(
 
     # Batch-level logging samples
     batch_samples = []
+
+    # Global step tracking
+    global_step = global_step_start
 
     pbar = tqdm(dataloader, desc="Training", leave=False)
 
@@ -190,6 +199,9 @@ def train_epoch(
         if scheduler is not None:
             scheduler.step()
 
+        # Increment global step
+        global_step += 1
+
         # Compute accuracies
         task_acc = compute_accuracy(outputs["task_logits"], y_task)
 
@@ -252,6 +264,22 @@ def train_epoch(
                 "task_acc": f"{total_task_acc / num_batches:.4f}",
             })
 
+        # Step-level wandb logging
+        if exp_logger is not None and global_step % log_step_interval == 0:
+            step_metrics = {
+                "train/step_loss": losses["total_loss"].item(),
+                "train/step_task_loss": losses["task_loss"].item(),
+                "train/step_task_acc": task_acc,
+            }
+            if method == "dann":
+                step_metrics["train/step_codec_loss"] = losses["codec_loss"].item()
+                step_metrics["train/step_codec_q_loss"] = losses["codec_q_loss"].item()
+                step_metrics["train/step_codec_acc"] = codec_acc
+                step_metrics["train/step_codec_q_acc"] = codec_q_acc
+            if track_gradients and grad_norms:
+                step_metrics["train/step_grad_norm"] = grad_norms[-1]
+            exp_logger.log_step_metrics(step_metrics, step=global_step)
+
     # Average metrics
     metrics = {
         "loss": total_loss / num_batches,
@@ -279,7 +307,7 @@ def train_epoch(
     if batch_samples:
         metrics["_batch_samples"] = batch_samples
 
-    return metrics
+    return metrics, global_step
 
 
 @torch.no_grad()
@@ -655,7 +683,7 @@ class Trainer:
                 logger.info(f"Epoch {epoch}: lambda = {current_lambda:.4f}")
 
             # Train
-            train_metrics = train_epoch(
+            train_metrics, self.global_step = train_epoch(
                 self.model,
                 self.train_loader,
                 self.loss_fn,
@@ -668,6 +696,9 @@ class Trainer:
                 log_interval=self.log_interval,
                 batch_sample_rate=self.batch_sample_rate,
                 track_gradients=self.track_gradients,
+                exp_logger=self.exp_logger,
+                global_step_start=self.global_step,
+                log_step_interval=self.log_interval,
             )
 
             # Extract batch samples for separate logging

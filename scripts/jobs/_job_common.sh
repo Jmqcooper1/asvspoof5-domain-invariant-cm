@@ -124,6 +124,17 @@ check_wandb_api_key() {
   fi
 }
 
+require_wandb_api_key() {
+  # Fail if WANDB_API_KEY is not set (for jobs that require wandb logging)
+  if [[ -z "${WANDB_API_KEY:-}" ]]; then
+    echo "ERROR: WANDB_API_KEY is required but not set." >&2
+    echo "       Set it in .env or export before submitting jobs." >&2
+    echo "       Example: export WANDB_API_KEY=your_api_key_here" >&2
+    return 1
+  fi
+  echo "WANDB_API_KEY: set (wandb logging enabled)"
+}
+
 load_and_require_asvspoof5_root() {
   load_dotenv_if_present
   require_env_var "ASVSPOOF5_ROOT"

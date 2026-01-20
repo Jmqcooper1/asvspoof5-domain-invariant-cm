@@ -45,6 +45,9 @@ echo ""
 source scripts/jobs/_job_common.sh
 load_and_require_asvspoof5_root
 
+# Optional defaults
+export WANDB_PROJECT=${WANDB_PROJECT:-asvspoof5-dann}
+
 echo "=== Running Non-Semantic Baselines ==="
 
 # Extract LFCC features
@@ -56,7 +59,7 @@ srun uv run python scripts/extract_lfcc.py --split dev
 # Train LFCC-GMM
 echo ""
 echo "--- Training LFCC-GMM ---"
-srun uv run python scripts/train_lfcc_gmm.py --n-components 32
+srun uv run python scripts/train_lfcc_gmm.py --n-components 32 --wandb
 
 # Extract TRILLsson embeddings (if TensorFlow Hub is available)
 echo ""
@@ -68,8 +71,8 @@ srun uv run python scripts/extract_trillsson.py --split dev || echo "TRILLsson e
 if [ -f "data/features/trillsson/train.npy" ]; then
     echo ""
     echo "--- Training TRILLsson Classifier ---"
-    srun uv run python scripts/train_trillsson.py --classifier logistic
-    srun uv run python scripts/train_trillsson.py --classifier mlp
+    srun uv run python scripts/train_trillsson.py --classifier logistic --wandb
+    srun uv run python scripts/train_trillsson.py --classifier mlp --wandb
 else
     echo "Skipping TRILLsson classifier (embeddings not found)"
 fi
