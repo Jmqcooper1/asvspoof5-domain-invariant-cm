@@ -4,7 +4,13 @@
 # Submits all jobs with proper dependency management to SLURM queue
 #
 # Usage:
-#   ./scripts/jobs/submit_all.sh [--dry-run] [--skip-baselines] [--skip-held-out]
+#   ./scripts/jobs/submit_all.sh [--dry-run] [--skip-staging] [--skip-baselines] [--skip-held-out]
+#
+# Options:
+#   --dry-run        Show what would be submitted without actually submitting
+#   --skip-staging   Skip data staging/setup phases (use when data already staged)
+#   --skip-baselines Skip LFCC/MFCC baseline jobs
+#   --skip-held-out  Skip held-out codec experiment
 # =============================================================================
 
 set -e
@@ -20,6 +26,7 @@ NC='\033[0m'
 DRY_RUN=false
 SKIP_BASELINES=false
 SKIP_HELD_OUT=false
+SKIP_STAGING=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -35,8 +42,13 @@ while [[ $# -gt 0 ]]; do
             SKIP_HELD_OUT=true
             shift
             ;;
+        --skip-staging)
+            SKIP_STAGING=true
+            shift
+            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
+            echo "Usage: $0 [--dry-run] [--skip-staging] [--skip-baselines] [--skip-held-out]"
             exit 1
             ;;
     esac
@@ -65,6 +77,11 @@ fi
 
 if [ "$DRY_RUN" = true ]; then
     echo -e "${YELLOW}DRY RUN MODE - No jobs will be submitted${NC}"
+    echo ""
+fi
+
+if [ "$SKIP_STAGING" = true ]; then
+    echo -e "${YELLOW}SKIP STAGING MODE - Assuming data is already staged${NC}"
     echo ""
 fi
 
@@ -120,11 +137,16 @@ get_job_info() {
 echo "Jobs to submit:"
 echo "---------------"
 echo ""
-echo -e "  ${GREEN}Phase 1: Dataset staging${NC}"
-echo "    - $(get_job_info $STAGE_SCRIPT)"
-echo ""
-echo -e "  ${GREEN}Phase 1b: Setup${NC}"
-echo "    - $(get_job_info $SETUP_SCRIPT)"
+if [ "$SKIP_STAGING" = true ]; then
+    echo -e "  ${YELLOW}Phase 1: Dataset staging - SKIPPED${NC}"
+    echo -e "  ${YELLOW}Phase 1b: Setup - SKIPPED${NC}"
+else
+    echo -e "  ${GREEN}Phase 1: Dataset staging${NC}"
+    echo "    - $(get_job_info $STAGE_SCRIPT)"
+    echo ""
+    echo -e "  ${GREEN}Phase 1b: Setup${NC}"
+    echo "    - $(get_job_info $SETUP_SCRIPT)"
+fi
 echo ""
 echo -e "  ${GREEN}Phase 2: Training (parallel)${NC}"
 for script in "${TRAIN_SCRIPTS[@]}"; do
@@ -164,80 +186,95 @@ echo "==================="
 echo ""
 
 # Phase 1: Dataset staging
-echo -e "${BLUE}Phase 1: Dataset staging${NC}"
 STAGE_JOB_ID=""
-if [ -f "$STAGE_SCRIPT" ]; then
-    job_name=$(grep -m1 "#SBATCH --job-name=" "$STAGE_SCRIPT" | cut -d'=' -f2)
-
-    if [ "$DRY_RUN" = true ]; then
-        echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC}"
-        STAGE_JOB_ID="DRYRUN_STAGE"
-    else
-        set +e
-        output=$(sbatch --chdir="$PROJECT_ROOT" "$STAGE_SCRIPT" 2>&1)
-        sbatch_exit_code=$?
-        set -e
-        if [ $sbatch_exit_code -ne 0 ]; then
-            echo -e "  ${RED}Failed to submit: $output${NC}"
-            exit 1
-        elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
-            STAGE_JOB_ID="${BASH_REMATCH[1]}"
-            ALL_JOB_IDS+=("$STAGE_JOB_ID")
-            echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $STAGE_JOB_ID)"
-        else
-            echo -e "  ${RED}Failed to submit: $output${NC}"
-            exit 1
-        fi
-    fi
-else
-    echo -e "  ${RED}Stage script not found: $STAGE_SCRIPT${NC}"
-    exit 1
-fi
-echo ""
-
-# Phase 1b: Setup (depends on staging)
-echo -e "${BLUE}Phase 1b: Setup${NC}"
 SETUP_JOB_ID=""
-if [ -f "$SETUP_SCRIPT" ]; then
-    job_name=$(grep -m1 "#SBATCH --job-name=" "$SETUP_SCRIPT" | cut -d'=' -f2)
 
-    if [ "$DRY_RUN" = true ]; then
-        echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after staging)"
-        SETUP_JOB_ID="DRYRUN_SETUP"
-    else
-        set +e
-        output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$STAGE_JOB_ID "$SETUP_SCRIPT" 2>&1)
-        sbatch_exit_code=$?
-        set -e
-        if [ $sbatch_exit_code -ne 0 ]; then
-            echo -e "  ${RED}Failed to submit: $output${NC}"
-            exit 1
-        elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
-            SETUP_JOB_ID="${BASH_REMATCH[1]}"
-            ALL_JOB_IDS+=("$SETUP_JOB_ID")
-            echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $SETUP_JOB_ID, depends on: $STAGE_JOB_ID)"
-        else
-            echo -e "  ${RED}Failed to submit: $output${NC}"
-            exit 1
-        fi
-    fi
+if [ "$SKIP_STAGING" = true ]; then
+    echo -e "${YELLOW}Phase 1: Dataset staging - SKIPPED${NC}"
+    echo -e "${YELLOW}Phase 1b: Setup - SKIPPED${NC}"
+    echo ""
 else
-    echo -e "  ${RED}Setup script not found: $SETUP_SCRIPT${NC}"
-    exit 1
-fi
-echo ""
+    echo -e "${BLUE}Phase 1: Dataset staging${NC}"
+    if [ -f "$STAGE_SCRIPT" ]; then
+        job_name=$(grep -m1 "#SBATCH --job-name=" "$STAGE_SCRIPT" | cut -d'=' -f2)
 
-# Phase 2: Training (depends on setup)
+        if [ "$DRY_RUN" = true ]; then
+            echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC}"
+            STAGE_JOB_ID="DRYRUN_STAGE"
+        else
+            set +e
+            output=$(sbatch --chdir="$PROJECT_ROOT" "$STAGE_SCRIPT" 2>&1)
+            sbatch_exit_code=$?
+            set -e
+            if [ $sbatch_exit_code -ne 0 ]; then
+                echo -e "  ${RED}Failed to submit: $output${NC}"
+                exit 1
+            elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
+                STAGE_JOB_ID="${BASH_REMATCH[1]}"
+                ALL_JOB_IDS+=("$STAGE_JOB_ID")
+                echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $STAGE_JOB_ID)"
+            else
+                echo -e "  ${RED}Failed to submit: $output${NC}"
+                exit 1
+            fi
+        fi
+    else
+        echo -e "  ${RED}Stage script not found: $STAGE_SCRIPT${NC}"
+        exit 1
+    fi
+    echo ""
+
+    # Phase 1b: Setup (depends on staging)
+    echo -e "${BLUE}Phase 1b: Setup${NC}"
+    if [ -f "$SETUP_SCRIPT" ]; then
+        job_name=$(grep -m1 "#SBATCH --job-name=" "$SETUP_SCRIPT" | cut -d'=' -f2)
+
+        if [ "$DRY_RUN" = true ]; then
+            echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after staging)"
+            SETUP_JOB_ID="DRYRUN_SETUP"
+        else
+            set +e
+            output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$STAGE_JOB_ID "$SETUP_SCRIPT" 2>&1)
+            sbatch_exit_code=$?
+            set -e
+            if [ $sbatch_exit_code -ne 0 ]; then
+                echo -e "  ${RED}Failed to submit: $output${NC}"
+                exit 1
+            elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
+                SETUP_JOB_ID="${BASH_REMATCH[1]}"
+                ALL_JOB_IDS+=("$SETUP_JOB_ID")
+                echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $SETUP_JOB_ID, depends on: $STAGE_JOB_ID)"
+            else
+                echo -e "  ${RED}Failed to submit: $output${NC}"
+                exit 1
+            fi
+        fi
+    else
+        echo -e "  ${RED}Setup script not found: $SETUP_SCRIPT${NC}"
+        exit 1
+    fi
+    echo ""
+fi
+
+# Phase 2: Training (depends on setup, or no dependency if --skip-staging)
 echo -e "${BLUE}Phase 2: Training${NC}"
 for script in "${TRAIN_SCRIPTS[@]}"; do
     if [ -f "$script" ]; then
         job_name=$(grep -m1 "#SBATCH --job-name=" "$script" | cut -d'=' -f2)
         
         if [ "$DRY_RUN" = true ]; then
-            echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after setup)"
+            if [ "$SKIP_STAGING" = true ]; then
+                echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (no dependency)"
+            else
+                echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after setup)"
+            fi
         else
             set +e
-            output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$SETUP_JOB_ID "$script" 2>&1)
+            if [ "$SKIP_STAGING" = true ]; then
+                output=$(sbatch --chdir="$PROJECT_ROOT" "$script" 2>&1)
+            else
+                output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$SETUP_JOB_ID "$script" 2>&1)
+            fi
             sbatch_exit_code=$?
             set -e
             if [ $sbatch_exit_code -ne 0 ]; then
@@ -246,7 +283,11 @@ for script in "${TRAIN_SCRIPTS[@]}"; do
                 job_id="${BASH_REMATCH[1]}"
                 ALL_JOB_IDS+=("$job_id")
                 TRAIN_JOB_IDS+=("$job_id")
-                echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id, depends on: $SETUP_JOB_ID)"
+                if [ "$SKIP_STAGING" = true ]; then
+                    echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id)"
+                else
+                    echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id, depends on: $SETUP_JOB_ID)"
+                fi
             else
                 echo -e "  ${YELLOW}Failed to submit $job_name: $output${NC}"
             fi
@@ -262,10 +303,18 @@ if [ "$SKIP_BASELINES" = false ]; then
         job_name=$(grep -m1 "#SBATCH --job-name=" "$BASELINES_SCRIPT" | cut -d'=' -f2)
         
         if [ "$DRY_RUN" = true ]; then
-            echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after setup)"
+            if [ "$SKIP_STAGING" = true ]; then
+                echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (no dependency)"
+            else
+                echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after setup)"
+            fi
         else
             set +e
-            output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$SETUP_JOB_ID "$BASELINES_SCRIPT" 2>&1)
+            if [ "$SKIP_STAGING" = true ]; then
+                output=$(sbatch --chdir="$PROJECT_ROOT" "$BASELINES_SCRIPT" 2>&1)
+            else
+                output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$SETUP_JOB_ID "$BASELINES_SCRIPT" 2>&1)
+            fi
             sbatch_exit_code=$?
             set -e
             if [ $sbatch_exit_code -ne 0 ]; then
@@ -273,7 +322,11 @@ if [ "$SKIP_BASELINES" = false ]; then
             elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
                 job_id="${BASH_REMATCH[1]}"
                 ALL_JOB_IDS+=("$job_id")
-                echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id, depends on: $SETUP_JOB_ID)"
+                if [ "$SKIP_STAGING" = true ]; then
+                    echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id)"
+                else
+                    echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id, depends on: $SETUP_JOB_ID)"
+                fi
             else
                 echo -e "  ${YELLOW}Failed to submit $job_name: $output${NC}"
             fi
@@ -342,10 +395,18 @@ if [ "$SKIP_HELD_OUT" = false ]; then
         job_name=$(grep -m1 "#SBATCH --job-name=" "$HELD_OUT_SCRIPT" | cut -d'=' -f2)
         
         if [ "$DRY_RUN" = true ]; then
-            echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after setup)"
+            if [ "$SKIP_STAGING" = true ]; then
+                echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (no dependency)"
+            else
+                echo -e "  [DRY RUN] Would submit: ${GREEN}$job_name${NC} (after setup)"
+            fi
         else
             set +e
-            output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$SETUP_JOB_ID "$HELD_OUT_SCRIPT" 2>&1)
+            if [ "$SKIP_STAGING" = true ]; then
+                output=$(sbatch --chdir="$PROJECT_ROOT" "$HELD_OUT_SCRIPT" 2>&1)
+            else
+                output=$(sbatch --chdir="$PROJECT_ROOT" --dependency=afterok:$SETUP_JOB_ID "$HELD_OUT_SCRIPT" 2>&1)
+            fi
             sbatch_exit_code=$?
             set -e
             if [ $sbatch_exit_code -ne 0 ]; then
@@ -353,7 +414,11 @@ if [ "$SKIP_HELD_OUT" = false ]; then
             elif [[ $output =~ Submitted\ batch\ job\ ([0-9]+) ]]; then
                 job_id="${BASH_REMATCH[1]}"
                 ALL_JOB_IDS+=("$job_id")
-                echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id, depends on: $SETUP_JOB_ID)"
+                if [ "$SKIP_STAGING" = true ]; then
+                    echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id)"
+                else
+                    echo -e "  Submitted: ${GREEN}$job_name${NC} (Job ID: $job_id, depends on: $SETUP_JOB_ID)"
+                fi
             else
                 echo -e "  ${YELLOW}Failed to submit $job_name: $output${NC}"
             fi
