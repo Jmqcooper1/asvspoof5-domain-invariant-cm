@@ -545,17 +545,15 @@ def main():
     logging_cfg = config.get("logging", {})
     wandb_cfg = config.get("wandb", {})
 
-    # Auto-enable wandb if API key is set (unless explicitly disabled)
+    # Wandb is enabled by default (can be disabled via config or --no-wandb)
     wandb_api_key = os.environ.get("WANDB_API_KEY")
-    use_wandb = args.wandb or wandb_cfg.get("enabled", False)
-    if wandb_api_key and not use_wandb:
-        logger.info("WANDB_API_KEY detected, enabling wandb logging automatically")
-        use_wandb = True
-    elif args.wandb and not wandb_api_key:
+    use_wandb = args.wandb or wandb_cfg.get("enabled", True)
+    if use_wandb and not wandb_api_key:
         logger.warning(
             "Wandb enabled but WANDB_API_KEY not set. "
-            "Set it in .env or export before running."
+            "Set it in .env or export before running. Disabling wandb."
         )
+        use_wandb = False
 
     # Parse wandb tags
     wandb_tags = None
