@@ -235,6 +235,8 @@ def run_held_out_experiment(
     output_dir: Path,
     seed: int,
     skip_training: bool = False,
+    use_wandb: bool = False,
+    wandb_project: str = "asvspoof5-held-out",
 ) -> dict:
     """Run a single held-out codec experiment.
 
@@ -244,6 +246,8 @@ def run_held_out_experiment(
         output_dir: Output directory for this experiment.
         seed: Random seed.
         skip_training: If True, skip training and load existing checkpoints.
+        use_wandb: Whether to enable wandb logging.
+        wandb_project: Wandb project name.
 
     Returns:
         Dictionary with results for this held-out codec.
@@ -446,6 +450,12 @@ def run_held_out_experiment(
                 gradient_clip=config["training"].get("gradient_clip", 1.0),
                 use_amp=config["training"].get("use_amp", False),
                 lambda_scheduler=lambda_scheduler,
+                use_wandb=use_wandb,
+                wandb_project=wandb_project,
+                wandb_run_name=f"held_out_{held_out_codec}_{method}",
+                wandb_tags=["held-out", held_out_codec, method],
+                codec_vocab=codec_vocab,
+                codec_q_vocab=codec_q_vocab,
             )
 
             trainer.train()
@@ -599,6 +609,8 @@ def main():
             output_dir=output_dir,
             seed=args.seed,
             skip_training=args.skip_training,
+            use_wandb=args.wandb,
+            wandb_project=args.wandb_project,
         )
         all_results.append(result)
 
