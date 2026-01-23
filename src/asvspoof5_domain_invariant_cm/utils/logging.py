@@ -326,6 +326,13 @@ class ExperimentLogger:
                 save_code=log_code,
             )
 
+            # Define separate step metrics for training (step-level) and validation (epoch-level)
+            # This prevents the "step must be monotonically increasing" warning when
+            # training logs at step 0, 50, 100, ... 70000 and validation logs at epoch 0, 1, 2, ...
+            wandb.define_metric("train/step_*", step_metric="train/global_step")
+            wandb.define_metric("val/*", step_metric="epoch")
+            wandb.define_metric("train/*", step_metric="epoch", step_sync=False)
+
             # Log experiment context
             wandb.config.update({"context": self.context}, allow_val_change=True)
 
@@ -501,7 +508,11 @@ class ExperimentLogger:
                 flat[key] = v
 
         if flat:
-            wandb.log(flat, step=step)
+            # Include global_step as the x-axis metric for step-level training logs
+            # This allows train/step_* metrics to use train/global_step as x-axis
+            # while val/* metrics use epoch as x-axis (defined in _init_wandb)
+            flat["train/global_step"] = step
+            wandb.log(flat, commit=True)
 
     def log_metrics(self, metrics: dict[str, Any], step: Optional[int] = None) -> None:
         """Log metrics to wandb and console.

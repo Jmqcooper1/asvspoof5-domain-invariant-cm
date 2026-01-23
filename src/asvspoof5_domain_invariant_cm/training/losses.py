@@ -129,18 +129,32 @@ class CombinedDANNLoss(nn.Module):
     def forward(
         self,
         task_logits: torch.Tensor,
-        codec_logits: torch.Tensor,
-        codec_q_logits: torch.Tensor,
+        codec_logits: Optional[torch.Tensor],
+        codec_q_logits: Optional[torch.Tensor],
         task_labels: torch.Tensor,
-        codec_labels: torch.Tensor,
-        codec_q_labels: torch.Tensor,
+        codec_labels: Optional[torch.Tensor],
+        codec_q_labels: Optional[torch.Tensor],
     ) -> dict[str, torch.Tensor]:
         """Compute combined DANN loss.
+
+        During validation, codec/codec_q inputs can be None to skip domain loss
+        computation (validation uses manifest labels which may not match training vocab).
 
         Returns:
             Dictionary with total_loss and component losses.
         """
         l_task = self.task_loss(task_logits, task_labels)
+
+        # Skip domain loss if inputs are None (validation mode)
+        if codec_logits is None or codec_labels is None:
+            zero = torch.tensor(0.0, device=task_logits.device)
+            return {
+                "total_loss": l_task,
+                "task_loss": l_task,
+                "codec_loss": zero,
+                "codec_q_loss": zero,
+            }
+
         l_codec = self.codec_loss(codec_logits, codec_labels)
 
         # Mask CODEC_Q loss when codec is NONE (quality undefined for uncoded)
