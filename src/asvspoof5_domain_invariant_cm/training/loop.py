@@ -363,13 +363,17 @@ def validate_epoch(
         outputs = model(waveform, attention_mask, lengths)
 
         if method == "dann":
+            # During validation, skip domain loss computation.
+            # Validation uses manifest labels which may not match the synthetic
+            # vocab used during training (e.g., manifest has 12 codecs, model expects 6).
+            # Domain invariance is measured separately via domain probe accuracy.
             losses = loss_fn(
                 outputs["task_logits"],
-                outputs["codec_logits"],
-                outputs["codec_q_logits"],
+                None,  # Skip domain loss - codec_logits
+                None,  # Skip domain loss - codec_q_logits
                 y_task,
-                y_codec,
-                y_codec_q,
+                None,  # Skip domain loss - codec_labels
+                None,  # Skip domain loss - codec_q_labels
             )
         else:
             losses = loss_fn(outputs["task_logits"], y_task)
@@ -383,13 +387,9 @@ def validate_epoch(
         total_task_acc += task_acc
         num_batches += 1
 
-        if method == "dann":
-            total_codec_loss += losses["codec_loss"].item()
-            total_codec_q_loss += losses["codec_q_loss"].item()
-            codec_acc = compute_accuracy(outputs["codec_logits"], y_codec)
-            codec_q_acc = compute_accuracy(outputs["codec_q_logits"], y_codec_q)
-            total_codec_acc += codec_acc
-            total_codec_q_acc += codec_q_acc
+        # Note: For DANN validation, we skip domain accuracy computation because
+        # validation labels come from manifest vocab (may differ from training vocab).
+        # Domain invariance should be evaluated via domain probe accuracy instead.
 
         # Collect scores for EER computation
         # Score convention: higher = more bonafide (class 0)
@@ -421,11 +421,9 @@ def validate_epoch(
         "min_dcf": min_dcf,
     }
 
-    if method == "dann":
-        metrics["codec_loss"] = total_codec_loss / num_batches
-        metrics["codec_q_loss"] = total_codec_q_loss / num_batches
-        metrics["codec_acc"] = total_codec_acc / num_batches
-        metrics["codec_q_acc"] = total_codec_q_acc / num_batches
+    # Note: For DANN validation, domain metrics are not computed because
+    # validation labels come from manifest vocab (may differ from training vocab).
+    # Domain invariance is measured separately via domain probe accuracy.
 
     # Per-domain breakdown
     if compute_domain_breakdown and codec_vocab and codec_q_vocab:

@@ -4,13 +4,14 @@
 # Submits all jobs with proper dependency management to SLURM queue
 #
 # Usage:
-#   ./scripts/jobs/submit_all.sh [--dry-run] [--skip-staging] [--skip-baselines] [--skip-held-out]
+#   ./scripts/jobs/submit_all.sh [--dry-run] [--skip-staging] [--skip-baselines] [--run-held-out]
 #
 # Options:
 #   --dry-run        Show what would be submitted without actually submitting
 #   --skip-staging   Skip data staging/setup phases (use when data already staged)
 #   --skip-baselines Skip LFCC/MFCC baseline jobs
-#   --skip-held-out  Skip held-out codec experiment
+#   --run-held-out   Enable held-out codec experiment (disabled by default because
+#                    ASVspoof5 train/dev have no codec diversity)
 # =============================================================================
 
 set -e
@@ -25,7 +26,11 @@ NC='\033[0m'
 # Parse arguments
 DRY_RUN=false
 SKIP_BASELINES=false
-SKIP_HELD_OUT=false
+# NOTE: Held-out codec experiment is disabled by default because ASVspoof5
+# train/dev sets have no codec diversity (all samples are NONE/uncoded).
+# Codec diversity only exists in the eval set.
+# See docs/evaluation.md for details.
+SKIP_HELD_OUT=true
 SKIP_STAGING=false
 
 while [[ $# -gt 0 ]]; do
@@ -38,8 +43,9 @@ while [[ $# -gt 0 ]]; do
             SKIP_BASELINES=true
             shift
             ;;
-        --skip-held-out)
-            SKIP_HELD_OUT=true
+        --run-held-out)
+            # Enable held-out experiment (disabled by default)
+            SKIP_HELD_OUT=false
             shift
             ;;
         --skip-staging)
@@ -48,7 +54,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            echo "Usage: $0 [--dry-run] [--skip-staging] [--skip-baselines] [--skip-held-out]"
+            echo "Usage: $0 [--dry-run] [--skip-staging] [--skip-baselines] [--run-held-out]"
             exit 1
             ;;
     esac
