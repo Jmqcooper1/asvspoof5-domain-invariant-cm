@@ -239,3 +239,8 @@ logs/
 !.env.example
 .DS_Store
 .cursor/
+
+# Job output files
+*.out
+cat_output.out
+cat_ouput.out

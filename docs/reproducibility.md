@@ -277,3 +277,26 @@ Wandb automatically logs:
 - Training curves
 - System metrics (GPU memory, CPU)
 - Artifacts (optional)
+
+#### Wandb step semantics (important)
+
+This repo logs **two different cadences**:
+
+- **Step-level training metrics**: `train/step_*` with x-axis `train/global_step`
+- **Epoch-level metrics**: `train/*` and `val/*` with x-axis `epoch`
+
+Implementation detail:
+
+- `train/step_*` logs include a `train/global_step` field and are bound via `wandb.define_metric("train/step_*", step_metric="train/global_step")`.
+- `train/*` and `val/*` logs include an `epoch` field and are bound via `wandb.define_metric(..., step_metric="epoch")`.
+- Epoch logs do **not** pass an explicit `step=` argument to `wandb.log()`, avoiding W&B’s monotonic step constraint when step-level logs have already advanced the internal step counter.
+
+If you see warnings like \"Tried to log to step 0 that is less than the current step ...\", it means epoch metrics were being logged with an explicit `step` and W&B is dropping them.
+
+#### Training stability knobs (early-stop + plateau)
+
+These keys live under `training:` in `configs/train/{erm,dann}.yaml`:
+
+- `min_delta`: minimum improvement in the monitored metric to reset early-stopping patience.
+- `train_loss_threshold`: if train loss stays below this threshold, the model is considered to be memorizing training data.
+- `plateau_patience`: number of consecutive epochs below `train_loss_threshold` before stopping.

@@ -469,7 +469,15 @@ class ExperimentLogger:
             if "layer_weights" in event:
                 flat["layer_weights"] = wandb.Histogram(event["layer_weights"])
 
-            wandb.log(flat, step=epoch)
+            # Do NOT pass an explicit `step` here.
+            #
+            # We log step-level training metrics frequently (which advances the W&B internal step),
+            # and epoch-level metrics (train/* and val/*) only once per epoch. If we pass
+            # `step=epoch`, W&B will reject the log as "step must be monotonically increasing".
+            #
+            # Instead, rely on `wandb.define_metric(..., step_metric="epoch")` and include `epoch`
+            # as a field in the payload (set above).
+            wandb.log(flat, commit=True)
 
         elif event_type == "evaluation_complete":
             metrics = event.get("metrics", {})
@@ -712,3 +720,35 @@ def check_for_nan_grads(model: torch.nn.Module) -> bool:
         if p.grad is not None and torch.isnan(p.grad).any():
             return True
     return False
+
+
+def get_non_finite_grad_parameter_names(
+    model: torch.nn.Module,
+    max_names: int = 10,
+) -> list[str]:
+    """Return parameter names whose gradients contain NaN/Inf.
+
+    Args:
+        model: PyTorch model.
+        max_names: Maximum number of parameter names to return.
+
+    Returns:
+        List of parameter names with non-finite gradients (NaN or Inf).
+    """
+    non_finite_names: list[str] = []
+    for name, p in model.named_parameters():
+        if p.grad is None:
+            continue
+        grad = p.grad
+        # grad can be sparse for some optimizers, but we don't use those here;
+        # still, guard against missing tensor ops.
+        try:
+            if not torch.isfinite(grad).all():
+                non_finite_names.append(name)
+        except Exception:
+            # Fall back to NaN-only check if isfinite isn't supported
+            if torch.isnan(grad).any():
+                non_finite_names.append(name)
+        if len(non_finite_names) >= max_names:
+            break
+    return non_finite_names

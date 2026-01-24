@@ -18,8 +18,8 @@ from tqdm import tqdm
 from ..utils.io import save_checkpoint, save_config, save_metrics
 from ..utils.logging import (
     ExperimentLogger,
-    check_for_nan_grads,
     compute_grad_norm,
+    get_non_finite_grad_parameter_names,
     get_gpu_memory_usage,
 )
 
@@ -156,48 +156,138 @@ def train_epoch(
 
         loss = losses["total_loss"]
 
+        # Fast fail / diagnostics: skip batches with non-finite loss.
+        # This happens in unstable regimes (too-large LR, AMP overflow, bad batch),
+        # and letting it backpropagate will poison the optimizer state.
+        if not torch.isfinite(loss).item():
+            non_finite_loss_event = {
+                "batch_idx": batch_idx,
+                "global_step": global_step,
+                "method": method,
+                "losses": {
+                    k: (v.item() if isinstance(v, torch.Tensor) and v.numel() == 1 else v)
+                    for k, v in losses.items()
+                },
+            }
+            logger.warning(
+                f"Non-finite loss at batch {batch_idx} (global_step={global_step}). "
+                "Skipping optimizer/scheduler step for this batch."
+            )
+            if exp_logger is not None:
+                exp_logger.log_wide_event("non_finite_loss_batch", non_finite_loss_event)
+            # Clear grads just in case and continue.
+            optimizer.zero_grad(set_to_none=True)
+            # Still advance global_step so `train/global_step` stays monotonic.
+            global_step += 1
+            continue
+
         # Backward pass
+        optimizer_step_taken = False
         if use_amp:
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
 
             # Track gradients before clipping
+            grad_norm: Optional[float] = None
             if track_gradients:
-                grad_norm = compute_grad_norm(model)
-                grad_norms.append(grad_norm)
-
-                # Check for NaN gradients
-                if check_for_nan_grads(model):
-                    nan_grad_count += 1
-                    logger.warning(f"NaN gradient detected at batch {batch_idx}")
+                grad_norm_value = compute_grad_norm(model)
+                grad_norms.append(grad_norm_value)
+                # grad_norm can be NaN if any gradients are non-finite
+                grad_norm = float(grad_norm_value) if np.isfinite(grad_norm_value) else None
 
             # Clip gradients
             orig_norm = nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
-            if orig_norm > gradient_clip:
-                grad_clips_count += 1
+            orig_norm_value = float(orig_norm)
+            grads_are_finite = np.isfinite(orig_norm_value)
 
-            scaler.step(optimizer)
-            scaler.update()
+            if not grads_are_finite:
+                nan_grad_count += 1
+                non_finite_grad_params = get_non_finite_grad_parameter_names(model, max_names=10)
+                logger.warning(
+                    "Non-finite gradients detected at batch "
+                    f"{batch_idx} (global_step={global_step}, grad_norm={orig_norm_value}). "
+                    f"params={non_finite_grad_params}"
+                )
+                if exp_logger is not None:
+                    exp_logger.log_wide_event(
+                        "non_finite_grad_batch",
+                        {
+                            "batch_idx": batch_idx,
+                            "global_step": global_step,
+                            "method": method,
+                            "grad_norm": grad_norm,
+                            "clipped_grad_norm": orig_norm_value,
+                            "params": non_finite_grad_params,
+                            "losses": {
+                                k: (v.item() if isinstance(v, torch.Tensor) and v.numel() == 1 else v)
+                                for k, v in losses.items()
+                            },
+                        },
+                    )
+                # Skip optimizer step to avoid poisoning the run.
+                # GradScaler will automatically backoff when update() is called without step().
+                optimizer.zero_grad(set_to_none=True)
+                scaler.update()
+            else:
+                if orig_norm_value > gradient_clip:
+                    grad_clips_count += 1
+
+                # Let GradScaler decide whether to skip the optimizer step (inf/nan grads).
+                # If it skips, we also skip the scheduler step to keep LR aligned with updates.
+                prev_scale = scaler.get_scale()
+                scaler.step(optimizer)
+                scaler.update()
+                scaler_skipped_step = scaler.get_scale() < prev_scale
+                optimizer_step_taken = not scaler_skipped_step
         else:
             loss.backward()
 
             # Track gradients before clipping
+            grad_norm: Optional[float] = None
             if track_gradients:
-                grad_norm = compute_grad_norm(model)
-                grad_norms.append(grad_norm)
-
-                if check_for_nan_grads(model):
-                    nan_grad_count += 1
-                    logger.warning(f"NaN gradient detected at batch {batch_idx}")
+                grad_norm_value = compute_grad_norm(model)
+                grad_norms.append(grad_norm_value)
+                grad_norm = float(grad_norm_value) if np.isfinite(grad_norm_value) else None
 
             orig_norm = nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
-            if orig_norm > gradient_clip:
-                grad_clips_count += 1
 
-            optimizer.step()
+            orig_norm_value = float(orig_norm)
+            grads_are_finite = np.isfinite(orig_norm_value)
+
+            if not grads_are_finite:
+                nan_grad_count += 1
+                non_finite_grad_params = get_non_finite_grad_parameter_names(model, max_names=10)
+                logger.warning(
+                    "Non-finite gradients detected at batch "
+                    f"{batch_idx} (global_step={global_step}, grad_norm={orig_norm_value}). "
+                    f"params={non_finite_grad_params}"
+                )
+                if exp_logger is not None:
+                    exp_logger.log_wide_event(
+                        "non_finite_grad_batch",
+                        {
+                            "batch_idx": batch_idx,
+                            "global_step": global_step,
+                            "method": method,
+                            "grad_norm": grad_norm,
+                            "clipped_grad_norm": orig_norm_value,
+                            "params": non_finite_grad_params,
+                            "losses": {
+                                k: (v.item() if isinstance(v, torch.Tensor) and v.numel() == 1 else v)
+                                for k, v in losses.items()
+                            },
+                        },
+                    )
+                optimizer.zero_grad(set_to_none=True)
+            else:
+                if orig_norm_value > gradient_clip:
+                    grad_clips_count += 1
+                optimizer.step()
+                optimizer_step_taken = True
 
         if scheduler is not None:
-            scheduler.step()
+            if optimizer_step_taken:
+                scheduler.step()
 
         # Increment global step
         global_step += 1
@@ -499,7 +589,10 @@ class Trainer:
         config: Full resolved config.
         method: Training method ('erm' or 'dann').
         max_epochs: Maximum training epochs.
-        patience: Early stopping patience.
+        patience: Early stopping patience (epochs without improvement).
+        min_delta: Minimum improvement to count as progress (e.g., 0.001 for EER).
+        train_loss_threshold: Stop if train loss is below this for plateau_patience epochs.
+        plateau_patience: Epochs of low train loss before stopping (prevents overfitting).
         gradient_clip: Gradient clipping value.
         use_amp: Whether to use automatic mixed precision.
         log_interval: Logging interval (steps).
@@ -534,6 +627,9 @@ class Trainer:
         method: str = "erm",
         max_epochs: int = 50,
         patience: int = 10,
+        min_delta: float = 0.001,
+        train_loss_threshold: float = 0.01,
+        plateau_patience: int = 3,
         gradient_clip: float = 1.0,
         use_amp: bool = False,
         log_interval: int = 50,
@@ -565,6 +661,9 @@ class Trainer:
         self.method = method
         self.max_epochs = max_epochs
         self.patience = patience
+        self.min_delta = min_delta
+        self.train_loss_threshold = train_loss_threshold
+        self.plateau_patience = plateau_patience
         self.gradient_clip = gradient_clip
         self.use_amp = use_amp
         self.log_interval = log_interval
@@ -602,6 +701,7 @@ class Trainer:
         # State
         self.best_metric = float("inf") if monitor_mode == "min" else float("-inf")
         self.epochs_without_improvement = 0
+        self.epochs_at_train_plateau = 0  # Track consecutive epochs with very low train loss
         self.current_epoch = 0
         self.global_step = 0
 
@@ -737,13 +837,12 @@ class Trainer:
                     f"min_dcf={val_metrics['min_dcf']:.4f}"
                 )
 
-                # Check for improvement
+                # Check for improvement (must improve by at least min_delta)
                 current_metric = val_metrics[self.monitor_metric]
-                is_better = (
-                    current_metric < self.best_metric
-                    if self.monitor_mode == "min"
-                    else current_metric > self.best_metric
-                )
+                if self.monitor_mode == "min":
+                    is_better = current_metric < (self.best_metric - self.min_delta)
+                else:
+                    is_better = current_metric > (self.best_metric + self.min_delta)
 
                 if is_better:
                     self.best_metric = current_metric
@@ -761,6 +860,12 @@ class Trainer:
                     logger.info(f"New best {self.monitor_metric}: {self.best_metric:.4f}")
                 else:
                     self.epochs_without_improvement += 1
+
+            # Track train loss plateau (model has memorized training data)
+            if train_metrics["loss"] < self.train_loss_threshold:
+                self.epochs_at_train_plateau += 1
+            else:
+                self.epochs_at_train_plateau = 0
 
             # Build epoch-complete wide event
             epoch_duration = time.time() - epoch_start_time
@@ -830,9 +935,25 @@ class Trainer:
                     self.run_dir / "checkpoints" / f"epoch_{epoch}.pt",
                 )
 
-            # Early stopping
+            # Early stopping checks
+            should_stop = False
+            stop_reason = ""
+
+            # 1. Val metric hasn't improved for patience epochs
             if self.epochs_without_improvement >= self.patience:
-                logger.info(f"Early stopping at epoch {epoch}")
+                should_stop = True
+                stop_reason = f"val {self.monitor_metric} hasn't improved for {self.patience} epochs"
+
+            # 2. Train loss plateau: model has memorized data, further training is overfitting
+            if self.epochs_at_train_plateau >= self.plateau_patience:
+                should_stop = True
+                stop_reason = (
+                    f"train loss below {self.train_loss_threshold} for "
+                    f"{self.plateau_patience} consecutive epochs (model memorized training data)"
+                )
+
+            if should_stop:
+                logger.info(f"Early stopping at epoch {epoch}: {stop_reason}")
                 break
 
         # Save final model

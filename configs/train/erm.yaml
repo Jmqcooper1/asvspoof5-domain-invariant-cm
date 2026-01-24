@@ -19,7 +19,10 @@ training:
   # Training loop
   max_epochs: 50
   patience: 10
+  min_delta: 0.001            # Minimum improvement (in monitor_metric) to reset patience
   gradient_clip: 1.0
+  train_loss_threshold: 0.01  # Consider training "memorized" below this loss
+  plateau_patience: 3         # Stop if train_loss_threshold holds for N epochs
   
   # Checkpointing
   save_every_n_epochs: 5

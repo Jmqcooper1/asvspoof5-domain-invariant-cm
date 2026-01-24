@@ -222,6 +222,7 @@ dependencies = [
     { name = "torchaudio" },
     { name = "tqdm" },
     { name = "transformers" },
+    { name = "wandb" },
 ]
 
 [package.optional-dependencies]
@@ -230,9 +231,6 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
-]
-tracking = [
-    { name = "wandb" },
 ]
 xai = [
     { name = "captum" },
@@ -263,9 +261,9 @@ requires-dist = [
     { name = "torchaudio", specifier = ">=2.5" },
     { name = "tqdm", specifier = ">=4.66" },
     { name = "transformers", specifier = ">=4.45" },
-    { name = "wandb", marker = "extra == 'tracking'", specifier = ">=0.23.1" },
+    { name = "wandb", specifier = ">=0.18" },
 ]
-provides-extras = ["dev", "xai", "tracking"]
+provides-extras = ["dev", "xai"]
 
 [[package]]
 name = "async-timeout"
