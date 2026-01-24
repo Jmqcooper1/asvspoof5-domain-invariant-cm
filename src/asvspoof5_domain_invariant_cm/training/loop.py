@@ -499,7 +499,10 @@ class Trainer:
         config: Full resolved config.
         method: Training method ('erm' or 'dann').
         max_epochs: Maximum training epochs.
-        patience: Early stopping patience.
+        patience: Early stopping patience (epochs without improvement).
+        min_delta: Minimum improvement to count as progress (e.g., 0.001 for EER).
+        train_loss_threshold: Stop if train loss is below this for plateau_patience epochs.
+        plateau_patience: Epochs of low train loss before stopping (prevents overfitting).
         gradient_clip: Gradient clipping value.
         use_amp: Whether to use automatic mixed precision.
         log_interval: Logging interval (steps).
@@ -534,6 +537,9 @@ class Trainer:
         method: str = "erm",
         max_epochs: int = 50,
         patience: int = 10,
+        min_delta: float = 0.001,
+        train_loss_threshold: float = 0.01,
+        plateau_patience: int = 3,
         gradient_clip: float = 1.0,
         use_amp: bool = False,
         log_interval: int = 50,
@@ -565,6 +571,9 @@ class Trainer:
         self.method = method
         self.max_epochs = max_epochs
         self.patience = patience
+        self.min_delta = min_delta
+        self.train_loss_threshold = train_loss_threshold
+        self.plateau_patience = plateau_patience
         self.gradient_clip = gradient_clip
         self.use_amp = use_amp
         self.log_interval = log_interval
@@ -602,6 +611,7 @@ class Trainer:
         # State
         self.best_metric = float("inf") if monitor_mode == "min" else float("-inf")
         self.epochs_without_improvement = 0
+        self.epochs_at_train_plateau = 0  # Track consecutive epochs with very low train loss
         self.current_epoch = 0
         self.global_step = 0
 
@@ -737,13 +747,12 @@ class Trainer:
                     f"min_dcf={val_metrics['min_dcf']:.4f}"
                 )
 
-                # Check for improvement
+                # Check for improvement (must improve by at least min_delta)
                 current_metric = val_metrics[self.monitor_metric]
-                is_better = (
-                    current_metric < self.best_metric
-                    if self.monitor_mode == "min"
-                    else current_metric > self.best_metric
-                )
+                if self.monitor_mode == "min":
+                    is_better = current_metric < (self.best_metric - self.min_delta)
+                else:
+                    is_better = current_metric > (self.best_metric + self.min_delta)
 
                 if is_better:
                     self.best_metric = current_metric
@@ -761,6 +770,12 @@ class Trainer:
                     logger.info(f"New best {self.monitor_metric}: {self.best_metric:.4f}")
                 else:
                     self.epochs_without_improvement += 1
+
+            # Track train loss plateau (model has memorized training data)
+            if train_metrics["loss"] < self.train_loss_threshold:
+                self.epochs_at_train_plateau += 1
+            else:
+                self.epochs_at_train_plateau = 0
 
             # Build epoch-complete wide event
             epoch_duration = time.time() - epoch_start_time
@@ -830,9 +845,25 @@ class Trainer:
                     self.run_dir / "checkpoints" / f"epoch_{epoch}.pt",
                 )
 
-            # Early stopping
+            # Early stopping checks
+            should_stop = False
+            stop_reason = ""
+
+            # 1. Val metric hasn't improved for patience epochs
             if self.epochs_without_improvement >= self.patience:
-                logger.info(f"Early stopping at epoch {epoch}")
+                should_stop = True
+                stop_reason = f"val {self.monitor_metric} hasn't improved for {self.patience} epochs"
+
+            # 2. Train loss plateau: model has memorized data, further training is overfitting
+            if self.epochs_at_train_plateau >= self.plateau_patience:
+                should_stop = True
+                stop_reason = (
+                    f"train loss below {self.train_loss_threshold} for "
+                    f"{self.plateau_patience} consecutive epochs (model memorized training data)"
+                )
+
+            if should_stop:
+                logger.info(f"Early stopping at epoch {epoch}: {stop_reason}")
                 break
 
         # Save final model
