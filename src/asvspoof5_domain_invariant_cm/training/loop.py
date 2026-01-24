@@ -18,8 +18,8 @@ from tqdm import tqdm
 from ..utils.io import save_checkpoint, save_config, save_metrics
 from ..utils.logging import (
     ExperimentLogger,
-    check_for_nan_grads,
     compute_grad_norm,
+    get_non_finite_grad_parameter_names,
     get_gpu_memory_usage,
 )
 
@@ -156,48 +156,138 @@ def train_epoch(
 
         loss = losses["total_loss"]
 
+        # Fast fail / diagnostics: skip batches with non-finite loss.
+        # This happens in unstable regimes (too-large LR, AMP overflow, bad batch),
+        # and letting it backpropagate will poison the optimizer state.
+        if not torch.isfinite(loss).item():
+            non_finite_loss_event = {
+                "batch_idx": batch_idx,
+                "global_step": global_step,
+                "method": method,
+                "losses": {
+                    k: (v.item() if isinstance(v, torch.Tensor) and v.numel() == 1 else v)
+                    for k, v in losses.items()
+                },
+            }
+            logger.warning(
+                f"Non-finite loss at batch {batch_idx} (global_step={global_step}). "
+                "Skipping optimizer/scheduler step for this batch."
+            )
+            if exp_logger is not None:
+                exp_logger.log_wide_event("non_finite_loss_batch", non_finite_loss_event)
+            # Clear grads just in case and continue.
+            optimizer.zero_grad(set_to_none=True)
+            # Still advance global_step so `train/global_step` stays monotonic.
+            global_step += 1
+            continue
+
         # Backward pass
+        optimizer_step_taken = False
         if use_amp:
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
 
             # Track gradients before clipping
+            grad_norm: Optional[float] = None
             if track_gradients:
-                grad_norm = compute_grad_norm(model)
-                grad_norms.append(grad_norm)
-
-                # Check for NaN gradients
-                if check_for_nan_grads(model):
-                    nan_grad_count += 1
-                    logger.warning(f"NaN gradient detected at batch {batch_idx}")
+                grad_norm_value = compute_grad_norm(model)
+                grad_norms.append(grad_norm_value)
+                # grad_norm can be NaN if any gradients are non-finite
+                grad_norm = float(grad_norm_value) if np.isfinite(grad_norm_value) else None
 
             # Clip gradients
             orig_norm = nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
-            if orig_norm > gradient_clip:
-                grad_clips_count += 1
+            orig_norm_value = float(orig_norm)
+            grads_are_finite = np.isfinite(orig_norm_value)
 
-            scaler.step(optimizer)
-            scaler.update()
+            if not grads_are_finite:
+                nan_grad_count += 1
+                non_finite_grad_params = get_non_finite_grad_parameter_names(model, max_names=10)
+                logger.warning(
+                    "Non-finite gradients detected at batch "
+                    f"{batch_idx} (global_step={global_step}, grad_norm={orig_norm_value}). "
+                    f"params={non_finite_grad_params}"
+                )
+                if exp_logger is not None:
+                    exp_logger.log_wide_event(
+                        "non_finite_grad_batch",
+                        {
+                            "batch_idx": batch_idx,
+                            "global_step": global_step,
+                            "method": method,
+                            "grad_norm": grad_norm,
+                            "clipped_grad_norm": orig_norm_value,
+                            "params": non_finite_grad_params,
+                            "losses": {
+                                k: (v.item() if isinstance(v, torch.Tensor) and v.numel() == 1 else v)
+                                for k, v in losses.items()
+                            },
+                        },
+                    )
+                # Skip optimizer step to avoid poisoning the run. Also back off AMP scale.
+                prev_scale = scaler.get_scale()
+                scaler.update(prev_scale / 2.0)
+                optimizer.zero_grad(set_to_none=True)
+            else:
+                if orig_norm_value > gradient_clip:
+                    grad_clips_count += 1
+
+                # Let GradScaler decide whether to skip the optimizer step (inf/nan grads).
+                # If it skips, we also skip the scheduler step to keep LR aligned with updates.
+                prev_scale = scaler.get_scale()
+                scaler.step(optimizer)
+                scaler.update()
+                scaler_skipped_step = scaler.get_scale() < prev_scale
+                optimizer_step_taken = not scaler_skipped_step
         else:
             loss.backward()
 
             # Track gradients before clipping
+            grad_norm: Optional[float] = None
             if track_gradients:
-                grad_norm = compute_grad_norm(model)
-                grad_norms.append(grad_norm)
-
-                if check_for_nan_grads(model):
-                    nan_grad_count += 1
-                    logger.warning(f"NaN gradient detected at batch {batch_idx}")
+                grad_norm_value = compute_grad_norm(model)
+                grad_norms.append(grad_norm_value)
+                grad_norm = float(grad_norm_value) if np.isfinite(grad_norm_value) else None
 
             orig_norm = nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
-            if orig_norm > gradient_clip:
-                grad_clips_count += 1
 
-            optimizer.step()
+            orig_norm_value = float(orig_norm)
+            grads_are_finite = np.isfinite(orig_norm_value)
+
+            if not grads_are_finite:
+                nan_grad_count += 1
+                non_finite_grad_params = get_non_finite_grad_parameter_names(model, max_names=10)
+                logger.warning(
+                    "Non-finite gradients detected at batch "
+                    f"{batch_idx} (global_step={global_step}, grad_norm={orig_norm_value}). "
+                    f"params={non_finite_grad_params}"
+                )
+                if exp_logger is not None:
+                    exp_logger.log_wide_event(
+                        "non_finite_grad_batch",
+                        {
+                            "batch_idx": batch_idx,
+                            "global_step": global_step,
+                            "method": method,
+                            "grad_norm": grad_norm,
+                            "clipped_grad_norm": orig_norm_value,
+                            "params": non_finite_grad_params,
+                            "losses": {
+                                k: (v.item() if isinstance(v, torch.Tensor) and v.numel() == 1 else v)
+                                for k, v in losses.items()
+                            },
+                        },
+                    )
+                optimizer.zero_grad(set_to_none=True)
+            else:
+                if orig_norm_value > gradient_clip:
+                    grad_clips_count += 1
+                optimizer.step()
+                optimizer_step_taken = True
 
         if scheduler is not None:
-            scheduler.step()
+            if optimizer_step_taken:
+                scheduler.step()
 
         # Increment global step
         global_step += 1
