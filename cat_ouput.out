@@ -1,0 +1,1089 @@
+[jcooper@int4 asvspoof5-domain-invariant-cm]$ cat scripts/jobs/out/*
+Repo root: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+SLURM_SUBMIT_DIR: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+downloading uv 0.9.26 x86_64-unknown-linux-gnu
+no checksums to verify
+installing to /home/jcooper/.local/bin
+  uv
+  uvx
+everything's installed!
+Resolved 134 packages in 3ms
+Audited 107 packages in 171ms
+CUDA available: True
+GPU device count: 1
+Active GPU: NVIDIA A100-SXM4-40GB
+
+WANDB_API_KEY: set (wandb logging enabled)
+=== Environment diagnostics ===
+PWD: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+ASVSPOOF5_ROOT: /projects/prjs1904/data/asvspoof5
+HF_HOME: /scratch-shared/jcooper/.cache/huggingface
+WANDB_PROJECT: asvspoof5-dann
+WANDB_MODE:
+ffmpeg: not-found
+===============================
+=== Running Non-Semantic Baselines ===
+
+--- Extracting LFCC Features ---
+2026-01-24 00:42:01,326 - INFO - Output directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/data/features/lfcc
+2026-01-24 00:42:01,328 - INFO - Loading manifest: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/data/manifests/train.parquet
+2026-01-24 00:42:01,546 - INFO - Loaded 182357 samples
+Extracting LFCC: 100%|██████████| 182357/182357 [47:30<00:00, 63.97it/s]
+2026-01-24 01:29:32,552 - INFO - Extracted features shape: (182357, 120)
+2026-01-24 01:29:32,729 - INFO - Saved embeddings: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/data/features/lfcc/train.npy
+2026-01-24 01:29:33,275 - INFO - Saved metadata: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/data/features/lfcc/train_metadata.csv
+2026-01-24 01:29:33,275 - INFO - Done!
+2026-01-24 01:30:00,309 - INFO - Output directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/data/features/lfcc       2026-01-24 01:30:00,310 - INFO - Loading manifest: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/data/manifests/dev.parquet
+2026-01-24 01:30:00,599 - INFO - Loaded 140950 samples
+Extracting LFCC: 100%|██████████| 140950/140950 [27:34<00:00, 85.19it/s]                                                         2026-01-24 01:57:35,273 - INFO - Extracted features shape: (140950, 120)
+2026-01-24 01:57:35,422 - INFO - Saved embeddings: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/data/features/lfcc/dev.npy                                                                                                                                2026-01-24 01:57:35,706 - INFO - Saved metadata: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/data/features/lfcc/dev_metadata.csv
+2026-01-24 01:57:35,706 - INFO - Done!                                                                                                                                                                                                                            --- Training LFCC-GMM ---
+2026-01-24 01:57:56,260 - INFO - Features directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/data/features/lfcc
+2026-01-24 01:57:56,263 - INFO - Output directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/lfcc_gmm_32
+2026-01-24 01:57:56,263 - INFO - Loading training data...                                                                        2026-01-24 01:57:56,463 - INFO - Training samples: 182357
+2026-01-24 01:57:56,463 - INFO - Feature dimension: 120
+2026-01-24 01:57:56,463 - INFO - Loading validation data...
+2026-01-24 01:57:56,607 - INFO - Validation samples: 140950                                                                      2026-01-24 01:57:57,039 - INFO - Bonafide samples: 18797                                                                         2026-01-24 01:57:57,039 - INFO - Spoof samples: 163560
+2026-01-24 01:57:57,039 - INFO - Training GMM with 32 components...                                                              2026-01-24 01:58:00,274 - INFO -   Bonafide GMM trained
+2026-01-24 01:58:27,643 - INFO -   Spoof GMM trained                                                                             2026-01-24 01:58:28,090 - INFO - ============================================================
+2026-01-24 01:58:28,090 - INFO - Validation Results:                                                                             2026-01-24 01:58:28,090 - INFO -   Accuracy: 0.7468
+2026-01-24 01:58:28,090 - INFO -   EER: 0.1759
+2026-01-24 01:58:28,090 - INFO -   minDCF: 0.9927
+2026-01-24 01:58:28,090 - INFO - ============================================================                                    2026-01-24 01:58:28,135 - INFO -                                                                                                 CODEC breakdown:
+2026-01-24 01:58:28,168 - INFO - domain  n_samples  n_bonafide  n_spoof      eer  eer_threshold  min_dcf                           NONE     140950       31334   109616 0.175878      26.502405 0.992698
+2026-01-24 01:58:28,216 - INFO -
+CODEC_Q breakdown:                                                                                                               2026-01-24 01:58:28,218 - INFO - domain  n_samples  n_bonafide  n_spoof      eer  eer_threshold  min_dcf
+  NONE     140950       31334   109616 0.175878      26.502405 0.992698
+wandb: Currently logged in as: mike-cooper (mike-cooper-uva) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin                                                                                                                                wandb: setting up run jnme6stj
+wandb: Tracking run with wandb version 0.23.1
+wandb: Run data is saved locally in /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/wandb/run-20260124_015829-jnme6stj      wandb: Run `wandb offline` to turn off syncing.                                                                                  wandb: Syncing run lfcc_gmm_32
+wandb: ⭐️ View project at https://wandb.ai/mike-cooper-uva/asvspoof5-dann
+wandb: 🚀 View run at https://wandb.ai/mike-cooper-uva/asvspoof5-dann/runs/jnme6stj
+wandb: updating run metadata
+wandb: uploading config.yaml
+wandb:
+wandb: Run history:                                                                                                              wandb: train/n_bonafide ▁                                                                                                        wandb:  train/n_samples ▁
+wandb:    train/n_spoof ▁
+wandb:     val/accuracy ▁
+wandb:          val/eer ▁
+wandb:      val/min_dcf ▁
+wandb:
+wandb: Run summary:
+wandb: train/n_bonafide 18797                                                                                                    wandb:  train/n_samples 182357
+wandb:    train/n_spoof 163560                                                                                                   wandb:     val/accuracy 0.74677
+wandb:          val/eer 0.17588
+wandb:      val/min_dcf 0.9927
+wandb:          val_eer 0.17588                                                                                                  wandb:      val_min_dcf 0.9927
+wandb:
+wandb: 🚀 View run lfcc_gmm_32 at: https://wandb.ai/mike-cooper-uva/asvspoof5-dann/runs/jnme6stj
+wandb: ⭐️ View project at: https://wandb.ai/mike-cooper-uva/asvspoof5-dann                                                       wandb: Synced 4 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)                                             wandb: Find logs at: ./wandb/run-20260124_015829-jnme6stj/logs
+2026-01-24 01:58:35,699 - INFO - Logged results to Wandb
+2026-01-24 01:58:36,229 - INFO -
+Results saved to: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/lfcc_gmm_32
+                                                                                                                                 --- Extracting TRILLsson Embeddings ---
+2026-01-24 01:58:37,948 - ERROR - TensorFlow is required for TRILLsson extraction.
+Install with: pip install tensorflow tensorflow-hub
+srun: error: gcn10: task 0: Exited with exit code 1                                                                              srun: Terminating StepId=18653577.3                                                                                              TRILLsson extraction failed (TensorFlow may not be available)
+2026-01-24 01:58:38,690 - ERROR - TensorFlow is required for TRILLsson extraction.
+Install with: pip install tensorflow tensorflow-hub
+srun: error: gcn10: task 0: Exited with exit code 1
+srun: Terminating StepId=18653577.4
+TRILLsson extraction failed
+Skipping TRILLsson classifier (embeddings not found)                                                                                                                                                                                                              Baselines complete!
+Repo root: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+SLURM_SUBMIT_DIR: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm                                                           downloading uv 0.9.26 x86_64-unknown-linux-gnu                                                                                   no checksums to verify
+installing to /home/jcooper/.local/bin
+  uv                                                                                                                               uvx
+everything's installed!                                                                                                          Resolved 134 packages in 3ms
+Audited 107 packages in 31ms
+CUDA available: True
+GPU device count: 1
+Active GPU: NVIDIA A100-SXM4-40GB
+
+WANDB_API_KEY: set (wandb logging enabled)
+=== Environment diagnostics ===
+PWD: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+ASVSPOOF5_ROOT: /projects/prjs1904/data/asvspoof5
+HF_HOME: /scratch-shared/jcooper/.cache/huggingface
+WANDB_PROJECT: asvspoof5-dann
+WANDB_MODE:
+ffmpeg: not-found
+===============================
+=== Training Wav2Vec2 + DANN ===
+Loading FFmpeg module: FFmpeg/7.1.1-GCCcore-14.2.0
+ffmpeg location: /sw/arch/RHEL9/EB_production/2025/software/FFmpeg/7.1.1-GCCcore-14.2.0/bin/ffmpeg
+Checking ffmpeg encoder support for codec augmentation...
+ffmpeg encoders OK.
+
+2026-01-24 00:41:59,072 - INFO - Using device: cuda
+2026-01-24 00:41:59,092 - INFO - Run directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/w2v2_dann
+2026-01-24 00:42:00,268 - INFO - Git commit: 06c6d928
+2026-01-24 00:42:00,269 - INFO - Hardware: NVIDIA A100-SXM4-40GB
+2026-01-24 00:42:00,271 - INFO - CODEC classes (manifest): 12
+2026-01-24 00:42:00,271 - INFO - CODEC_Q classes (manifest): 9
+2026-01-24 00:42:00,457 - WARNING - Some requested codecs not supported by ffmpeg: {'OPUS'}. Using: ['MP3', 'AAC']
+2026-01-24 00:42:00,457 - INFO - Codec augmentor initialized: supported_codecs=['MP3', 'AAC'], codec_prob=0.5
+2026-01-24 00:42:00,928 - INFO - Train samples: 182357
+2026-01-24 00:42:00,928 - INFO - Val samples: 140950
+2026-01-24 00:42:00,929 - INFO - DANN with augmentation: domain discriminator sizes num_codecs=6, num_codec_qs=6
+2026-01-24 00:42:00,931 - INFO - Saved synthetic vocabs to run dir (DANN with augmentation)
+/gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/.venv/lib64/python3.11/site-packages/transformers/configuration_utils.py:335: UserWarning: Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the `Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`.
+  warnings.warn(
+2026-01-24 00:42:04,078 - INFO - Total parameters: 95,425,178
+2026-01-24 00:42:04,079 - INFO - Trainable parameters: 1,053,466
+wandb: Currently logged in as: mike-cooper (mike-cooper-uva) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run 3t6tat3q
+wandb: Tracking run with wandb version 0.23.1
+wandb: Run data is saved locally in /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/w2v2_dann/wandb/run-20260124_004204-3t6tat3q
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run w2v2_dann
+wandb: ⭐️ View project at https://wandb.ai/mike-cooper-uva/asvspoof5-dann
+wandb: 🚀 View run at https://wandb.ai/mike-cooper-uva/asvspoof5-dann/runs/3t6tat3q
+2026-01-24 00:42:06,665 - INFO - Wandb initialized: https://wandb.ai/mike-cooper-uva/asvspoof5-dann/runs/3t6tat3q
+2026-01-24 00:42:06,668 - INFO - Model: 95,425,178 params (1,053,466 trainable)
+2026-01-24 00:42:06,668 - INFO - Dataset: train=182357, val=140950
+2026-01-24 00:42:06,670 - INFO - [experiment_start] method=dann, backbone=wav2vec2_base
+2026-01-24 00:42:06,670 - INFO - Starting training for 50 epochs
+2026-01-24 00:42:06,670 - INFO - Run directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/w2v2_dann
+2026-01-24 00:42:06,670 - INFO - Model: 95,425,178 params (1,053,466 trainable)
+2026-01-24 00:42:06,684 - INFO - Dataset: train=182357, val=140950
+2026-01-24 00:42:06,689 - INFO - ============================================================
+2026-01-24 00:42:06,690 - INFO - Training DANN model
+2026-01-24 00:42:06,690 - INFO - Backbone: wav2vec2_base
+2026-01-24 00:42:06,690 - INFO - Seed: 42
+2026-01-24 00:42:06,690 - INFO - ============================================================
+2026-01-24 00:42:06,690 - INFO - Epoch 0: lambda = 0.0000
+Training:   2%|▏    2026-01-24 00:44:48,859 - INFO - Step 100: cumulative augmentation rate = 49.6% (1604/3232 samples coded)
+Training:   3%|▎       2026-01-24 00:47:09,037 - INFO - Step 200: cumulative augmentation rate = 49.5% (3185/6432 samples coded)
+Train2026-01-24 00:49:36,783 - INFO - Step 300: cumulative augmentation rate = 49.7% (4784/9632 samples coded)
+Traini2026-01-24 00:52:08,550 - INFO - Step 400: cumulative augmentation rate = 49.7% (6382/12832 samples coded)
+Training:   9%|▉         | 499/5698 [12:59<3:14:31,  2.24s/it, loss=0.3342, tas2026-01-24 00:55:06,887 - INFO - Step 500: cumulative augmentation rate = 50.0% (8008/16032 samples coded)
+Training:  10%|█         | 594/5698 [15:35<1:32:22,  1.09s/it, loss=0.2883, task2026-01-24 00:57:55,504 - INFO - Step 600: cumulative augmentation rate = 50.0% (9624/19232 samples coded)
+Training:  12%|█▏        | 699/5698 [2026-01-24 01:00:48,904 - INFO - Step 700: cumulative augmentation rate = 50.2% (11272/22432 samples coded)
+Training:  14%|█▍        | 792/5698 [22026-01-24 01:04:02,346 - INFO - Step 800: cumulative augmentation rate = 50.4% (12909/25632 samples coded)
+2026-01-24 01:07:05,107 - INFO - Step 900: cumulative augmentation rate = 50.3% (14505/28832 samples coded)
+Training:  18%|█▊        | 999/5698 [27:29<1:29:39,2026-01-24 01:09:42,036 - INFO - Step 1000: cumulative augmentation rate = 50.1% (16047/32032 samples coded)
+Training:  19%|█▉        | 1091/5698 [30:08<1:04:53,  1.2026-01-24 01:12:34,597 - INFO - Step 1100: cumulative augmentation rate = 50.1% (17667/35232 samples coded)
+Training: 2026-01-24 01:15:12,957 - INFO - Step 1200: cumulative augmentation rate = 50.2% (19283/38432 samples coded)
+Training:  23%|██▎       | 1294/5698 [35:19<1:20:38,  1.10s/it, loss=0.1358, tas2026-01-24 01:17:39,391 - INFO - Step 1300: cumulative augmentation rate = 50.2% (20895/41632 samples coded)
+Training:  24%|██▍  2026-01-24 01:20:09,206 - INFO - Step 1400: cumulative augmentation rate = 50.2% (22506/44832 samples coded)
+Training:  26%|██▌       | 1495/5698 [40:13<58:27,  1.20it/s2026-01-24 01:22:31,813 - INFO - Step 1500: cumulative augmentation rate = 50.2% (24126/48032 samples coded)
+Traini2026-01-24 01:24:57,212 - INFO - Step 1600: cumulative augmentation rate = 50.2% (25724/51232 samples coded)
+Training:  30%|██▉       | 1696/5698 [452026-01-24 01:27:26,368 - INFO - Step 1700: cumulative augmentation rate = 50.2% (27314/54432 samples coded)
+Training:  32%|███▏      | 1796/5698 [47:45<1:15:02026-01-24 01:29:59,022 - INFO - Step 1800: cumulative augmentation rate = 50.2% (28936/57632 samples coded)
+Training:  33%|███▎      | 1894/5698 [50:18<1:07:20,  1.06s/it, loss=0.0933, task_acc=0.972026-01-24 01:32:38,712 - INFO - Step 1900: cumulative augmentation rate = 50.2% (30513/60832 samples coded)
+Training:  35%|███▍      | 1992026-01-24 01:35:11,768 - INFO - Step 2000: cumulative augmentation rate = 50.1% (32076/64032 samples coded)
+Training:  37%|███▋      | 2091/5698 [55:20<1:26:26,  1.44s/it, loss=02026-01-24 01:37:42,296 - INFO - Step 2100: cumulative augmentation rate = 50.1% (33683/67232 samples coded)
+Training:  39%|██�2026-01-24 01:40:23,318 - INFO - Step 2200: cumulative augmentation rate = 50.1% (35254/70432 samples coded)
+Training:  40%|████      | 2297/5698 [1:00:54<51:44,  1.10it/s, loss=0.0773, task_acc=0.2026-01-24 01:43:06,778 - INFO - Step 2300: cumulative augmentation rate = 50.0% (36848/73632 samples coded)
+Training:  42%|████▏     | 2393/5698 [1:03:17<58:24,  1.06s/it2026-01-24 01:45:37,148 - INFO - Step 2400: cumulative augmentation rate = 50.0% (38391/76832 samples coded)
+Traini2026-01-24 01:48:16,105 - INFO - Step 2500: cumulative augmentation rate = 49.9% (39941/80032 samples coded)
+Training:  45%|████▌     | 2592/5698 [1:08:32<1:38:51,  1.91s/it, loss=0.02026-01-24 01:50:50,601 - INFO - Step 2600: cumulative augmentation rate = 49.9% (41546/83232 samples coded)
+Training:  47%|██�2026-01-24 01:53:21,523 - INFO - Step 2700: cumulative augmentation rate = 50.0% (43182/86432 samples coded)
+Training:  49%|████▉     | 2791/5698 [1:13:37<1:56:54,  2.41s/it, loss=0.0637, task_acc=0.2026-01-24 01:55:55,129 - INFO - Step 2800: cumulative augmentation rate = 50.0% (44815/89632 samples coded)
+Training:  51%|█████     | 2896/5698 [1:16:04<35:02026-01-24 01:58:22,940 - INFO - Step 2900: cumulative augmentation rate = 49.9% (46361/92832 samples coded)
+Training:  53%|█████▎    | 2999/5698 [1:18:48<1:05:37,  1.46s/2026-01-24 02:01:01,853 - INFO - Step 3000: cumulative augmentation rate = 49.9% (47965/96032 samples coded)
+Training:  54%|█████▍    | 3092/5698 [1:21:23<40:59,  1.06it/s, loss2026-01-24 02:03:48,597 - INFO - Step 3100: cumulative augmentation rate = 50.0% (49615/99232 samples coded)
+Training:  56%|█████▌    | 3195/5698 [1:23:59<1:252026-01-24 02:06:11,480 - INFO - Step 3200: cumulative augmentation rate = 50.0% (51236/102432 samples coded)
+Training:  58%|█████▊    | 3298/5698 [1:262026-01-24 02:08:35,958 - INFO - Step 3300: cumulative augmentation rate = 50.0% (52784/105632 samples coded)
+Training2026-01-24 02:11:03,570 - INFO - Step 3400: cumulative augmentation rate = 50.0% (54379/108832 samples coded)
+Training:  61%|█2026-01-24 02:13:29,154 - INFO - Step 3500: cumulative augmentation rate = 50.0% (56005/112032 samples coded)
+Training:  63%|�2026-01-24 02:16:24,606 - INFO - Step 3600: cumulative augmentation rate = 50.0% (57615/115232 samples coded)
+Training:  65%|██████▍   |2026-01-24 02:19:01,509 - INFO - Step 3700: cumulative augmentation rate = 50.0% (59168/118432 samples coded)
+Training:  67%|██████▋   | 3798/5698 [1:39:21<1:44:47,  3.31s/it, loss2026-01-24 02:21:29,629 - INFO - Step 3800: cumulative augmentation rate = 50.0% (60806/121632 samples coded)
+Training:  62026-01-24 02:24:12,411 - INFO - Step 3900: cumulative augmentation rate = 49.9% (62353/124832 samples coded)
+Training:  70%|██�2026-01-24 02:26:48,432 - INFO - Step 4000: cumulative augmentation rate = 49.9% (63886/128032 samples coded)
+Training:  71%|███████   | 4019/5698 [1:45:10<1:2026-01-24 02:27:29,197 - WARNING - NaN gradient detected at batch 4026
+Training:  72%|███████▏ 2026-01-24 02:29:17,828 - INFO - Step 4100: cumulative augmentation rate = 49.9% (65461/131232 samples coded)
+Training:  74%|███████2026-01-24 02:31:53,782 - INFO - Step 4200: cumulative augmentation rate = 49.9% (67051/134432 samples coded)
+Training:  75%|███████▌  | 4293/5698 [1:52:04<47:08,  2.01s/it, 2026-01-24 02:34:22,245 - INFO - Step 4300: cumulative augmentation rate = 49.9% (68638/137632 samples coded)
+Training: 2026-01-24 02:36:55,720 - INFO - Step 4400: cumulative augmentation rate = 49.9% (70223/140832 samples coded)
+Training:  79%|███████▉  | 4492026-01-24 02:39:35,826 - INFO - Step 4500: cumulative augmentation rate = 49.8% (71775/144032 samples coded)
+Training:  81%|████████  | 4594/5698 [1:59:51<40:02,  2.18s/it, loss=0.0392026-01-24 02:42:02,814 - INFO - Step 4600: cumulative augmentation rate = 49.8% (73346/147232 samples coded)
+Trai2026-01-24 02:44:43,784 - INFO - Step 4700: cumulative augmentation rate = 49.8% (74967/150432 samples coded)
+Training:  84%|████████▍ | 4792/5698 [2:05:15<22:22026-01-24 02:47:37,839 - INFO - Step 4800: cumulative augmentation rate = 49.9% (76612/153632 samples coded)
+Training:  86%|███████2026-01-24 02:50:25,351 - INFO - Step 4900: cumulative augmentation rate = 49.9% (78236/156832 samples coded)
+Training:  88%|████████▊ | 4998/5698 [2:10:39<22:23,  1.92s/it, loss=0.0360, task_2026-01-24 02:52:52,581 - INFO - Step 5000: cumulative augmentation rate = 49.9% (79807/160032 samples coded)
+Training:  89%|████████▉ | 5097/562026-01-24 02:55:25,473 - INFO - Step 5100: cumulative augmentation rate = 49.9% (81413/163232 samples coded)
+Training:  90%|████████▉ | 5105/5698 [2:13:24<23:32026-01-24 02:55:38,030 - WARNING - NaN gradient detected at batch 5109
+Trai2026-01-24 02:57:49,491 - INFO - Step 5200: cumulative augmentation rate = 49.9% (82999/166432 samples coded)
+Training:  93%|█████████▎| 5292/5698 [2:18:03<05:11,  1.30it/s, loss=0.0341, task_ac2026-01-24 03:00:30,451 - INFO - Step 5300: cumulative augmentation rate = 49.9% (84645/169632 samples coded)
+Training:  95%|█████████▍| 5398/5698 [2:20:47<04:20,  1.15it2026-01-24 03:03:01,395 - INFO - Step 5400: cumulative augmentation rate = 49.9% (86250/172832 samples coded)
+Training:  96%|█████████▋| 5495/5698 [2026-01-24 03:05:22,563 - INFO - Step 5500: cumulative augmentation rate = 49.9% (87884/176032 samples coded)
+Training:  98%|███████2026-01-24 03:07:58,779 - INFO - Step 5600: cumulative augmentation rate = 49.9% (89472/179232 samples coded)
+Training: 102026-01-24 03:11:03,253 - INFO - Epoch 0 train: loss=0.0317, task_acc=0.98989897]
+Validatin2026-01-24 03:21:12,323 - INFO - Epoch 0 val: loss=1.1740, eer=0.0601, min_dcf=0.5549
+2026-01-24 03:21:12,914 - INFO - New best eer: 0.0601
+2026-01-24 03:21:12,915 - INFO - [epoch_complete] epoch=0, train_loss=0.0317, val_eer=0.0601
+2026-01-24 03:21:13,217 - INFO - Epoch 1: lambda = 0.0000
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]wandb: WARNING Tried to log to step 0 that is less than the current step 113. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:   2%|▏         | 98/5698 [02:21<1:51:50,  1.20s/it, loss=0.002026-01-24 03:23:41,710 - INFO - Step 100: cumulative augmentation rate = 49.7% (1607/3232 samples coded)
+Training:   3%|▎         | 193/5698 [04:34<2:46:38,  1.82s/it, loss=0.00012026-01-24 03:25:57,950 - INFO - Step 200: cumulative augmentation rate = 48.5% (3117/6432 samples coded)
+Training:   5%|▌         | 299/5698 [07:04<1:07:18,  12026-01-24 03:28:24,255 - INFO - Step 300: cumulative augmentation rate = 49.0% (4724/9632 samples coded)
+Training:   7%|▋         | 394/5698 [09:23<2:36:01,  1.772026-01-24 03:30:47,540 - INFO - Step 400: cumulative augmentation rate = 49.1% (6306/12832 samples coded)
+Training:   9%|▉         | 500/5698 [2026-01-24 03:33:06,024 - INFO - Step 500: cumulative augmentation rate = 48.9% (7834/16032 samples coded)
+Training:  10%|█         | 595/5698 [12026-01-24 03:35:24,211 - INFO - Step 600: cumulative augmentation rate = 48.7% (9367/19232 samples coded)
+Training:  12%|█▏        | 699/5698 [16:26<2:08:29,  1.54s/it, loss=0.0006, task_acc=0.9992026-01-24 03:37:41,681 - INFO - Step 700: cumulative augmentation rate = 48.9% (10965/22432 samples coded)
+Training:  14%|█▍        | 792/5698 [18:48<1:58:05,  1.44s/it, loss=0.0005, task_acc=0.99982026-01-24 03:40:15,739 - INFO - Step 800: cumulative augmentation rate = 48.9% (12546/25632 samples coded)
+Training:  16%|█▌        | 896/5698 [21:31<3:39:42026-01-24 03:42:47,682 - INFO - Step 900: cumulative augmentation rate = 49.1% (14162/28832 samples coded)
+Training:  2026-01-24 03:45:17,854 - INFO - Step 1000: cumulative augmentation rate = 49.2% (15763/32032 samples coded)
+Training:  19%|2026-01-24 03:47:50,903 - INFO - Step 1100: cumulative augmentation rate = 49.3% (17356/35232 samples coded)
+Training:  21%|██        | 1194/5698 [28:52<1:35:35,  1.27s2026-01-24 03:50:19,024 - INFO - Step 1200: cumulative augmentation rate = 49.3% (18941/38432 samples coded)
+Training:  23%|██▎       | 1295/52026-01-24 03:52:44,523 - INFO - Step 1300: cumulative augmentation rate = 49.3% (20535/41632 samples coded)
+Training:  24%|██▍       | 1395/5698 [33:45<1:38:45,  1.38s/it, loss=0.002026-01-24 03:55:08,471 - INFO - Step 1400: cumulative augmentation rate = 49.4% (22151/44832 samples coded)
+Tra2026-01-24 03:55:26,817 - WARNING - NaN gradient detected at batch 14132, task_acc=0.9996]
+Training:  26%|█�2026-01-24 03:57:40,676 - INFO - Step 1500: cumulative augmentation rate = 49.4% (23741/48032 samples coded)
+Training:  28%|██▊       | 1596/5698 [38:45<1:10:26,  12026-01-24 04:00:09,771 - INFO - Step 1600: cumulative augmentation rate = 49.5% (25363/51232 samples coded)
+Train2026-01-24 04:02:42,397 - INFO - Step 1700: cumulative augmentation rate = 49.7% (27040/54432 samples coded)
+Training:  32%|�2026-01-24 04:05:02,435 - INFO - Step 1800: cumulative augmentation rate = 49.7% (28646/57632 samples coded)
+Training:  33%|███▎      | 1895/5698 [45:56<1:15:00,  12026-01-24 04:07:17,846 - INFO - Step 1900: cumulative augmentation rate = 49.6% (30188/60832 samples coded)
+Training:  2026-01-24 04:09:43,383 - INFO - Step 2000: cumulative augmentation rate = 49.5% (31714/64032 samples coded)
+Training:  37%|███▋      | 2092/5698 [50:29<1:08:2026-01-24 04:11:54,717 - INFO - Step 2100: cumulative augmentation rate = 49.5% (33308/67232 samples coded)
+Trainin2026-01-24 04:14:16,129 - INFO - Step 2200: cumulative augmentation rate = 49.6% (34912/70432 samples coded)
+Training:  40%|████      | 2299/5698 [55:23<1:49:2026-01-24 04:16:36,606 - INFO - Step 2300: cumulative augmentation rate = 49.5% (36477/73632 samples coded)
+Training:  42%|██2026-01-24 04:19:06,571 - INFO - Step 2400: cumulative augmentation rate = 49.6% (38076/76832 samples coded)
+Training:  44%|████▍     | 2493/5698 [1:00:01<50:54,  1.05it/s, loss=0.2026-01-24 04:21:28,967 - INFO - Step 2500: cumulative augmentation rate = 49.6% (39659/80032 samples coded)
+Training:2026-01-24 04:24:05,061 - INFO - Step 2600: cumulative augmentation rate = 49.6% (41256/83232 samples coded)
+Training:  47%|████▋     | 2692/5698 [1:05:10<1:28:14,  1.76s/it, l2026-01-24 04:26:37,371 - INFO - Step 2700: cumulative augmentation rate = 49.5% (42813/86432 samples coded)
+Training:  49%|█�2026-01-24 04:29:06,716 - INFO - Step 2800: cumulative augmentation rate = 49.5% (44383/89632 samples coded)
+Training:  2026-01-24 04:31:29,259 - INFO - Step 2900: cumulative augmentation rate = 49.6% (45999/92832 samples coded)
+Training:  53%|█████�2026-01-24 04:33:59,061 - INFO - Step 3000: cumulative augmentation rate = 49.6% (47627/96032 samples coded)
+Training:  54%|█████▍    | 3097/5698 [1:15:35<1:18:05,  1.80s/it, loss=0.002026-01-24 04:36:53,509 - INFO - Step 3100: cumulative augmentation rate = 49.7% (49270/99232 samples coded)
+Training:  56%|█████▌    | 3200/5698 [1:12026-01-24 04:39:22,330 - INFO - Step 3200: cumulative augmentation rate = 49.7% (50872/102432 samples coded)
+Training:  58%|█████▊    | 3293/5698 [1:20:24<49:57,  1.25s/it, loss=0.00142026-01-24 04:41:49,396 - INFO - Step 3300: cumulative augmentation rate = 49.7% (52540/105632 samples coded)
+Training:  60%|█████▉    | 3396/5698 [1:22:53<1:16:19,  1.99s/it, loss=0.0014, 2026-01-24 04:44:13,041 - INFO - Step 3400: cumulative augmentation rate = 49.7% (54122/108832 samples coded)
+Training:  61%|██████    | 342026-01-24 04:46:28,169 - WARNING - NaN gradient detected at batch 3495
+Training:  61%|██████▏   | 3499/5698 [1:25:17<46:32,  1.27s/it, loss=0.2026-01-24 04:46:36,660 - INFO - Step 3500: cumulative augmentation rate = 49.8% (55744/112032 samples coded)
+Training:  63%|██████▎   | 3591/5698 [1:27:26<31:48,  1.10it/s, loss=0.2026-01-24 04:48:56,819 - INFO - Step 3600: cumulative augmentation rate = 49.8% (57341/115232 samples coded)
+Training:  65%|██████▍   | 3693/5692026-01-24 04:51:11,961 - INFO - Step 3700: cumulative augmentation rate = 49.7% (58899/118432 samples coded)
+Training:2026-01-24 04:53:39,719 - INFO - Step 3800: cumulative augmentation rate = 49.8% (60559/121632 samples coded)
+Training:  68%|██████▊   | 3896/5698 [1:34:45<1:16:04,  2.53s/it, loss=0.2026-01-24 04:56:04,204 - INFO - Step 3900: cumulative augmentation rate = 49.8% (62191/124832 samples coded)
+Training:  70%|███████   | 3998/5698 [1:37:07<42:45,  12026-01-24 04:58:25,586 - INFO - Step 4000: cumulative augmentation rate = 49.8% (63778/128032 samples coded)
+Training:  72%|███████▏  | 4099/5698 [1:39:33<1:01:34,  2.31s/it, loss=2026-01-24 05:00:48,454 - INFO - Step 4100: cumulative augmentation rate = 49.8% (65391/131232 samples coded)
+Training:  74%|███████▎  | 4199/5698 [1:41:57<19:51,  1.26it/s, loss=0.0013, task_a2026-01-24 05:03:17,490 - INFO - Step 4200: cumulative augmentation rate = 49.8% (66980/134432 samples coded)
+Training:  75%|2026-01-24 05:05:39,483 - INFO - Step 4300: cumulative augmentation rate = 49.8% (68601/137632 samples coded)
+Training:  77%|███████▋  | 4400/5698 [1:46:2026-01-24 05:08:02,817 - INFO - Step 4400: cumulative augmentation rate = 49.9% (70236/140832 samples coded)
+Training:  79%|███████▉  | 4500/5698 [1:49:06<22:08,  1.11s/it, loss=0.0013, task_acc=02026-01-24 05:10:22,619 - INFO - Step 4500: cumulative augmentation rate = 49.9% (71854/144032 samples coded)
+Tra2026-01-24 05:12:42,993 - INFO - Step 4600: cumulative augmentation rate = 49.9% (73428/147232 samples coded)
+Training:  82%|████████▏ | 47002026-01-24 05:14:59,033 - INFO - Step 4700: cumulative augmentation rate = 49.9% (75002/150432 samples coded)
+T2026-01-24 05:17:22,576 - INFO - Step 4800: cumulative augmentation rate = 49.9% (76615/153632 samples coded)
+Training:  86%|████████▌ | 4897/5698 [1:58:30<12026-01-24 05:19:49,883 - INFO - Step 4900: cumulative augmentation rate = 49.9% (78254/156832 samples coded)
+Training:  88%|�2026-01-24 05:22:13,947 - INFO - Step 5000: cumulative augmentation rate = 49.9% (79884/160032 samples coded)
+Training:  89%|████████▉ | 5094/5698 [2:03:09<08:55,  1.13it/s,2026-01-24 05:24:35,417 - INFO - Step 5100: cumulative augmentation rate = 49.9% (81500/163232 samples coded)
+Training:  91%|██████2026-01-24 05:26:54,491 - INFO - Step 5200: cumulative augmentation rate = 49.9% (83076/166432 samples coded)
+Training:  93%|██�2026-01-24 05:29:11,530 - INFO - Step 5300: cumulative augmentation rate = 49.9% (84637/169632 samples coded)
+T2026-01-24 05:31:39,328 - INFO - Step 5400: cumulative augmentation rate = 49.9% (86255/172832 samples coded)
+Training:  96%|█████████▋| 5492/5698 [2:12:38<07:16,  2.12s/it, loss=0.002026-01-24 05:34:05,893 - INFO - Step 5500: cumulative augmentation rate = 49.9% (87853/176032 samples coded)
+Training:  98%|█████████▊| 5598/5698 [2:15:07<01:2026-01-24 05:36:25,098 - INFO - Step 5600: cumulative augmentation rate = 49.9% (89463/179232 samples coded)
+Training: 100%|█████████▉| 2026-01-24 05:38:47,555 - INFO - Epoch 1 train: loss=0.0014, task_acc=0.9995
+                                                          2026-01-24 05:48:55,276 - INFO - Epoch 1 val: loss=1.6536, eer=0.0647, min_dcf=0.6820
+2026-01-24 05:48:55,286 - INFO - [epoch_complete] epoch=1, train_loss=0.0014, val_eer=0.0647
+2026-01-24 05:48:55,288 - INFO - Epoch 2: lambda = 0.0000
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]wandb: WARNING Tried to log to step 1 that is less than the current step 227. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:   2%|▏         | 98/5698 [02:28<2:05:49,  1.35s/it, loss=0.002026-01-24 05:51:27,786 - INFO - Step 100: cumulative augmentation rate = 50.2% (1623/3232 samples coded)
+Training:   3%|▎         | 193/5698 [04:41<2:26:28,  1.60s/it, loss=0.00002026-01-24 05:53:48,181 - INFO - Step 200: cumulative augmentation rate = 50.4% (3243/6432 samples coded)
+Training:   4%|▍         | 214/52026-01-24 05:54:10,857 - WARNING - NaN gradient detected at batch 218
+Training:   42026-01-24 05:54:21,828 - WARNING - NaN gradient detected at batch 226c=1.0000]
+Training:   5%|▌         | 299/5698 [07:13<3:23:45,  22026-01-24 05:56:09,356 - INFO - Step 300: cumulative augmentation rate = 50.7% (4888/9632 samples coded)
+Training:   7%|▋         | 394/5698 [09:33<3:01:46,  2.2026-01-24 05:58:40,211 - INFO - Step 400: cumulative augmentation rate = 50.6% (6498/12832 samples coded)
+Training:   9%|▉         | 500/56982026-01-24 06:01:01,629 - INFO - Step 500: cumulative augmentation rate = 50.4% (8075/16032 samples coded)
+Training:  10%|█         | 595/5698 2026-01-24 06:03:13,284 - INFO - Step 600: cumulative augmentation rate = 50.1% (9627/19232 samples coded)
+Training:  12%|█▏        | 699/5698 [16:41<2:16:00,  1.63s/it, loss=0.0008, task_acc=0.92026-01-24 06:05:37,369 - INFO - Step 700: cumulative augmentation rate = 50.2% (11263/22432 samples coded)
+Training:  14%|█▍        | 792/5698 [18:46<1:04:10,  1.27it/s, loss=0.0007, task_acc=0.99982026-01-24 06:07:58,494 - INFO - Step 800: cumulative augmentation rate = 50.2% (12858/25632 samples coded)
+Training:  16%|█▌        | 896/5698 [21:17<2:31:02026-01-24 06:10:16,602 - INFO - Step 900: cumulative augmentation rate = 50.2% (14469/28832 samples coded)
+Training:  2026-01-24 06:12:41,461 - INFO - Step 1000: cumulative augmentation rate = 50.1% (16053/32032 samples coded)
+Training:  19%|2026-01-24 06:15:06,973 - INFO - Step 1100: cumulative augmentation rate = 50.1% (17663/35232 samples coded)
+Training:  21%|██        | 1194/5698 [28:17<2:09:51,  1.73s2026-01-24 06:17:18,633 - INFO - Step 1200: cumulative augmentation rate = 50.0% (19227/38432 samples coded)
+Training:  23%|██▎       | 1295/52026-01-24 06:19:49,888 - INFO - Step 1300: cumulative augmentation rate = 50.1% (20844/41632 samples coded)
+Training:  24%|██▍       | 1395/5698 [33:02<1:06:09,  1.08it/s, loss=0.002026-01-24 06:22:10,509 - INFO - Step 1400: cumulative augmentation rate = 50.0% (22434/44832 samples coded)
+Training:  26%|█�2026-01-24 06:24:46,210 - INFO - Step 1500: cumulative augmentation rate = 50.1% (24085/48032 samples coded)
+Training:  28%|██▊       | 1596/5698 [38:01<1:28:49, 2026-01-24 06:27:02,617 - INFO - Step 1600: cumulative augmentation rate = 50.1% (25646/51232 samples coded)
+Train2026-01-24 06:29:24,485 - INFO - Step 1700: cumulative augmentation rate = 50.0% (27224/54432 samples coded)
+Training:  32%|2026-01-24 06:31:57,356 - INFO - Step 1800: cumulative augmentation rate = 50.1% (28861/57632 samples coded)
+Training:  33%|███▎      | 1895/5698 [45:22<1:15:2026-01-24 06:34:28,000 - INFO - Step 1900: cumulative augmentation rate = 50.1% (30454/60832 samples coded)
+Tra2026-01-24 06:36:53,114 - INFO - Step 2000: cumulative augmentation rate = 50.1% (32055/64032 samples coded)
+Training:  37%|███▋      | 2092/5698 [50:2026-01-24 06:39:12,734 - INFO - Step 2100: cumulative augmentation rate = 50.0% (33606/67232 samples coded)
+Training:  38%|███▊      | 2190/5698 [52:22<2:12:43,  2.27s/it, loss=0.0018, task_acc=0.9995]2026-01-24 06:41:29,107 - INFO - Step 2200: cumulative augmentation rate = 50.0% (35182/70432 samples coded)
+Training:  40%|████      | 2299/5698 [54:55<2:02026-01-24 06:43:51,536 - INFO - Step 2300: cumulative augmentation rate = 49.9% (36779/73632 samples coded)
+Training:  42%|2026-01-24 06:46:07,455 - INFO - Step 2400: cumulative augmentation rate = 49.9% (38337/76832 samples coded)
+Training:  44%|████▍     | 2493/5698 [59:21<1:02:23,  1.17s/it, loss=0.002026-01-24 06:48:26,957 - INFO - Step 2500: cumulative augmentation rate = 49.9% (39922/80032 samples coded)
+Training:  46%|████▌     | 2598/5698 [1:01:48<1:02:55,  1.22s/it, loss=0.0015, 2026-01-24 06:50:50,471 - INFO - Step 2600: cumulative augmentation rate = 49.9% (41569/83232 samples coded)
+Training:  46%|████▌     | 2607/5698 [1:02:2026-01-24 06:51:07,636 - WARNING - NaN gradient detected at batch 2612
+Training:  47%|████▋     | 2693/5698 [1:04:01<40:07,  1.25it/s,2026-01-24 06:53:07,165 - INFO - Step 2700: cumulative augmentation rate = 49.9% (43138/86432 samples coded)
+Training:  49%|███�2026-01-24 06:55:27,157 - INFO - Step 2800: cumulative augmentation rate = 49.9% (44743/89632 samples coded)
+Training:2026-01-24 06:57:52,604 - INFO - Step 2900: cumulative augmentation rate = 49.9% (46333/92832 samples coded)
+Training:  53%|█████▎    | 2996/5692026-01-24 07:00:13,847 - INFO - Step 3000: cumulative augmentation rate = 49.9% (47940/96032 samples coded)
+Trainin2026-01-24 07:02:42,021 - INFO - Step 3100: cumulative augmentation rate = 50.0% (49620/99232 samples coded)
+Training:  56%|█████▌    | 3192/5692026-01-24 07:05:03,084 - INFO - Step 3200: cumulative augmentation rate = 50.0% (51225/102432 samples coded)
+Training:  58%|████�2026-01-24 07:07:35,508 - INFO - Step 3300: cumulative augmentation rate = 50.0% (52836/105632 samples coded)
+Training:  60%|████�2026-01-24 07:09:57,054 - INFO - Step 3400: cumulative augmentation rate = 50.0% (54457/108832 samples coded)
+Training:  61%|██████▏   | 3491/5698 [1:23:16<33:39,  1.09it/s,2026-01-24 07:12:27,962 - INFO - Step 3500: cumulative augmentation rate = 50.1% (56115/112032 samples coded)
+Training:  63%|██████▎   | 3592/5698 [1:25:47<1:34:00,  2.68s/it, loss=0.0015, task_acc=0.9996]2026-01-24 07:14:51,011 - INFO - Step 3600: cumulative augmentation rate = 50.1% (57685/115232 samples coded)
+Training:  65%|█████�2026-01-24 07:17:20,373 - INFO - Step 3700: cumulative augmentation rate = 50.1% (59311/118432 samples coded)
+Training:  67%|██████▋   | 3795/5698 [1:30:40<33:54,  1.07s/it, los2026-01-24 07:19:46,345 - INFO - Step 3800: cumulative augmentation rate = 50.1% (60930/121632 samples coded)
+Training:  68%|██████▊   | 3897/5698 [1:33:2026-01-24 07:22:11,233 - INFO - Step 3900: cumulative augmentation rate = 50.1% (62530/124832 samples coded)
+Training:  70%|███████   | 39992026-01-24 07:24:34,669 - INFO - Step 4000: cumulative augmentation rate = 50.1% (64111/128032 samples coded)
+Training:  72%|███████▏  | 4100/5692026-01-24 07:26:55,460 - INFO - Step 4100: cumulative augmentation rate = 50.1% (65703/131232 samples coded)
+Training:  74%|███████▎  | 4200/5698 [1:40:29<46:2026-01-24 07:29:24,435 - INFO - Step 4200: cumulative augmentation rate = 50.1% (67329/134432 samples coded)
+Training:  75%|███████▌  | 4300/5698 [1:42:57<41:05,  1.76s/it,2026-01-24 07:31:52,494 - INFO - Step 4300: cumulative augmentation rate = 50.1% (68949/137632 samples coded)
+Training:  77%|███████▋  | 4391/5698 [1:45:10<52:54,  2.43s/it, loss=2026-01-24 07:34:18,345 - INFO - Step 4400: cumulative augmentation rate = 50.1% (70551/140832 samples coded)
+Training:  79%|█�2026-01-24 07:36:51,507 - INFO - Step 4500: cumulative augmentation rate = 50.1% (72164/144032 samples coded)
+Training:  81%|████████  | 4592/5698 [1:50:09<32026-01-24 07:39:15,684 - INFO - Step 4600: cumulative augmentation rate = 50.1% (73757/147232 samples coded)
+Training:  82%|████████▏ | 4700/5698 [1:52:42<20:33,  1.24s/it, loss=0.0015, task_acc=0.9992026-01-24 07:41:38,788 - INFO - Step 4700: cumulative augmentation rate = 50.1% (75352/150432 samples coded)
+Training:  84%|████████▍ | 4799/5698 [1:55:2026-01-24 07:44:03,182 - INFO - Step 4800: cumulative augmentation rate = 50.1% (76919/153632 samples coded)
+Training:  85%|████████▌ | 4861/5698 [1:56:2026-01-24 07:45:36,670 - WARNING - NaN gradient detected at batch 4862
+Training:  862026-01-24 07:46:31,158 - INFO - Step 4900: cumulative augmentation rate = 50.1% (78532/156832 samples coded)
+Training:  88%|████████▊ | 4996/5698 [1:59:55<28:29,  2.44s2026-01-24 07:48:56,265 - INFO - Step 5000: cumulative augmentation rate = 50.0% (80095/160032 samples coded)
+Training:  89%|████�2026-01-24 07:51:15,939 - INFO - Step 5100: cumulative augmentation rate = 50.0% (81644/163232 samples coded)
+Training:  91%|█████████ | 5193/5698 [2:04:36<08:20,  1.01it/s, loss=0.00152026-01-24 07:53:43,608 - INFO - Step 5200: cumulative augmentation rate = 50.0% (83234/166432 samples coded)
+Training:  93%|█████████▎| 5299/5698 [2:07:20<11:34,  1.74s/it,2026-01-24 07:56:16,353 - INFO - Step 5300: cumulative augmentation rate = 50.0% (84868/169632 samples coded)
+Training:  95%|█████████▍| 5396/5698 [2:02026-01-24 07:58:44,558 - INFO - Step 5400: cumulative augmentation rate = 50.0% (86486/172832 samples coded)
+Training:  96%|████████2026-01-24 08:01:18,617 - INFO - Step 5500: cumulative augmentation rate = 50.0% (88093/176032 samples coded)
+Training:  98%|2026-01-24 08:03:41,091 - INFO - Step 5600: cumulative augmentation rate = 50.0% (89655/179232 samples coded)
+Training: 100%|█████████▉| 5695/5698 [2:17:11<00:06,  2.05s/it, loss=0.0014, task_acc=02026-01-24 08:06:07,286 - INFO - Epoch 2 train: loss=0.0014, task_acc=0.9996
+Validating: 100%|�2026-01-24 08:16:14,864 - INFO - Epoch 2 val: loss=2.2121, eer=0.0670, min_dcf=0.9761
+2026-01-24 08:16:14,878 - INFO - [epoch_complete] epoch=2, train_loss=0.0014, val_eer=0.0670
+2026-01-24 08:16:14,879 - INFO - Epoch 3: lambda = 0.0000
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]wandb: WARNING Tried to log to step 2 that is less than the current step 341. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:   2%|▏         | 98/5698 [02:27<3:01:16,  1.94s/it, loss=0.002026-01-24 08:18:44,010 - INFO - Step 100: cumulative augmentation rate = 49.7% (1607/3232 samples coded)
+Training:   3%|▎         | 193/5698 [04:44<1:24:36,  1.08it/s, loss=0.00002026-01-24 08:21:09,931 - INFO - Step 200: cumulative augmentation rate = 49.6% (3193/6432 samples coded)
+Training:   5%|▌         | 299/5698 [07:19<2:40:55,  12026-01-24 08:23:34,323 - INFO - Step 300: cumulative augmentation rate = 50.2% (4833/9632 samples coded)
+Training:   7%|▋         | 394/5698 [09:35<1:45:35,  1.2026-01-24 08:25:59,417 - INFO - Step 400: cumulative augmentation rate = 50.2% (6442/12832 samples coded)
+Training:   9%|▉         | 500/56982026-01-24 08:28:21,033 - INFO - Step 500: cumulative augmentation rate = 50.1% (8030/16032 samples coded)
+Training:  10%|█         | 595/5698 2026-01-24 08:30:47,007 - INFO - Step 600: cumulative augmentation rate = 49.9% (9590/19232 samples coded)
+Training:  12%|█▏        | 699/5698 [16:50<1:21:15,  1.03it/s, loss=0.0010, task_acc=0.92026-01-24 08:33:12,966 - INFO - Step 700: cumulative augmentation rate = 49.9% (11202/22432 samples coded)
+Training:  14%|█▍        | 792/5698 [19:11<3:16:19,  2.40s/it, loss=0.0015, task_acc=0.992026-01-24 08:35:38,497 - INFO - Step 800: cumulative augmentation rate = 49.9% (12794/25632 samples coded)
+Training:  16%|█▌        | 896/5698 [21:41<1:002026-01-24 08:38:07,529 - INFO - Step 900: cumulative augmentation rate = 50.0% (14413/28832 samples coded)
+Training:2026-01-24 08:40:30,861 - INFO - Step 1000: cumulative augmentation rate = 50.0% (16003/32032 samples coded)
+Training:  192026-01-24 08:42:54,664 - INFO - Step 1100: cumulative augmentation rate = 49.9% (17580/35232 samples coded)
+Training:  21%|██        | 1194/5698 [28:53<3:00:04,  2.42026-01-24 08:45:13,294 - INFO - Step 1200: cumulative augmentation rate = 49.9% (19191/38432 samples coded)
+Training:  23%|██▎       | 12952026-01-24 08:47:38,153 - INFO - Step 1300: cumulative augmentation rate = 50.0% (20798/41632 samples coded)
+Training:  24%|██▍       | 1395/5698 [33:52<2:39:56,  2.23s/it, loss=0.2026-01-24 08:50:14,458 - INFO - Step 1400: cumulative augmentation rate = 50.0% (22430/44832 samples coded)
+Training:  26%|�2026-01-24 08:52:46,412 - INFO - Step 1500: cumulative augmentation rate = 50.1% (24055/48032 samples coded)
+Training:  26%|██▋       | 1505/5692026-01-24 08:53:03,768 - WARNING - NaN gradient detected at batch 1513
+Training:  28%|██▊       | 1596/5698 [38:57<1:59:182026-01-24 08:55:19,347 - INFO - Step 1600: cumulative augmentation rate = 50.1% (25642/51232 samples coded)
+Training:  30%|██▉       | 1696/5698 [41:26<1:05:19,  1.02it/s, loss=0.0015, task_acc=0.9992026-01-24 08:57:53,387 - INFO - Step 1700: cumulative augmentation rate = 50.1% (27264/54432 samples coded)
+Train2026-01-24 09:00:22,739 - INFO - Step 1800: cumulative augmentation rate = 50.1% (28875/57632 samples coded)
+Training:  33%|███▎      | 1895/5698 2026-01-24 09:02:59,996 - INFO - Step 1900: cumulative augmentation rate = 50.1% (30464/60832 samples coded)
+Training:  35%|███▍      | 1993/5698 [49:00<1:37:39,  1.58s/it, loss=0.0014, task2026-01-24 09:05:29,235 - INFO - Step 2000: cumulative augmentation rate = 50.1% (32075/64032 samples coded)
+Training:  37%|███▋    2026-01-24 09:08:10,054 - INFO - Step 2100: cumulative augmentation rate = 50.1% (33682/67232 samples coded)
+Training:  39%|███▊      | 2200/5698 [54:28<2:23:15,  2.46s/it, los2026-01-24 09:10:43,855 - INFO - Step 2200: cumulative augmentation rate = 50.1% (35292/70432 samples coded)
+Training:  40%|�2026-01-24 09:13:23,289 - INFO - Step 2300: cumulative augmentation rate = 50.1% (36896/73632 samples coded)
+Training:  42%|████▏     | 2396/5698 [59:42<1:15:04,  1.36s/i2026-01-24 09:16:08,634 - INFO - Step 2400: cumulative augmentation rate = 50.1% (38472/76832 samples coded)
+Training:  44%|████▎     | 2491/5698 [1:02026-01-24 09:18:49,672 - INFO - Step 2500: cumulative augmentation rate = 50.1% (40092/80032 samples coded)
+Training:  46%|████▌     | 2595/5698 [1:05:05<2:26:06,  2.83s/it, loss=0.00112026-01-24 09:21:27,631 - INFO - Step 2600: cumulative augmentation rate = 50.1% (41702/83232 samples coded)
+Training:  47%|██�2026-01-24 09:24:06,256 - INFO - Step 2700: cumulative augmentation rate = 50.1% (43337/86432 samples coded)
+Training:  49%|████▉     | 2794/5698 [1:10:14<1:09:31,  1.44s/it, loss=0.0011, task_acc=02026-01-24 09:26:39,014 - INFO - Step 2800: cumulative augmentation rate = 50.1% (44886/89632 samples coded)
+Training:  51%|█████     | 2899/5692026-01-24 09:29:19,442 - INFO - Step 2900: cumulative augmentation rate = 50.1% (46509/92832 samples coded)
+Training:  53%|█████▎    | 2992/5698 [1:15:20<56:33,  1.25s/it, loss=0.0011, task_acc=0.9997]  2026-01-24 09:31:49,440 - INFO - Step 3000: cumulative augmentation rate = 50.0% (48054/96032 samples coded)
+Training:  54%|█████▍    | 3095/5698 [1:18:04<1:40:19, 2026-01-24 09:34:26,714 - INFO - Step 3100: cumulative augmentation rate = 50.0% (49656/99232 samples coded)
+Training:  562026-01-24 09:37:12,256 - INFO - Step 3200: cumulative augmentation rate = 50.1% (51289/102432 samples coded)
+Training:  58%|█████▊    | 3300/5698 [1:23:37<54:38,  1.37s/it, loss=0.0010, task_a2026-01-24 09:39:52,468 - INFO - Step 3300: cumulative augmentation rate = 50.1% (52891/105632 samples coded)
+Training:  60%|█�2026-01-24 09:42:35,807 - INFO - Step 3400: cumulative augmentation rate = 50.0% (54461/108832 samples coded)
+Training:  61%|██████▏   | 3496/5698 [1:28:57<46:38,  1.27s/it, loss=0.0009, task_acc=0.9992026-01-24 09:45:18,974 - INFO - Step 3500: cumulative augmentation rate = 50.1% (56096/112032 samples coded)
+Tra2026-01-24 09:47:59,749 - INFO - Step 3600: cumulative augmentation rate = 50.1% (57727/115232 samples coded)
+Training:  65%|███�2026-01-24 09:50:42,983 - INFO - Step 3700: cumulative augmentation rate = 50.1% (59342/118432 samples coded)
+Training:  67%|██████▋   | 3800/5698 [1:37:042026-01-24 09:53:19,383 - INFO - Step 3800: cumulative augmentation rate = 50.1% (60897/121632 samples coded)
+Training:  68%|██████▊   | 3892/5698 [1:39:242026-01-24 09:55:51,471 - INFO - Step 3900: cumulative augmentation rate = 50.1% (62491/124832 samples coded)
+Training:  70%|██████▉   | 3984/5698 [1:41:572026-01-24 09:58:13,068 - WARNING - NaN gradient detected at batch 3985
+Training:  70%|███████   | 3993/5698 [1:42:12<44:39,  1.57s/it, loss=0.0012, task_acc=02026-01-24 09:58:38,423 - INFO - Step 4000: cumulative augmentation rate = 50.1% (64089/128032 samples coded)
+Training:  72%|███████▏  | 4094/5698 [1:44:48<26:20,  1.01it/s, loss=0.00122026-01-24 10:01:15,519 - INFO - Step 4100: cumulative augmentation rate = 50.0% (65655/131232 samples coded)
+Training:  74%|███████▎  | 4194/5698 [1:47:30<27:56,  12026-01-24 10:03:56,253 - INFO - Step 4200: cumulative augmentation rate = 50.0% (67222/134432 samples coded)
+Training:  75%|███████▌  | 4294/5698 [1:50:16<42:48,  1.83s/it, loss=0.0012, ta2026-01-24 10:06:42,117 - INFO - Step 4300: cumulative augmentation rate = 50.0% (68815/137632 samples coded)
+Training:  77%|████�2026-01-24 10:09:11,853 - INFO - Step 4400: cumulative augmentation rate = 50.0% (70363/140832 samples coded)
+Training:  79%|███████▉  | 4495/5698 [1:55:26<21:2026-01-24 10:11:48,782 - INFO - Step 4500: cumulative augmentation rate = 50.0% (71949/144032 samples coded)
+Training:  81%|████████  | 4595/5698 [1:58:08<29:16,  1.59s/it, loss=0.0012, task_acc=0.9996]2026-01-24 10:14:30,028 - INFO - Step 4600: cumulative augmentation rate = 49.9% (73538/147232 samples coded)
+Training:  82%|██2026-01-24 10:17:12,350 - INFO - Step 4700: cumulative augmentation rate = 50.0% (75145/150432 samples coded)
+Training:  84%|████████▍ | 4793/5698 [2:03:25<16:37,  1.10s/it, los2026-01-24 10:19:53,859 - INFO - Step 4800: cumulative augmentation rate = 49.9% (76736/153632 samples coded)
+Training:  86%|███████�2026-01-24 10:22:38,157 - INFO - Step 4900: cumulative augmentation rate = 50.0% (78357/156832 samples coded)
+Train2026-01-24 10:25:17,526 - INFO - Step 5000: cumulative augmentation rate = 50.0% (79941/160032 samples coded)
+Training:  89%|████████▉ | 5098/5698 [2:11:27<12:532026-01-24 10:27:48,077 - INFO - Step 5100: cumulative augmentation rate = 49.9% (81478/163232 samples coded)
+Training:  91%|██2026-01-24 10:30:31,974 - INFO - Step 5200: cumulative augmentation rate = 49.9% (83061/166432 samples coded)
+Train2026-01-24 10:33:07,098 - INFO - Step 5300: cumulative augmentation rate = 49.9% (84613/169632 samples coded)
+Training:  95%|█████████▍| 5399/5698 [2:19:34<08:13,  1.65s/it, loss=0.00122026-01-24 10:35:54,859 - INFO - Step 5400: cumulative augmentation rate = 49.9% (86182/172832 samples coded)
+Training:  96%|█████████▋| 5496/5698 [2:22:13<03:05, 2026-01-24 10:38:41,002 - INFO - Step 5500: cumulative augmentation rate = 49.9% (87766/176032 samples coded)
+Training:  98%|█████████▊| 55932026-01-24 10:41:33,590 - INFO - Step 5600: cumulative augmentation rate = 49.9% (89358/179232 samples coded)
+                           2026-01-24 10:44:08,034 - INFO - Epoch 3 train: loss=0.0012, task_acc=0.9996
+Validating: 100%|█████████▉| 4398/44052026-01-24 10:54:15,647 - INFO - Epoch 3 val: loss=1.9537, eer=0.0609, min_dcf=0.8327
+2026-01-24 10:54:15,649 - INFO - [epoch_complete] epoch=3, train_loss=0.0012, val_eer=0.0609
+2026-01-24 10:54:15,650 - INFO - Epoch 4: lambda = 0.0000
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]wandb: WARNING Tried to log to step 3 that is less than the current step 455. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:   2%|▏         | 98/5698 [02:43<2:04:34,  1.33s/it, loss=0.002026-01-24 10:57:05,475 - INFO - Step 100: cumulative augmentation rate = 50.8% (1641/3232 samples coded)
+Training:   3%|▎         | 193/5698 [05:14<2:48:51,  1.84s/it, loss=0.00002026-01-24 10:59:41,532 - INFO - Step 200: cumulative augmentation rate = 50.1% (3220/6432 samples coded)
+Training:   5%|▌         | 299/5698 [08:06<3:11:47,  22026-01-24 11:02:22,579 - INFO - Step 300: cumulative augmentation rate = 49.9% (4809/9632 samples coded)
+Training:   7%|▋         | 394/5698 [10:44<2:18:17,  1.2026-01-24 11:05:10,141 - INFO - Step 400: cumulative augmentation rate = 50.2% (6442/12832 samples coded)
+2026-01-24 11:05:16,037 - WARNING - NaN gradient detected at batch 402
+Training:   9%|▉         | 500/56982026-01-24 11:08:02,740 - INFO - Step 500: cumulative augmentation rate = 50.4% (8077/16032 samples coded)
+Training:  10%|█         | 595/5698 2026-01-24 11:10:45,229 - INFO - Step 600: cumulative augmentation rate = 50.2% (9664/19232 samples coded)
+Training:  12%|█▏        | 657/5698 [18:00<2:38:17,  1.88s/it, lossrun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+Training:  12%|█▏        | 667/5698 [18:13<1:18:38,  1.07it/s, loss=0.0021, task_acc=0.9994][2026-01-24T11:12:34.564] error: *** STEP 18653576.0 ON gcn55 CANCELLED AT 2026-01-24T11:12:34 DUE to SIGNAL Terminated ***
+[2026-01-24T11:12:34.565] error: *** JOB 18653576 ON gcn55 CANCELLED AT 2026-01-24T11:12:34 DUE to SIGNAL Terminated ***
+Repo root: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+SLURM_SUBMIT_DIR: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+downloading uv 0.9.26 x86_64-unknown-linux-gnu
+no checksums to verify
+installing to /home/jcooper/.local/bin
+  uv
+  uvx
+everything's installed!
+Resolved 134 packages in 3ms
+Audited 107 packages in 173ms
+CUDA available: True
+GPU device count: 1
+Active GPU: NVIDIA A100-SXM4-40GB
+
+WANDB_API_KEY: set (wandb logging enabled)
+=== Environment diagnostics ===
+PWD: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+ASVSPOOF5_ROOT: /projects/prjs1904/data/asvspoof5
+HF_HOME: /scratch-shared/jcooper/.cache/huggingface
+WANDB_PROJECT: asvspoof5-dann
+WANDB_MODE:
+ffmpeg: not-found
+===============================
+=== Training Wav2Vec2 + ERM ===
+2026-01-24 00:38:28,389 - INFO - Using device: cuda
+2026-01-24 00:38:28,423 - INFO - Run directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/w2v2_erm
+2026-01-24 00:38:29,619 - INFO - Git commit: 06c6d928
+2026-01-24 00:38:29,619 - INFO - Hardware: NVIDIA A100-SXM4-40GB
+2026-01-24 00:38:29,624 - INFO - CODEC classes (manifest): 12
+2026-01-24 00:38:29,625 - INFO - CODEC_Q classes (manifest): 9
+2026-01-24 00:38:29,898 - INFO - Train samples: 182357
+2026-01-24 00:38:29,899 - INFO - Val samples: 140950
+/gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/.venv/lib64/python3.11/site-packages/transformers/configuration_utils.py:335: UserWarning: Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the `Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`.
+  warnings.warn(
+2026-01-24 00:38:32,686 - INFO - Total parameters: 95,290,510
+2026-01-24 00:38:32,686 - INFO - Trainable parameters: 918,798
+wandb: Currently logged in as: mike-cooper (mike-cooper-uva) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run 1kahab11
+wandb: Tracking run with wandb version 0.23.1
+wandb: Run data is saved locally in /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/w2v2_erm/wandb/run-20260124_003833-1kahab11
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run w2v2_erm
+wandb: ⭐️ View project at https://wandb.ai/mike-cooper-uva/asvspoof5-dann
+wandb: 🚀 View run at https://wandb.ai/mike-cooper-uva/asvspoof5-dann/runs/1kahab11
+2026-01-24 00:38:35,351 - INFO - Wandb initialized: https://wandb.ai/mike-cooper-uva/asvspoof5-dann/runs/1kahab11
+2026-01-24 00:38:35,354 - INFO - Model: 95,290,510 params (918,798 trainable)
+2026-01-24 00:38:35,354 - INFO - Dataset: train=182357, val=140950
+2026-01-24 00:38:35,358 - INFO - [experiment_start] method=erm, backbone=wav2vec2_base
+2026-01-24 00:38:35,358 - INFO - Starting training for 50 epochs
+2026-01-24 00:38:35,359 - INFO - Run directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/w2v2_erm
+2026-01-24 00:38:35,359 - INFO - Model: 95,290,510 params (918,798 trainable)
+2026-01-24 00:38:35,359 - INFO - Dataset: train=182357, val=140950
+2026-01-24 00:38:35,364 - INFO - ============================================================
+2026-01-24 00:38:35,364 - INFO - Training ERM model
+2026-01-24 00:38:35,365 - INFO - Backbone: wav2vec2_base
+2026-01-24 00:38:35,365 - INFO - Seed: 42
+2026-01-24 00:38:35,365 - INFO - ============================================================
+Training:  72%|███████▏  | 4107/5698 [14:27<04:49,  5.49it/s, loss=0.0421, task_ac2026-01-24 00:53:03,369 - WARNING - NaN gradient detected at batch 4109
+Training: 2026-01-24 00:54:19,774 - WARNING - NaN gradient detected at batch 4525cc=0.9878]
+Training: 100%|�2026-01-24 00:57:34,548 - INFO - Epoch 0 train: loss=0.0307, task_acc=0.9903
+Validating: 100%|█████████▉| 4395/4405 [10:06<00:012026-01-24 01:07:43,060 - INFO - Epoch 0 val: loss=1.3766, eer=0.0661, min_dcf=0.5922
+2026-01-24 01:07:43,666 - INFO - New best eer: 0.0661
+2026-01-24 01:07:43,667 - INFO - [epoch_complete] epoch=0, train_loss=0.0307, val_eer=0.0661
+Training:   0%|          | 4/5698 [00:01<23:01,  4.12it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 0 that is less than the current step 113. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Tra2026-01-24 01:09:49,813 - WARNING - NaN gradient detected at batch 986 task_acc=0.9998]
+Training:  53%|█████▎    | 3035/5698 [06:24<05:35,  7.93it/s, loss=0.0012026-01-24 01:14:09,567 - WARNING - NaN gradient detected at batch 3043
+Training:  90%|████████▉ | 5112026-01-24 01:18:31,632 - WARNING - NaN gradient detected at batch 5119
+Training2026-01-24 01:19:44,639 - INFO - Epoch 1 train: loss=0.0013, task_acc=0.99960.9996]
+Validating: 100%|█████████▉| 4402/4402026-01-24 01:29:50,879 - INFO - Epoch 1 val: loss=0.1998, eer=0.0445, min_dcf=0.3912
+2026-01-24 01:29:51,288 - INFO - New best eer: 0.0445
+2026-01-24 01:29:51,307 - INFO - [epoch_complete] epoch=1, train_loss=0.0013, val_eer=0.0445
+Training:   0%|          | 28/5698 [00:04<11:55,  7.92it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 1 that is less than the current step 227. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  25%|██▌       | 142026-01-24 01:32:52,802 - WARNING - NaN gradient detected at batch 1433
+Training:  50%|█████     | 28512026-01-24 01:35:52,635 - WARNING - NaN gradient detected at batch 2857
+Training:  86%|████████▋ | 4917/5698 [10:20<01:382026-01-24 01:40:13,360 - WARNING - NaN gradient detected at batch 4925
+Tra2026-01-24 01:41:50,911 - INFO - Epoch 2 train: loss=0.0012, task_acc=0.9997_acc=0.9997]
+Validating: 100%|█████████▉| 4403/4405 [10:06<00:00,  7.27it2026-01-24 01:51:57,511 - INFO - Epoch 2 val: loss=3.8279, eer=0.0877, min_dcf=1.0000
+2026-01-24 01:51:57,512 - INFO - [epoch_complete] epoch=2, train_loss=0.0012, val_eer=0.0877
+Training:   1%|          | 59/5698 [00:07<11:52,  7.91it/s, loss=0.0003, task_acc=1.0000]wandb: WARNING Tried to log to step 2 that is less than the current step 341. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  30%|██▉       | 1683/5698 [03:32<08:27,  7.92026-01-24 01:55:31,104 - WARNING - NaN gradient detected at batch 1687
+Training:  72%|███████▏  | 4075/52026-01-24 02:00:33,187 - WARNING - NaN gradient detected at batch 4078
+Training: 100%|██████�2026-01-24 02:03:57,564 - INFO - Epoch 3 train: loss=0.0010, task_acc=0.9997
+Validating: 100%|█████████▉| 4401/442026-01-24 02:14:04,248 - INFO - Epoch 3 val: loss=1.3402, eer=0.0573, min_dcf=0.6200
+2026-01-24 02:14:04,299 - INFO - [epoch_complete] epoch=3, train_loss=0.0010, val_eer=0.0573
+Training:   0%|          | 5/5698 [00:01<15:42,  6.04it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 3 that is less than the current step 455. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:   8%|▊         | 440/5698 [00:56<11:04,  7.91it/s, loss=0.0000, task_acc=12026-01-24 02:15:00,462 - WARNING - NaN gradient detected at batch 440
+Training:  43%|████▎     | 2438/5698 [05:16<06:512026-01-24 02:19:21,976 - WARNING - NaN gradient detected at batch 2446
+Training:  84%|████████▍ | 4807/5698 [10:15<01:52,  7.92it/s, l2026-01-24 02:24:21,222 - WARNING - NaN gradient detected at batch 4816
+Training: 100%|█████████▉| 5693/5698 [12:07<00:00,  7.80it/s, loss=0.0011, ta2026-01-24 02:26:12,432 - INFO - Epoch 4 train: loss=0.0010, task_acc=0.9997
+Validating: 100%|█████████▉| 4403/4405 [102026-01-24 02:36:18,893 - INFO - Epoch 4 val: loss=1.4898, eer=0.0574, min_dcf=0.6951
+2026-01-24 02:36:18,895 - INFO - [epoch_complete] epoch=4, train_loss=0.0010, val_eer=0.0574
+Training:   1%|          | 48/5698 [00:06<11:54,  7.90it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 4 that is less than the current step 569. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  20%|█▉        | 1117/5692026-01-24 02:38:41,165 - WARNING - NaN gradient detected at batch 1120
+Training:  61%|██████    | 3468/5698 [07:182026-01-24 02:43:37,933 - WARNING - NaN gradient detected at batch 3471
+Training: 100%|█████████▉| 5691/5698 [11:59<00:00,  7.68it/s, loss=0.002026-01-24 02:48:19,080 - INFO - Epoch 5 train: loss=0.0009, task_acc=0.9998
+Validating: 100%|█████████▉| 4400/4405 [10:20<00:00,  7.2026-01-24 02:58:40,486 - INFO - Epoch 5 val: loss=2.0038, eer=0.0682, min_dcf=0.9927
+2026-01-24 02:58:40,505 - INFO - [epoch_complete] epoch=5, train_loss=0.0009, val_eer=0.0682
+Training:   1%|          | 31/5698 [00:04<11:53,  7.94it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 5 that is less than the current step 683. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:   4%|▍         | 249/5698 [00:31<11:27,  7.92it/s, loss=0.0000, t2026-01-24 02:59:13,950 - WARNING - NaN gradient detected at batch 256
+Training:  43%|████▎     | 2470/5698 [05:122026-01-24 03:03:53,517 - WARNING - NaN gradient detected at batch 2470
+Train2026-01-24 03:08:48,670 - WARNING - NaN gradient detected at batch 4808ask_acc=0.9998]
+Training: 100%|█████████▉| 562026-01-24 03:10:40,898 - INFO - Epoch 6 train: loss=0.0010, task_acc=0.9997
+Validating: 100%|█████████▉| 4394/4405 [10:04<00:01,  7.28it/s2026-01-24 03:20:47,392 - INFO - Epoch 6 val: loss=2.7878, eer=0.0708, min_dcf=0.9998
+2026-01-24 03:20:47,412 - INFO - [epoch_complete] epoch=6, train_loss=0.0010, val_eer=0.0708
+Training:   1%|          | 59/5698 [00:07<11:51,  7.93it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 6 that is less than the current step 797. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  23%|██▎       | 132026-01-24 03:23:36,623 - WARNING - NaN gradient detected at batch 1337
+Training:  75%|███████▌  | 4289/5698 [09:2026-01-24 03:29:49,969 - WARNING - NaN gradient detected at batch 4294
+Training: 100%|██████�2026-01-24 03:32:47,140 - INFO - Epoch 7 train: loss=0.0009, task_acc=0.9998
+Validating: 100%|█████████▉| 4401/442026-01-24 03:43:09,981 - INFO - Epoch 7 val: loss=1.4756, eer=0.0578, min_dcf=0.7137
+2026-01-24 03:43:09,999 - INFO - [epoch_complete] epoch=7, train_loss=0.0009, val_eer=0.0578
+Training:   1%|          | 32/5698 [00:05<13:06,  7.21it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 7 that is less than the current step 911. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  15%|█▌        | 871/52026-01-24 03:45:16,256 - WARNING - NaN gradient detected at batch 873
+Training:  57%|█████▋    | 3261/5698 [07:29<05:07,  7.91it/s, loss=2026-01-24 03:50:39,680 - WARNING - NaN gradient detected at batch 3262
+Training: 100%|████2026-01-24 03:55:49,972 - INFO - Epoch 8 train: loss=0.0008, task_acc=0.9998
+Vali2026-01-24 04:05:56,474 - INFO - Epoch 8 val: loss=2.1069, eer=0.0641, min_dcf=0.9896
+2026-01-24 04:05:56,476 - INFO - [epoch_complete] epoch=8, train_loss=0.0008, val_eer=0.0641
+Training:   1%|          | 67/5698 [00:08<11:51,  7.91it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 8 that is less than the current step 1025. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:   6%|▋         | 370/5698 [00:47<11:13,  7.91it/s, loss2026-01-24 04:06:44,521 - WARNING - NaN gradient detected at batch 376
+Training:  58%|█████▊    | 3321/5692026-01-24 04:12:57,162 - WARNING - NaN gradient detected at batch 3328
+Training:  97%|██████�2026-01-24 04:17:37,037 - WARNING - NaN gradient detected at batch 5548
+Training: 100%|██████████| 5698/5698 [11:59<00:00,  7.92it/s, l2026-01-24 04:17:55,916 - INFO - Epoch 9 train: loss=0.0005, task_acc=0.9998
+Vali2026-01-24 04:28:02,379 - INFO - Epoch 9 val: loss=2.9163, eer=0.0732, min_dcf=0.9999
+2026-01-24 04:28:02,394 - INFO - [epoch_complete] epoch=9, train_loss=0.0005, val_eer=0.0732
+Training:   0%|          | 21/5698 [00:03<11:58,  7.90it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 9 that is less than the current step 1139. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  38%|███▊2026-01-24 04:32:34,650 - WARNING - NaN gradient detected at batch 2150]
+Training:  94%|█████████▎| 5329/5698 [11:13<00:46,  7.93i2026-01-24 04:39:16,808 - WARNING - NaN gradient detected at batch 5337
+Training: 100%|█████████▉| 5697/5698 [11:2026-01-24 04:40:02,273 - INFO - Epoch 10 train: loss=0.0004, task_acc=0.9999
+Validating: 100%|███████2026-01-24 04:50:08,760 - INFO - Epoch 10 val: loss=1.6129, eer=0.0630, min_dcf=0.8570
+2026-01-24 04:50:08,764 - INFO - [epoch_complete] epoch=10, train_loss=0.0004, val_eer=0.0630
+Training:   1%|          | 46/5698 [00:06<11:53,  7.92it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 10 that is less than the current step 1253. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  33%|███▎      | 1873/5698 [03:57<08:02,  7.92it/s, loss=0.00042026-01-24 04:54:07,221 - WARNING - NaN gradient detected at batch 1879
+Training:  68%|██████2026-01-24 04:58:25,742 - WARNING - NaN gradient detected at batch 3887
+                                       2026-01-24 05:02:28,990 - INFO - Epoch 11 train: loss=0.0004, task_acc=0.9999
+Validating: 100%|█████████▉| 4398/4405 [10:05<00:00,2026-01-24 05:12:35,553 - INFO - Epoch 11 val: loss=1.3657, eer=0.0513, min_dcf=0.7219
+2026-01-24 05:12:35,554 - INFO - [epoch_complete] epoch=11, train_loss=0.0004, val_eer=0.0513
+2026-01-24 05:12:35,556 - INFO - Early stopping at epoch 11
+2026-01-24 05:12:36,011 - INFO - [training_complete] {"event_type": "training_complete", "run_id": "w2v2_erm", "timestamp": "2026-01-24T04:12:35.998671Z", "best_epoch": 1, "best_eer": 0.04452425021230569, "final_epoch": 11, "final_val": {"loss": 1.36572
+2026-01-24 05:12:36,013 - INFO - Experiment complete. Logs saved to: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/w2v2_erm
+wandb: updating run metadata
+wandb: uploading summary, console lines 86-86
+wandb:
+wandb: Run history:
+wandb:    train/global_step ▁▁▂▂▂▂▂▃▃▃▃▄▄▄▄▄▄▄▅▅▅▅▅▅▅▆▆▆▆▆▆▆▆▇▇▇▇▇▇█
+wandb: train/step_grad_norm █▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:      train/step_loss █▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:  train/step_task_acc ██████▁█████████████████████████████████
+wandb: train/step_task_loss █▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:
+wandb: Run summary:
+wandb:             best_eer 0.04452
+wandb:           best_epoch 1
+wandb:         total_epochs 12
+wandb:    train/global_step 68350
+wandb: train/step_grad_norm 0.0
+wandb:      train/step_loss 0
+wandb:  train/step_task_acc 1
+wandb: train/step_task_loss 0
+wandb:
+wandb: 🚀 View run w2v2_erm at: https://wandb.ai/mike-cooper-uva/asvspoof5-dann/runs/1kahab11
+wandb: ⭐️ View project at: https://wandb.ai/mike-cooper-uva/asvspoof5-dann
+wandb: Synced 6 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./runs/w2v2_erm/wandb/run-20260124_003833-1kahab11/logs
+wandb: WARNING Tried to log to step 11 that is less than the current step 1367. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+2026-01-24 05:12:37,317 - INFO - ============================================================
+2026-01-24 05:12:37,318 - INFO - Training complete!
+2026-01-24 05:12:37,318 - INFO - Best eer: 0.04452425021230569
+2026-01-24 05:12:37,318 - INFO - Run directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/w2v2_erm
+2026-01-24 05:12:37,318 - INFO - ============================================================
+Training complete!
+Repo root: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+SLURM_SUBMIT_DIR: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+downloading uv 0.9.26 x86_64-unknown-linux-gnu
+no checksums to verify
+installing to /home/jcooper/.local/bin
+  uv
+  uvx
+everything's installed!
+Resolved 134 packages in 3ms
+Audited 107 packages in 169ms
+CUDA available: True
+GPU device count: 1
+Active GPU: NVIDIA A100-SXM4-40GB
+
+WANDB_API_KEY: set (wandb logging enabled)
+=== Environment diagnostics ===
+PWD: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+ASVSPOOF5_ROOT: /projects/prjs1904/data/asvspoof5
+HF_HOME: /scratch-shared/jcooper/.cache/huggingface
+WANDB_PROJECT: asvspoof5-dann
+WANDB_MODE:
+ffmpeg: not-found
+===============================
+=== Training WavLM + DANN ===
+Loading FFmpeg module: FFmpeg/7.1.1-GCCcore-14.2.0
+ffmpeg location: /sw/arch/RHEL9/EB_production/2025/software/FFmpeg/7.1.1-GCCcore-14.2.0/bin/ffmpeg
+Checking ffmpeg encoder support for codec augmentation...
+ffmpeg encoders OK.
+
+2026-01-24 00:38:06,800 - INFO - Using device: cuda
+2026-01-24 00:38:06,822 - INFO - Run directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/wavlm_dann
+2026-01-24 00:38:08,029 - INFO - Git commit: 06c6d928
+2026-01-24 00:38:08,029 - INFO - Hardware: NVIDIA A100-SXM4-40GB
+2026-01-24 00:38:08,036 - INFO - CODEC classes (manifest): 12
+2026-01-24 00:38:08,036 - INFO - CODEC_Q classes (manifest): 9
+2026-01-24 00:38:08,244 - WARNING - Some requested codecs not supported by ffmpeg: {'OPUS'}. Using: ['MP3', 'AAC']
+2026-01-24 00:38:08,244 - INFO - Codec augmentor initialized: supported_codecs=['MP3', 'AAC'], codec_prob=0.5
+2026-01-24 00:38:08,530 - INFO - Train samples: 182357
+2026-01-24 00:38:08,530 - INFO - Val samples: 140950
+2026-01-24 00:38:08,531 - INFO - DANN with augmentation: domain discriminator sizes num_codecs=6, num_codec_qs=6
+2026-01-24 00:38:08,538 - INFO - Saved synthetic vocabs to run dir (DANN with augmentation)
+2026-01-24 00:38:10,484 - INFO - Total parameters: 95,435,402
+2026-01-24 00:38:10,485 - INFO - Trainable parameters: 1,053,466
+wandb: Currently logged in as: mike-cooper (mike-cooper-uva) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run gxtjwusl
+wandb: Tracking run with wandb version 0.23.1
+wandb: Run data is saved locally in /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/wavlm_dann/wandb/run-20260124_003811-gxtjwusl
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run wavlm_dann
+wandb: ⭐️ View project at https://wandb.ai/mike-cooper-uva/asvspoof5-dann
+wandb: 🚀 View run at https://wandb.ai/mike-cooper-uva/asvspoof5-dann/runs/gxtjwusl
+2026-01-24 00:38:13,100 - INFO - Wandb initialized: https://wandb.ai/mike-cooper-uva/asvspoof5-dann/runs/gxtjwusl
+2026-01-24 00:38:13,103 - INFO - Model: 95,435,402 params (1,053,466 trainable)
+2026-01-24 00:38:13,104 - INFO - Dataset: train=182357, val=140950
+2026-01-24 00:38:13,108 - INFO - [experiment_start] method=dann, backbone=wavlm_base_plus
+2026-01-24 00:38:13,108 - INFO - Starting training for 50 epochs
+2026-01-24 00:38:13,108 - INFO - Run directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/wavlm_dann
+2026-01-24 00:38:13,108 - INFO - Model: 95,435,402 params (1,053,466 trainable)
+2026-01-24 00:38:13,121 - INFO - Dataset: train=182357, val=140950
+2026-01-24 00:38:13,130 - INFO - ============================================================
+2026-01-24 00:38:13,130 - INFO - Training DANN model
+2026-01-24 00:38:13,130 - INFO - Backbone: wavlm_base_plus
+2026-01-24 00:38:13,131 - INFO - Seed: 42
+2026-01-24 00:38:13,131 - INFO - ============================================================
+2026-01-24 00:38:13,131 - INFO - Epoch 0: lambda = 0.0000
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]/gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/.venv/lib64/python3.11/site-packages/torch/nn/functional.py:6044: UserWarning: Support for mismatched key_padding_mask and attn_mask is deprecated. Use same type for both instead.
+  warnings.warn(
+Training:   2%|▏         | 98/5698 [03:08<2:34:10,  1.65s/it, loss=0.682026-01-24 00:41:29,764 - INFO - Step 100: cumulative augmentation rate = 49.6% (1604/3232 samples coded)
+Training:   3%|▎         | 193/5698 [05:43<1:22:00,  1.12it/s, loss=0.53262026-01-24 00:44:10,084 - INFO - Step 200: cumulative augmentation rate = 49.5% (3185/6432 samples coded)
+Training:   5%|▌         | 299/5698 [08:38<1:39:05,  12026-01-24 00:46:57,434 - INFO - Step 300: cumulative augmentation rate = 49.7% (4784/9632 samples coded)
+Training:   7%|▋         | 394/5698 [11:19<2:31:57,  1.2026-01-24 00:49:45,557 - INFO - Step 400: cumulative augmentation rate = 49.7% (6382/12832 samples coded)
+Training:   9%|▉         | 500/56982026-01-24 00:52:32,813 - INFO - Step 500: cumulative augmentation rate = 50.0% (8008/16032 samples coded)
+Training:  10%|█         | 595/5698 2026-01-24 00:55:18,787 - INFO - Step 600: cumulative augmentation rate = 50.0% (9624/19232 samples coded)
+Training:  12%|█▏        | 699/5698 [19:43<1:31:40,  1.10s/it, loss=0.2646, task_acc=0.82026-01-24 00:58:03,106 - INFO - Step 700: cumulative augmentation rate = 50.2% (11272/22432 samples coded)
+Training:  14%|█▍        | 792/5698 [22:22<2:23:20,  1.75s/it, loss=0.2327, task_acc=0.912026-01-24 01:00:50,022 - INFO - Step 800: cumulative augmentation rate = 50.4% (12909/25632 samples coded)
+Training:  16%|█▌        | 896/5698 [25:19<2:222026-01-24 01:03:38,968 - INFO - Step 900: cumulative augmentation rate = 50.3% (14505/28832 samples coded)
+Training:2026-01-24 01:06:19,921 - INFO - Step 1000: cumulative augmentation rate = 50.1% (16047/32032 samples coded)
+Training:  192026-01-24 01:08:59,253 - INFO - Step 1100: cumulative augmentation rate = 50.1% (17667/35232 samples coded)
+Training:  21%|██        | 1194/5698 [33:14<1:36:12,  1.22026-01-24 01:11:37,512 - INFO - Step 1200: cumulative augmentation rate = 50.2% (19283/38432 samples coded)
+Training:  23%|██▎       | 12952026-01-24 01:14:12,908 - INFO - Step 1300: cumulative augmentation rate = 50.2% (20895/41632 samples coded)
+Training:  24%|██▍       | 1395/5698 [38:22<1:19:01,  1.10s/it, loss=0.2026-01-24 01:16:46,783 - INFO - Step 1400: cumulative augmentation rate = 50.2% (22506/44832 samples coded)
+Training:  26%|�2026-01-24 01:19:26,628 - INFO - Step 1500: cumulative augmentation rate = 50.2% (24126/48032 samples coded)
+Training:  28%|██▊       | 1596/5698 [43:34<2:34:222026-01-24 01:21:53,496 - INFO - Step 1600: cumulative augmentation rate = 50.2% (25724/51232 samples coded)
+Training:  30%|██▉       | 1696/5698 [46:04<1:30:26,  1.36s/it, loss=0.1102, task_acc=0.9582026-01-24 01:24:24,293 - INFO - Step 1700: cumulative augmentation rate = 50.2% (27314/54432 samples coded)
+Train2026-01-24 01:27:06,704 - INFO - Step 1800: cumulative augmentation rate = 50.2% (28936/57632 samples coded)
+Training:  33%|███▎      | 1895/5698 2026-01-24 01:29:41,772 - INFO - Step 1900: cumulative augmentation rate = 50.2% (30513/60832 samples coded)
+Training:  35%|███▍      | 1993/5698 [53:46<54:21,  1.14it/s, loss=0.0936, task2026-01-24 01:32:13,756 - INFO - Step 2000: cumulative augmentation rate = 50.1% (32076/64032 samples coded)
+Training:  37%|███�2026-01-24 01:34:50,152 - INFO - Step 2100: cumulative augmentation rate = 50.1% (33683/67232 samples coded)
+Training:  39%|███▊      | 2200/5698 [59:07<1:12:33,  1.24s/i2026-01-24 01:37:20,931 - INFO - Step 2200: cumulative augmentation rate = 50.1% (35254/70432 samples coded)
+Training:  40%|████      | 2297/5698 [1:01:43<55:51,  1.01it/s, loss=0.0813, ta2026-01-24 01:40:03,002 - INFO - Step 2300: cumulative augmentation rate = 50.0% (36848/73632 samples coded)
+Training:  42%|████▏     | 2393/5698 [1:02026-01-24 01:42:36,573 - INFO - Step 2400: cumulative augmentation rate = 50.0% (38391/76832 samples coded)
+Training:  44%|████▍     | 2497/5698 [1:06:56<59:54,  1.12s/it, loss=0.0749, ta2026-01-24 01:45:15,510 - INFO - Step 2500: cumulative augmentation rate = 49.9% (39941/80032 samples coded)
+Training:  45%|████▌     | 2592/5698 [1:09:30<12026-01-24 01:47:55,450 - INFO - Step 2600: cumulative augmentation rate = 49.9% (41546/83232 samples coded)
+T2026-01-24 01:50:32,403 - INFO - Step 2700: cumulative augmentation rate = 50.0% (43182/86432 samples coded)
+Training:  49%|████▉     | 2791/5698 [1:14:47<1:55:06,  2.38s/i2026-01-24 01:53:12,472 - INFO - Step 2800: cumulative augmentation rate = 50.0% (44815/89632 samples coded)
+Training:  51%|██2026-01-24 01:55:48,543 - INFO - Step 2900: cumulative augmentation rate = 49.9% (46361/92832 samples coded)
+Training:  53%|██�2026-01-24 01:58:26,295 - INFO - Step 3000: cumulative augmentation rate = 49.9% (47965/96032 samples coded)
+Training:  54%|████2026-01-24 02:01:14,421 - INFO - Step 3100: cumulative augmentation rate = 50.0% (49615/99232 samples coded)
+Training:  56%|█████▌    | 3194/5698 [1:25:27<1:26:53,  2.08s/it, loss=0.0585, task_acc2026-01-24 02:03:50,033 - INFO - Step 3200: cumulative augmentation rate = 50.0% (51236/102432 samples coded)
+Training:  58%|█████▊    | 3297/5698 [1:28:09<1:12:072026-01-24 02:06:28,048 - INFO - Step 3300: cumulative augmentation rate = 50.0% (52784/105632 samples coded)
+Training:  60%|████�2026-01-24 02:09:12,870 - INFO - Step 3400: cumulative augmentation rate = 50.0% (54379/108832 samples coded)
+Training:  61%|██████▏   | 3493/5692026-01-24 02:11:56,714 - INFO - Step 3500: cumulative augmentation rate = 50.0% (56005/112032 samples coded)
+Training:  63%|██████▎   | 3594/5698 [1:36:12<1:02026-01-24 02:14:37,996 - INFO - Step 3600: cumulative augmentation rate = 50.0% (57615/115232 samples coded)
+Training:  65%|██████▍   | 3695/5698 [1:39:01<42026-01-24 02:17:28,796 - INFO - Step 3700: cumulative augmentation rate = 50.0% (59168/118432 samples coded)
+Training:  67%|██████▋   | 3796/5698 [1:41:50<44:44,  1.41s/it, loss=0.0495, 2026-01-24 02:20:12,894 - INFO - Step 3800: cumulative augmentation rate = 50.0% (60806/121632 samples coded)
+Training:  68%|██████�2026-01-24 02:22:48,932 - INFO - Step 3900: cumulative augmentation rate = 49.9% (62353/124832 samples coded)
+Training:  70%|███████   | 3999/5698 [1:47:05<37:27,  1.32s/it, loss=0.0470, task2026-01-24 02:25:19,292 - INFO - Step 4000: cumulative augmentation rate = 49.9% (63886/128032 samples coded)
+Training:  71%|███████▏  | 4063/5698 [1:48:43<58:03,  2.13s/it, loss=0.0459, task2026-01-24 02:27:03,229 - WARNING - NaN gradient detected at batch 4067
+Training:  72%|███████▏  | 4100/5698 [1:49:43<49:16,  1.85s/it, loss=0.0459, ta2026-01-24 02:27:56,537 - INFO - Step 4100: cumulative augmentation rate = 49.9% (65461/131232 samples coded)
+Training:  74%|███████▎  | 4200/5698 [1:52:28<43:46,  1.75s/it, l2026-01-24 02:30:43,619 - INFO - Step 4200: cumulative augmentation rate = 49.9% (67051/134432 samples coded)
+2026-01-24 02:30:51,637 - WARNING - NaN gradient detected at batch 4204
+Training:  75%|███████▌  | 4300/5698 [1:55:06<26:17,  1.13s/it, loss=0.0438, task_acc=0.9837]2026-01-24 02:33:22,941 - INFO - Step 4300: cumulative augmentation rate = 49.9% (68638/137632 samples coded)
+T2026-01-24 02:36:00,633 - INFO - Step 4400: cumulative augmentation rate = 49.9% (70223/140832 samples coded)
+Training:  79%|███████�2026-01-24 02:38:39,592 - INFO - Step 4500: cumulative augmentation rate = 49.8% (71775/144032 samples coded)
+Training:  81%|████████  | 4592/5698 [2:02:57<25:29,  1.38s/i2026-01-24 02:41:21,923 - INFO - Step 4600: cumulative augmentation rate = 49.8% (73346/147232 samples coded)
+Training:  82%|████████▏ | 4691/5698 [2:05:28<40:22,  2.41s/it, loss=0.0401, task_acc=0.92026-01-24 02:43:57,986 - INFO - Step 4700: cumulative augmentation rate = 49.8% (74967/150432 samples coded)
+Training:  84%|████████▍ | 4799/5698 [2:08:25<30:58,  2.02026-01-24 02:46:39,756 - INFO - Step 4800: cumulative augmentation rate = 49.9% (76612/153632 samples coded)
+Training:  86%|████2026-01-24 02:49:21,328 - INFO - Step 4900: cumulative augmentation rate = 49.9% (78236/156832 samples coded)
+Training:  88%|████████▊ | 4996/5698 [2:13:46<15:36,  1.33s/it, loss=0.032026-01-24 02:52:09,253 - INFO - Step 5000: cumulative augmentation rate = 49.9% (79807/160032 samples coded)
+Training:  89%|████████▉ 2026-01-24 02:55:09,577 - INFO - Step 5100: cumulative augmentation rate = 49.9% (81413/163232 samples coded)
+Training:  91%|█████████ | 5193/5698 [2:19:33<13:33,  1.61s/it, loss=0.0363, task_acc=0.92026-01-24 02:58:00,730 - INFO - Step 5200: cumulative augmentation rate = 49.9% (82999/166432 samples coded)
+Training:  93%|█████████▎| 5299/5698 [2:22:26<10:03,  1.51s/it, loss=0.0356, 2026-01-24 03:00:47,511 - INFO - Step 5300: cumulative augmentation rate = 49.9% (84645/169632 samples coded)
+Training:  95%|█████████▍| 5396/5698 [2:25:09<11:26,  22026-01-24 03:03:30,683 - INFO - Step 5400: cumulative augmentation rate = 49.9% (86250/172832 samples coded)
+Training:  96%|█████████▋| 5493/52026-01-24 03:05:59,187 - INFO - Step 5500: cumulative augmentation rate = 49.9% (87884/176032 samples coded)
+Training:  98%|████�2026-01-24 03:08:31,078 - INFO - Step 5600: cumulative augmentation rate = 49.9% (89472/179232 samples coded)
+Trainin2026-01-24 03:11:02,114 - INFO - Epoch 0 train: loss=0.0329, task_acc=0.9878cc=0.9877]
+                                          2026-01-24 03:27:21,323 - INFO - Epoch 0 val: loss=1.0772, eer=0.0443, min_dcf=0.3727
+2026-01-24 03:27:21,795 - INFO - New best eer: 0.0443
+2026-01-24 03:27:21,796 - INFO - [epoch_complete] epoch=0, train_loss=0.0329, val_eer=0.0443
+2026-01-24 03:27:22,164 - INFO - Epoch 1: lambda = 0.0000
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]wandb: WARNING Tried to log to step 0 that is less than the current step 113. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+/gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/.venv/lib64/python3.11/site-packages/torch/nn/functional.py:6044: UserWarning: Support for mismatched key_padding_mask and attn_mask is deprecated. Use same type for both instead.
+  warnings.warn(
+Training:   2%|▏         | 98/5698 [03:09<3:16:55,  2.11s/it, loss=0.002026-01-24 03:30:39,719 - INFO - Step 100: cumulative augmentation rate = 49.7% (1607/3232 samples coded)
+Training:   3%|▎         | 193/5698 [06:05<2:52:23,  1.88s/it, loss=0.00062026-01-24 03:33:40,448 - INFO - Step 200: cumulative augmentation rate = 48.5% (3117/6432 samples coded)
+Training:   5%|▌         | 299/5698 [09:41<1:31:43,  12026-01-24 03:37:09,699 - INFO - Step 300: cumulative augmentation rate = 49.0% (4724/9632 samples coded)
+Training:   7%|▋         | 394/5698 [12:32<2:42:26,  1.2026-01-24 03:40:06,541 - INFO - Step 400: cumulative augmentation rate = 49.1% (6306/12832 samples coded)
+Training:   9%|▉         | 500/56982026-01-24 03:42:41,868 - INFO - Step 500: cumulative augmentation rate = 48.9% (7834/16032 samples coded)
+Training:   9%|▉         | 520/5698 [15:49<3:26:41,  2.40s/it, loss=0.0005, task_acc=0.92026-01-24 03:43:12,645 - WARNING - NaN gradient detected at batch 521
+Training:  10%|█         | 595/5698 2026-01-24 03:45:17,902 - INFO - Step 600: cumulative augmentation rate = 48.7% (9367/19232 samples coded)
+Training:  12%|█▏        | 699/5698 [20:25<1:26:57,  1.04s/it, loss=0.0006, task_acc=0.92026-01-24 03:47:53,811 - INFO - Step 700: cumulative augmentation rate = 48.9% (10965/22432 samples coded)
+Training:  14%|█▍        | 792/5698 [22:48<1:48:16,  1.32s/it, loss=0.0005, task_acc=0.992026-01-24 03:50:27,586 - INFO - Step 800: cumulative augmentation rate = 48.9% (12546/25632 samples coded)
+Training:  16%|█▌        | 896/5698 [25:35<3:442026-01-24 03:53:00,947 - INFO - Step 900: cumulative augmentation rate = 49.1% (14162/28832 samples coded)
+Training:2026-01-24 03:55:45,099 - INFO - Step 1000: cumulative augmentation rate = 49.2% (15763/32032 samples coded)
+Training:  192026-01-24 03:58:35,370 - INFO - Step 1100: cumulative augmentation rate = 49.3% (17356/35232 samples coded)
+Training:  21%|██        | 1194/5698 [33:58<2:26:43,  1.92026-01-24 04:01:33,445 - INFO - Step 1200: cumulative augmentation rate = 49.3% (18941/38432 samples coded)
+Training:  23%|██▎       | 12952026-01-24 04:04:12,238 - INFO - Step 1300: cumulative augmentation rate = 49.3% (20535/41632 samples coded)
+Training:  24%|██▍       | 1395/5698 [39:07<1:24:57,  1.18s/it, loss=0.2026-01-24 04:06:40,524 - INFO - Step 1400: cumulative augmentation rate = 49.4% (22151/44832 samples coded)
+Training:  26%|�2026-01-24 04:09:18,539 - INFO - Step 1500: cumulative augmentation rate = 49.4% (23741/48032 samples coded)
+Training:  28%|██▊       | 1596/5698 [44:23<1:18:43, 2026-01-24 04:11:57,212 - INFO - Step 1600: cumulative augmentation rate = 49.5% (25363/51232 samples coded)
+Training:  30%|██▉       | 1696/5698 [47:02<1:43:43,  1.56s/it, loss=0.0004, task_acc=0.9999]2026-01-24 04:14:34,155 - INFO - Step 1700: cumulative augmentation rate = 49.7% (27040/54432 samples coded)
+Training:  2026-01-24 04:17:03,360 - INFO - Step 1800: cumulative augmentation rate = 49.7% (28646/57632 samples coded)
+Training:  33%|███▎      | 1895/5698 [52:01<12026-01-24 04:19:33,446 - INFO - Step 1900: cumulative augmentation rate = 49.6% (30188/60832 samples coded)
+Training:  35%|███▍      | 1993/5698 [54:35<3:00:27,  2.92s/it, loss=0.0005, task_acc=0.92026-01-24 04:22:11,735 - INFO - Step 2000: cumulative augmentation rate = 49.5% (31714/64032 samples coded)
+Training:  37%|███▋      | 2026-01-24 04:24:50,029 - INFO - Step 2100: cumulative augmentation rate = 49.5% (33308/67232 samples coded)
+Training:  39%|███▊      | 2200/5698 [1:00:08<1:38:29,  1.69s/i2026-01-24 04:27:31,095 - INFO - Step 2200: cumulative augmentation rate = 49.6% (34912/70432 samples coded)
+Training:  40%|2026-01-24 04:30:06,277 - INFO - Step 2300: cumulative augmentation rate = 49.5% (36477/73632 samples coded)
+Training:  42%|████▏     | 2392/5698 [1:05:02<1:29:32,  1.63s/it, loss=0.0006, task_acc=02026-01-24 04:32:42,003 - INFO - Step 2400: cumulative augmentation rate = 49.6% (38076/76832 samples coded)
+Training:  44%|██�2026-01-24 04:35:22,345 - INFO - Step 2500: cumulative augmentation rate = 49.6% (39659/80032 samples coded)
+Training:  45%|█�2026-01-24 04:36:52,216 - WARNING - NaN gradient detected at batch 25540.9998]
+Training:  45%|████▌     | 2591/5698 [1:10:25<1:02:59,  1.22s/it, loss=0.0006, 2026-01-24 04:38:03,166 - INFO - Step 2600: cumulative augmentation rate = 49.6% (41256/83232 samples coded)
+Training:  47%|�2026-01-24 04:40:32,970 - INFO - Step 2700: cumulative augmentation rate = 49.5% (42813/86432 samples coded)
+Training:  49%|████▉     | 2800/5698 [1:12026-01-24 04:43:07,525 - INFO - Step 2800: cumulative augmentation rate = 49.5% (44383/89632 samples coded)
+Training:  51%|█████   2026-01-24 04:45:45,259 - INFO - Step 2900: cumulative augmentation rate = 49.6% (45999/92832 samples coded)
+Training:  53%|█████▎    | 292026-01-24 04:48:16,628 - INFO - Step 3000: cumulative augmentation rate = 49.6% (47627/96032 samples coded)
+Training:  54%|█████▍    | 3100/5698 [1:23:29<1:25:06,  1.97s/it, loss=0.0009, task_acc=0.92026-01-24 04:50:52,222 - INFO - Step 3100: cumulative augmentation rate = 49.7% (49270/99232 samples coded)
+Training:  56%|2026-01-24 04:53:19,700 - INFO - Step 3200: cumulative augmentation rate = 49.7% (50872/102432 samples coded)
+Training:  58%|█████▊    | 3296/5698 [1:28:28<1:33:25,  2.33s/it, loss=0.0009, ta2026-01-24 04:55:56,582 - INFO - Step 3300: cumulative augmentation rate = 49.7% (52540/105632 samples coded)
+Training:  60%|█████▉    | 3399/5698 [1:31:01<31:41,  1.21it/s, loss=0.2026-01-24 04:58:29,553 - INFO - Step 3400: cumulative augmentation rate = 49.7% (54122/108832 samples coded)
+Training:  61%|████2026-01-24 05:01:02,234 - INFO - Step 3500: cumulative augmentation rate = 49.8% (55744/112032 samples coded)
+Training:  63%|██████▎   | 35942026-01-24 05:03:34,401 - INFO - Step 3600: cumulative augmentation rate = 49.8% (57341/115232 samples coded)
+Training:  65%|██████▍   | 3695/5698 [1:38:27<37:09,  1.11s/it, l2026-01-24 05:05:59,419 - INFO - Step 3700: cumulative augmentation rate = 49.7% (58899/118432 samples coded)
+Training:  67%|██�2026-01-24 05:08:35,001 - INFO - Step 3800: cumulative augmentation rate = 49.8% (60559/121632 samples coded)
+Training:  68%|██████▊   | 3898/5698 [1:43:42<40:25,  1.35s/i2026-01-24 05:11:09,483 - INFO - Step 3900: cumulative augmentation rate = 49.8% (62191/124832 samples coded)
+Training:  70%|███████ 2026-01-24 05:13:41,092 - INFO - Step 4000: cumulative augmentation rate = 49.8% (63778/128032 samples coded)
+Training:  72%|███�2026-01-24 05:16:12,459 - INFO - Step 4100: cumulative augmentation rate = 49.8% (65391/131232 samples coded)
+Training:  74%|███████▎  2026-01-24 05:18:43,052 - INFO - Step 4200: cumulative augmentation rate = 49.8% (66980/134432 samples coded)
+Training:  75%|███████▌  | 4292/5698 [1:53:38<42026-01-24 05:21:16,022 - INFO - Step 4300: cumulative augmentation rate = 49.8% (68601/137632 samples coded)
+Training:  77%|███████▋  | 4383/5698 [1:55:59<39:29,  1.82026-01-24 05:23:34,245 - WARNING - NaN gradient detected at batch 4391
+Training:  77%|███████▋  | 4392/5698 [1:56:12<28:00,  1.29s/it, loss=0.0007, task_acc=0.9992026-01-24 05:23:47,963 - INFO - Step 4400: cumulative augmentation rate = 49.9% (70236/140832 samples coded)
+Training:  79%|███████▉  2026-01-24 05:26:17,735 - INFO - Step 4500: cumulative augmentation rate = 49.9% (71854/144032 samples coded)
+Training:  81%|████████  | 4593/5698 [2:01:15<33:46,  1.83s/it, loss=2026-01-24 05:28:48,133 - INFO - Step 4600: cumulative augmentation rate = 49.9% (73428/147232 samples coded)
+T2026-01-24 05:31:14,170 - INFO - Step 4700: cumulative augmentation rate = 49.9% (75002/150432 samples coded)
+Training:  84%|████████▍ | 4800/5698 [2:06:26<31:38,  2.11s/it,2026-01-24 05:33:48,789 - INFO - Step 4800: cumulative augmentation rate = 49.9% (76615/153632 samples coded)
+Training:  86%|██████2026-01-24 05:36:20,022 - INFO - Step 4900: cumulative augmentation rate = 49.9% (78254/156832 samples coded)
+Training:  88%|████████▊ | 4997/5698 [2:11:21<12:50,  1.10s/it, loss=0.0009, ta2026-01-24 05:38:50,470 - INFO - Step 5000: cumulative augmentation rate = 49.9% (79884/160032 samples coded)
+Training:  89%|████████▉ | 50962026-01-24 05:41:24,884 - INFO - Step 5100: cumulative augmentation rate = 49.9% (81500/163232 samples coded)
+T2026-01-24 05:43:51,088 - INFO - Step 5200: cumulative augmentation rate = 49.9% (83076/166432 samples coded)
+Training:  93%|█████████▎| 5300/5698 [2:18:58<10:41,  1.61s/it, loss=0.0009, task2026-01-24 05:46:20,588 - INFO - Step 5300: cumulative augmentation rate = 49.9% (84637/169632 samples coded)
+Training:  95%|█████████▍| 5397/5698 [2:21:28<09:48,  1.96s2026-01-24 05:48:54,854 - INFO - Step 5400: cumulative augmentation rate = 49.9% (86255/172832 samples coded)
+Training:  96%|█████████▋| 5494/5698 2026-01-24 05:51:27,235 - INFO - Step 5500: cumulative augmentation rate = 49.9% (87853/176032 samples coded)
+Training:  98%|██████2026-01-24 05:53:57,730 - INFO - Step 5600: cumulative augmentation rate = 49.9% (89463/179232 samples coded)
+Training: 12026-01-24 05:56:28,945 - INFO - Epoch 1 train: loss=0.0009, task_acc=0.9997.9997]
+Validating: 100%|█████████▉| 4395/4405 [16:17<2026-01-24 06:12:48,299 - INFO - Epoch 1 val: loss=0.8735, eer=0.0557, min_dcf=0.4350
+2026-01-24 06:12:48,314 - INFO - [epoch_complete] epoch=1, train_loss=0.0009, val_eer=0.0557
+2026-01-24 06:12:48,315 - INFO - Epoch 2: lambda = 0.0000
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]wandb: WARNING Tried to log to step 1 that is less than the current step 227. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:   2%|▏         | 98/5698 [02:37<2:08:04,  1.37s/it, loss=0.002026-01-24 06:15:29,246 - INFO - Step 100: cumulative augmentation rate = 50.2% (1623/3232 samples coded)
+Training:   3%|▎         | 193/5698 [04:57<2:04:23,  1.36s/it, loss=0.00152026-01-24 06:17:58,310 - INFO - Step 200: cumulative augmentation rate = 50.4% (3243/6432 samples coded)
+Training:   5%|▌         | 299/5698 [07:41<3:04:05,  22026-01-24 06:20:31,622 - INFO - Step 300: cumulative augmentation rate = 50.7% (4888/9632 samples coded)
+Training:   7%|▋         | 394/5698 [10:08<2:43:28,  1.2026-01-24 06:23:07,586 - INFO - Step 400: cumulative augmentation rate = 50.6% (6498/12832 samples coded)
+Training:   9%|▉         | 500/56982026-01-24 06:25:40,032 - INFO - Step 500: cumulative augmentation rate = 50.4% (8075/16032 samples coded)
+Training:  10%|█         | 595/5698 2026-01-24 06:28:03,057 - INFO - Step 600: cumulative augmentation rate = 50.1% (9627/19232 samples coded)
+Training:  12%|█▏        | 699/5698 [17:52<2:36:58,  1.88s/it, loss=0.0009, task_acc=0.92026-01-24 06:30:41,190 - INFO - Step 700: cumulative augmentation rate = 50.2% (11263/22432 samples coded)
+Training:  14%|█▍        | 792/5698 [20:06<1:07:48,  1.21it/s, loss=0.0007, task_acc=0.992026-01-24 06:33:09,351 - WARNING - NaN gradient detected at batch 799
+2026-01-24 06:33:14,650 - INFO - Step 800: cumulative augmentation rate = 50.2% (12858/25632 samples coded)
+Training:  16%|█▌        | 896/5698 [22:52<2:082026-01-24 06:35:48,276 - INFO - Step 900: cumulative augmentation rate = 50.2% (14469/28832 samples coded)
+Training:2026-01-24 06:38:23,211 - INFO - Step 1000: cumulative augmentation rate = 50.1% (16053/32032 samples coded)
+Training:  192026-01-24 06:40:56,838 - INFO - Step 1100: cumulative augmentation rate = 50.1% (17663/35232 samples coded)
+Training:  21%|██        | 1194/5698 [30:22<2:15:25,  1.82026-01-24 06:43:17,363 - INFO - Step 1200: cumulative augmentation rate = 50.0% (19227/38432 samples coded)
+Training:  23%|██▎       | 12952026-01-24 06:45:57,198 - INFO - Step 1300: cumulative augmentation rate = 50.1% (20844/41632 samples coded)
+Training:  24%|██▍       | 1395/5698 [35:25<1:13:12,  1.02s/it, loss=0.2026-01-24 06:48:26,748 - INFO - Step 1400: cumulative augmentation rate = 50.0% (22434/44832 samples coded)
+Training:  26%|�2026-01-24 06:51:06,746 - INFO - Step 1500: cumulative augmentation rate = 50.1% (24085/48032 samples coded)
+Training:  28%|██▊       | 1596/5698 [40:30<1:19:092026-01-24 06:53:26,567 - INFO - Step 1600: cumulative augmentation rate = 50.1% (25646/51232 samples coded)
+Training:  30%|██▉       | 1696/5698 [42:55<2:14:07,  2.01s/it, loss=0.0008, task_acc=0.9992026-01-24 06:55:50,081 - INFO - Step 1700: cumulative augmentation rate = 50.0% (27224/54432 samples coded)
+Train2026-01-24 06:58:27,284 - INFO - Step 1800: cumulative augmentation rate = 50.1% (28861/57632 samples coded)
+Training:  33%|███▎      | 1895/5698 2026-01-24 07:01:02,318 - INFO - Step 1900: cumulative augmentation rate = 50.1% (30454/60832 samples coded)
+Training:  35%|███▍      | 1993/5698 [50:27<1:09:19,  1.12s/it, loss=0.0010, task2026-01-24 07:03:27,337 - INFO - Step 2000: cumulative augmentation rate = 50.1% (32055/64032 samples coded)
+Training:  37%|███▋2026-01-24 07:05:58,434 - INFO - Step 2100: cumulative augmentation rate = 50.0% (33606/67232 samples coded)
+Training:  39%|███▊      | 2200/5698 [55:39<1:49:34,  1.88s/it,2026-01-24 07:08:27,967 - INFO - Step 2200: cumulative augmentation rate = 50.0% (35182/70432 samples coded)
+Training:  2026-01-24 07:11:02,416 - INFO - Step 2300: cumulative augmentation rate = 49.9% (36779/73632 samples coded)
+Training:  42%|████2026-01-24 07:13:28,168 - INFO - Step 2400: cumulative augmentation rate = 49.9% (38337/76832 samples coded)
+Training:  44%|████▍     | 2500/5698 [1:03:12<1:52:04,  22026-01-24 07:16:01,410 - INFO - Step 2500: cumulative augmentation rate = 49.9% (39922/80032 samples coded)
+Training:  46%|████▌   2026-01-24 07:18:38,706 - INFO - Step 2600: cumulative augmentation rate = 49.9% (41569/83232 samples coded)
+Training:  47%|████▋     | 2699/5698 [1:08:17<1:09:04,  1.38s/i2026-01-24 07:21:09,458 - INFO - Step 2700: cumulative augmentation rate = 49.9% (43138/86432 samples coded)
+Training:  49%|████▉     | 2794/5698 [1:10:2026-01-24 07:23:43,238 - INFO - Step 2800: cumulative augmentation rate = 49.9% (44743/89632 samples coded)
+Trainin2026-01-24 07:26:15,475 - INFO - Step 2900: cumulative augmentation rate = 49.9% (46333/92832 samples coded)
+Training:  53%|█████▎    | 2992/5698 [1:15:39<45:43,  1.01s2026-01-24 07:28:45,417 - INFO - Step 3000: cumulative augmentation rate = 49.9% (47940/96032 samples coded)
+Training:  54%|███�2026-01-24 07:31:25,860 - INFO - Step 3100: cumulative augmentation rate = 50.0% (49620/99232 samples coded)
+Training:  56%|█████▌    | 3178/5698 [1:20:30<1:08:20,  1.63s/it, loss=0.0006, task_a2026-01-24 07:33:25,532 - WARNING - NaN gradient detected at batch 3183
+Training:  56%|█████▌    | 3197/5698 [1:20:56<47:07,  1.13s/it, loss=0.0006, task_acc=0.92026-01-24 07:33:51,740 - INFO - Step 3200: cumulative augmentation rate = 50.0% (51225/102432 samples coded)
+Training:  58%|█████▊    | 3300/5698 [1:23:45<1:48:16,  2.71s/it,2026-01-24 07:36:34,240 - INFO - Step 3300: cumulative augmentation rate = 50.0% (52836/105632 samples coded)
+T2026-01-24 07:39:07,092 - INFO - Step 3400: cumulative augmentation rate = 50.0% (54457/108832 samples coded)
+Training:  61%|██████▏   | 3496/5698 [1:28:50<1:15:40,  2.06s/it, loss=0.0006, 2026-01-24 07:41:44,746 - INFO - Step 3500: cumulative augmentation rate = 50.1% (56115/112032 samples coded)
+Training:  2026-01-24 07:44:14,147 - INFO - Step 3600: cumulative augmentation rate = 50.1% (57685/115232 samples coded)
+Training:  65%|██████▍   2026-01-24 07:46:51,905 - INFO - Step 3700: cumulative augmentation rate = 50.1% (59311/118432 samples coded)
+Training:  67%|██████▋   | 3800/5698 [1:36:31<27:08,  1.17it/2026-01-24 07:49:24,934 - INFO - Step 3800: cumulative augmentation rate = 50.1% (60930/121632 samples coded)
+Training:  68%|██████▊   | 3892/5698 [1:38:55<32:32,  1.08s/it, loss=0.0006, ta2026-01-24 07:52:00,672 - INFO - Step 3900: cumulative augmentation rate = 50.1% (62530/124832 samples coded)
+Training:  70%|███████   | 3994/5692026-01-24 07:54:36,036 - INFO - Step 4000: cumulative augmentation rate = 50.1% (64111/128032 samples coded)
+Training:  72%|███████▏  | 4095/5698 [1:44:08<39:2026-01-24 07:57:05,037 - INFO - Step 4100: cumulative augmentation rate = 50.1% (65703/131232 samples coded)
+Training:  74%|███████▎  | 4195/5698 [1:46:49<52:35,  2.10s/i2026-01-24 07:59:46,584 - INFO - Step 4200: cumulative augmentation rate = 50.1% (67329/134432 samples coded)
+Training:  75%|███████▌  | 4295/5698 [1:49:31<53:05,  2.27s/it, loss=2026-01-24 08:02:27,163 - INFO - Step 4300: cumulative augmentation rate = 50.1% (68949/137632 samples coded)
+Training:  77%|█�2026-01-24 08:05:07,942 - INFO - Step 4400: cumulative augmentation rate = 50.1% (70551/140832 samples coded)
+Training:  79%|███████▉  | 4496/5698 [1:54:50<42026-01-24 08:07:44,459 - INFO - Step 4500: cumulative augmentation rate = 50.1% (72164/144032 samples coded)
+Training:  81%|████████  | 4596/5698 [1:57:23<35:05,  1.91s/it, loss=0.0006, task_acc=0.9992026-01-24 08:10:17,101 - INFO - Step 4600: cumulative augmentation rate = 50.1% (73757/147232 samples coded)
+Training:  82%|�2026-01-24 08:12:58,161 - INFO - Step 4700: cumulative augmentation rate = 50.1% (75352/150432 samples coded)
+Training:  84%|████████▍ | 4794/5698 [2:02:34<14:20,  1.05it/s,2026-01-24 08:15:38,793 - INFO - Step 4800: cumulative augmentation rate = 50.1% (76919/153632 samples coded)
+Training:  86%|██████2026-01-24 08:18:25,636 - INFO - Step 4900: cumulative augmentation rate = 50.1% (78532/156832 samples coded)
+Training:  88%|████████▊ | 4991/5698 [2:07:52<12:08,  1.03s/it, loss=0.0006, ta2026-01-24 08:20:57,971 - INFO - Step 5000: cumulative augmentation rate = 50.0% (80095/160032 samples coded)
+Training:  89%|████████▉ | 5099/5698 [2:10:30<12026-01-24 08:23:22,376 - INFO - Step 5100: cumulative augmentation rate = 50.0% (81644/163232 samples coded)
+Training:  91%|�2026-01-24 08:25:52,622 - INFO - Step 5200: cumulative augmentation rate = 50.0% (83234/166432 samples coded)
+Training:  93%|█████████▎| 5294/5698 [2:15:38<15:16,  2.27s/it, loss=0.0006, task_acc=0.9998]2026-01-24 08:28:34,527 - INFO - Step 5300: cumulative augmentation rate = 50.0% (84868/169632 samples coded)
+Training:  95%|█████████▍| 5400/5698 [2:18:21<06:09,  1.24s/it, loss=2026-01-24 08:31:13,893 - INFO - Step 5400: cumulative augmentation rate = 50.0% (86486/172832 samples coded)
+Training:  96%|█████████▌| 5470/5698 [2:20:13<05:17, 2026-01-24 08:33:02,154 - WARNING - NaN gradient detected at batch 5470
+Training:  96%|█████████▋| 5497/5698 [2:20:55<02026-01-24 08:33:49,646 - INFO - Step 5500: cumulative augmentation rate = 50.0% (88093/176032 samples coded)
+Training:  98%|█████████▊2026-01-24 08:36:20,673 - INFO - Step 5600: cumulative augmentation rate = 50.0% (89655/179232 samples coded)
+Training: 100%|██�2026-01-24 08:38:51,254 - INFO - Epoch 2 train: loss=0.0006, task_acc=0.9998
+Validating: 100%|█████████▉| 4399/4405 [16:17<00:01,  4.54it/s2026-01-24 08:55:09,846 - INFO - Epoch 2 val: loss=0.2908, eer=0.0562, min_dcf=0.5421
+2026-01-24 08:55:09,848 - INFO - [epoch_complete] epoch=2, train_loss=0.0006, val_eer=0.0562
+2026-01-24 08:55:09,850 - INFO - Epoch 3: lambda = 0.0000
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]wandb: WARNING Tried to log to step 2 that is less than the current step 341. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:   2%|▏         | 98/5698 [02:37<3:32:10,  2.27s/it, loss=0.00302026-01-24 08:57:48,654 - INFO - Step 100: cumulative augmentation rate = 49.7% (1607/3232 samples coded)
+Training:   3%|▎         | 193/5698 [05:09<1:38:47,  1.08s/it, loss=0.0070, 2026-01-24 09:00:30,672 - INFO - Step 200: cumulative augmentation rate = 49.6% (3193/6432 samples coded)
+Training:   5%|▌         | 299/5698 [08:02<3:00:01,  2.02026-01-24 09:03:12,593 - INFO - Step 300: cumulative augmentation rate = 50.2% (4833/9632 samples coded)
+Training:   7%|▋         | 394/5698 [10:35<1:57:48,  1.332026-01-24 09:05:55,042 - INFO - Step 400: cumulative augmentation rate = 50.2% (6442/12832 samples coded)
+Training:   9%|▉         | 500/5698 [2026-01-24 09:08:33,330 - INFO - Step 500: cumulative augmentation rate = 50.1% (8030/16032 samples coded)
+Training:  10%|█         | 595/5698 [12026-01-24 09:11:14,505 - INFO - Step 600: cumulative augmentation rate = 49.9% (9590/19232 samples coded)
+Training:  12%|█▏        | 699/5698 [18:47<1:41:35,  1.22s/it, loss=0.0028, task_acc=0.9992026-01-24 09:14:06,057 - INFO - Step 700: cumulative augmentation rate = 49.9% (11202/22432 samples coded)
+Training:  14%|█▍        | 792/5698 [21:29<3:59:11,  2.93s/it, loss=0.0025, task_acc=0.99932026-01-24 09:16:53,180 - INFO - Step 800: cumulative augmentation rate = 49.9% (12794/25632 samples coded)
+Training:  16%|█▌        | 896/5698 [24:22<1:13:12026-01-24 09:19:45,020 - INFO - Step 900: cumulative augmentation rate = 50.0% (14413/28832 samples coded)
+Training:  2026-01-24 09:22:24,855 - INFO - Step 1000: cumulative augmentation rate = 50.0% (16003/32032 samples coded)
+Training:  19%|2026-01-24 09:25:11,399 - INFO - Step 1100: cumulative augmentation rate = 49.9% (17580/35232 samples coded)
+Training:  21%|██        | 1194/5698 [32:36<3:24:57,  2.73s2026-01-24 09:27:55,563 - INFO - Step 1200: cumulative augmentation rate = 49.9% (19191/38432 samples coded)
+Training:  23%|██▎       | 1295/52026-01-24 09:30:39,470 - INFO - Step 1300: cumulative augmentation rate = 50.0% (20798/41632 samples coded)
+Training:  24%|██▍       | 1395/5698 [38:13<2:22:06,  1.98s/it, loss=0.002026-01-24 09:33:33,096 - INFO - Step 1400: cumulative augmentation rate = 50.0% (22430/44832 samples coded)
+Training:  26%|█�2026-01-24 09:36:26,928 - INFO - Step 1500: cumulative augmentation rate = 50.1% (24055/48032 samples coded)
+Training:  28%|██▊       | 1596/5698 [43:56<2:53:14, 2026-01-24 09:39:13,439 - INFO - Step 1600: cumulative augmentation rate = 50.1% (25642/51232 samples coded)
+Training:  30%|██▉       | 1696/5698 [46:46<1:11:23,  1.07s/it, loss=0.0012, task_acc=0.9997]2026-01-24 09:42:07,901 - INFO - Step 1700: cumulative augmentation rate = 50.1% (27264/54432 samples coded)
+Trainin2026-01-24 09:45:01,490 - INFO - Step 1800: cumulative augmentation rate = 50.1% (28875/57632 samples coded)
+Training:  32%|█�2026-01-24 09:45:50,727 - WARNING - NaN gradient detected at batch 18319997]
+Training:  33%|███▎      | 1895/5698 [52026-01-24 09:47:57,279 - INFO - Step 1900: cumulative augmentation rate = 50.1% (30464/60832 samples coded)
+Training:  35%|███▍      | 1993/5698 [55:19<1:23:34,  1.35s/it, loss=0.0012, ta2026-01-24 09:50:43,912 - INFO - Step 2000: cumulative augmentation rate = 50.1% (32075/64032 samples coded)
+Training:  37%|███�2026-01-24 09:53:47,297 - INFO - Step 2100: cumulative augmentation rate = 50.1% (33682/67232 samples coded)
+Training:  39%|███▊      | 2199/5698 [1:01:14<42:29,  1.37it/s, loss=2026-01-24 09:56:32,375 - INFO - Step 2200: cumulative augmentation rate = 50.1% (35292/70432 samples coded)
+Training:  40%|██�2026-01-24 09:59:18,453 - INFO - Step 2300: cumulative augmentation rate = 50.1% (36896/73632 samples coded)
+Training:  42%|████▏     | 2391/5698 [1:06:42<1:17:28,  1.41s/it, loss=0.0010, task_acc2026-01-24 10:02:12,812 - INFO - Step 2400: cumulative augmentation rate = 50.1% (38472/76832 samples coded)
+Training:  44%|████2026-01-24 10:04:54,263 - INFO - Step 2500: cumulative augmentation rate = 50.1% (40092/80032 samples coded)
+Training:  46%|████▌     | 2600/5698 [1:12:29<12026-01-24 10:07:39,440 - INFO - Step 2600: cumulative augmentation rate = 50.1% (41702/83232 samples coded)
+Training:  47%|███�2026-01-24 10:10:26,199 - INFO - Step 2700: cumulative augmentation rate = 50.1% (43337/86432 samples coded)
+Training:  49%|████▉     | 2799/5698 [1:17:49<1:30:27,  1.82026-01-24 10:12:59,834 - INFO - Step 2800: cumulative augmentation rate = 50.1% (44886/89632 samples coded)
+Training:  51%|█████     | 2894/52026-01-24 10:15:46,040 - INFO - Step 2900: cumulative augmentation rate = 50.1% (46509/92832 samples coded)
+Training:  53%|█████▎    | 2997/52026-01-24 10:18:18,793 - INFO - Step 3000: cumulative augmentation rate = 50.0% (48054/96032 samples coded)
+Training:  54%|█████▍    | 3099/5698 [1:25:51<1:36:29,  2.23s/it, loss=2026-01-24 10:21:03,241 - INFO - Step 3100: cumulative augmentation rate = 50.0% (49656/99232 samples coded)
+Training:  56%|█████▌    | 3192/5698 [1:28:22<1:09:01,  1.65s/it, l2026-01-24 10:23:47,844 - INFO - Step 3200: cumulative augmentation rate = 50.1% (51289/102432 samples coded)
+Training:  58%|█████▊    | 3295/5698 2026-01-24 10:26:31,037 - INFO - Step 3300: cumulative augmentation rate = 50.1% (52891/105632 samples coded)
+Training:  60%|████2026-01-24 10:29:16,618 - INFO - Step 3400: cumulative augmentation rate = 50.0% (54461/108832 samples coded)
+Training:  61%|██████▏   | 3500/5698 [1:36:48<49:12,  1.34s/it, loss=0.0007, task_acc=0.92026-01-24 10:31:58,135 - INFO - Step 3500: cumulative augmentation rate = 50.1% (56096/112032 samples coded)
+Training:  63%|██████▎   | 3592/5698 [1:39:19<1:02026-01-24 10:34:45,965 - INFO - Step 3600: cumulative augmentation rate = 50.1% (57727/115232 samples coded)
+Training:  65%|██████▍   | 3693/5692026-01-24 10:37:41,102 - INFO - Step 3700: cumulative augmentation rate = 50.1% (59342/118432 samples coded)
+Training:  67%|██████▋   | 3794/5698 [1:45:12<12026-01-24 10:40:28,507 - INFO - Step 3800: cumulative augmentation rate = 50.1% (60897/121632 samples coded)
+Training:  2026-01-24 10:41:29,869 - WARNING - NaN gradient detected at batch 3835k_acc=0.9998]
+Training:  68%|██████▊   | 3895/5698 [1:47:55<52:47,  1.76s/it, loss=0.2026-01-24 10:43:12,936 - INFO - Step 3900: cumulative augmentation rate = 50.1% (62491/124832 samples coded)
+Training:  70%|███�2026-01-24 10:46:02,458 - INFO - Step 4000: cumulative augmentation rate = 50.1% (64089/128032 samples coded)
+Train2026-01-24 10:48:52,362 - INFO - Step 4100: cumulative augmentation rate = 50.0% (65655/131232 samples coded)
+Training:  74%|███████▎  | 4197/5698 [1:56:23<50:46,  2.03s/it, loss=0.0007, task_acc=0.9992026-01-24 10:51:38,613 - INFO - Step 4200: cumulative augmentation rate = 50.0% (67222/134432 samples coded)
+Training:  75%|███████▌  | 4297/5698 [1:59:18<44:40,  1.91s/it, loss=0.0007, ta2026-01-24 10:54:34,462 - INFO - Step 4300: cumulative augmentation rate = 50.0% (68815/137632 samples coded)
+Training:2026-01-24 10:57:21,208 - INFO - Step 4400: cumulative augmentation rate = 50.0% (70363/140832 samples coded)
+Training:  79%|███████▉  2026-01-24 11:00:07,715 - INFO - Step 4500: cumulative augmentation rate = 50.0% (71949/144032 samples coded)
+Training:  81%|████████  | 4598/5698 [2:07:50<39:12,  2.14s/i2026-01-24 11:03:01,297 - INFO - Step 4600: cumulative augmentation rate = 49.9% (73538/147232 samples coded)
+Training:  82%|████████▏ | 4697/5698 [2:10:49<17:19,  1.04s/it, loss=2026-01-24 11:06:06,771 - INFO - Step 4700: cumulative augmentation rate = 50.0% (75145/150432 samples coded)
+Training:  84%|████████2026-01-24 11:08:58,008 - INFO - Step 4800: cumulative augmentation rate = 49.9% (76736/153632 samples coded)
+Training:  86%|████████▌ | 4894/5698 [2:16:24<17:08,  1.28s/it, loss=0.0008, task_acc2026-01-24 11:11:47,186 - INFO - Step 4900: cumulative augmentation rate = 50.0% (78357/156832 samples coded)
+Training:  86%|████████srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+[2026-01-24T11:12:34.566] error: *** JOB 18653574 ON gcn59 CANCELLED AT 2026-01-24T11:12:34 DUE to SIGNAL Terminated ***
+Training:  86%|████████▋ | 4926/5698 [2:17:22<14:49,  1.15s/it, loss=0.0008, task_acc=0.9998][2026-01-24T11:12:34.566] error: *** STEP 18653574.0 ON gcn59 CANCELLED AT 2026-01-24T11:12:34 DUE to SIGNAL Terminated ***
+Repo root: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+SLURM_SUBMIT_DIR: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+downloading uv 0.9.26 x86_64-unknown-linux-gnu
+no checksums to verify
+installing to /home/jcooper/.local/bin
+  uv
+  uvx
+everything's installed!
+Resolved 134 packages in 3ms
+Audited 107 packages in 384ms
+CUDA available: True
+GPU device count: 1
+Active GPU: NVIDIA A100-SXM4-40GB
+
+WANDB_API_KEY: set (wandb logging enabled)
+=== Environment diagnostics ===
+PWD: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm
+ASVSPOOF5_ROOT: /projects/prjs1904/data/asvspoof5
+HF_HOME: /scratch-shared/jcooper/.cache/huggingface
+WANDB_PROJECT: asvspoof5-dann
+WANDB_MODE:
+ffmpeg: not-found
+===============================
+=== Training WavLM + ERM ===
+2026-01-24 00:37:55,914 - INFO - Using device: cuda
+2026-01-24 00:37:55,917 - INFO - Run directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/wavlm_erm
+2026-01-24 00:37:57,138 - INFO - Git commit: 06c6d928
+2026-01-24 00:37:57,138 - INFO - Hardware: NVIDIA A100-SXM4-40GB
+2026-01-24 00:37:57,141 - INFO - CODEC classes (manifest): 12
+2026-01-24 00:37:57,141 - INFO - CODEC_Q classes (manifest): 9
+2026-01-24 00:37:57,742 - INFO - Train samples: 182357
+2026-01-24 00:37:57,742 - INFO - Val samples: 140950
+2026-01-24 00:38:00,866 - INFO - Total parameters: 95,300,734
+2026-01-24 00:38:00,867 - INFO - Trainable parameters: 918,798
+wandb: Currently logged in as: mike-cooper (mike-cooper-uva) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run 7bsc8ha4
+wandb: Tracking run with wandb version 0.23.1
+wandb: Run data is saved locally in /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/wavlm_erm/wandb/run-20260124_003801-7bsc8ha4
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run wavlm_erm
+wandb: ⭐️ View project at https://wandb.ai/mike-cooper-uva/asvspoof5-dann
+wandb: 🚀 View run at https://wandb.ai/mike-cooper-uva/asvspoof5-dann/runs/7bsc8ha4
+2026-01-24 00:38:03,997 - INFO - Wandb initialized: https://wandb.ai/mike-cooper-uva/asvspoof5-dann/runs/7bsc8ha4
+2026-01-24 00:38:04,000 - INFO - Model: 95,300,734 params (918,798 trainable)
+2026-01-24 00:38:04,001 - INFO - Dataset: train=182357, val=140950
+2026-01-24 00:38:04,003 - INFO - [experiment_start] method=erm, backbone=wavlm_base_plus
+2026-01-24 00:38:04,003 - INFO - Starting training for 50 epochs
+2026-01-24 00:38:04,003 - INFO - Run directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/wavlm_erm
+2026-01-24 00:38:04,003 - INFO - Model: 95,300,734 params (918,798 trainable)
+2026-01-24 00:38:04,004 - INFO - Dataset: train=182357, val=140950
+2026-01-24 00:38:04,008 - INFO - ============================================================
+2026-01-24 00:38:04,008 - INFO - Training ERM model
+2026-01-24 00:38:04,008 - INFO - Backbone: wavlm_base_plus
+2026-01-24 00:38:04,008 - INFO - Seed: 42
+2026-01-24 00:38:04,008 - INFO - ============================================================
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]/gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/.venv/lib64/python3.11/site-packages/torch/nn/functional.py:6044: UserWarning: Support for mismatched key_padding_mask and attn_mask is deprecated. Use same type for both instead.
+  warnings.warn(
+Training:  73%|██�2026-01-24 00:53:14,903 - WARNING - NaN gradient detected at batch 41680]
+Training:  83%|████████▎ 2026-01-24 00:54:52,265 - WARNING - NaN gradient detected at batch 4722
+Training: 100%|█████████▉| 5697/5698 [19:2026-01-24 00:57:34,489 - INFO - Epoch 0 train: loss=0.0321, task_acc=0.9882
+Validating: 100%|█████2026-01-24 01:13:51,791 - INFO - Epoch 0 val: loss=0.9451, eer=0.0459, min_dcf=0.4277
+2026-01-24 01:13:52,222 - INFO - New best eer: 0.0459
+2026-01-24 01:13:52,224 - INFO - [epoch_complete] epoch=0, train_loss=0.0321, val_eer=0.0459
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]/gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/.venv/lib64/python3.11/site-packages/torch/nn/functional.py:6044: UserWarning: Support for mismatched key_padding_mask and attn_mask is deprecated. Use same type for both instead.
+  warnings.warn(
+Training:   0%|          | 5/5698 [00:01<19:10,  4.95it/s, loss=0.0001, task_acc=1.0000]wandb: WARNING Tried to log to step 0 that is less than the current step 113. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  30%|███       | 1736/5698 [04:45<11:03,  5.97i2026-01-24 01:18:37,781 - WARNING - NaN gradient detected at batch 1736
+Training:  70%|███████   | 4010/5698 [10:52<05:10,  5.44it/s, loss=2026-01-24 01:24:45,626 - WARNING - NaN gradient detected at batch 4014
+T2026-01-24 01:28:29,104 - WARNING - NaN gradient detected at batch 53926, task_acc=0.9998]
+Training: 100%|█████████▉| 5693/5698 [15:25<00:00,  6.61it/s, loss=0.0006, ta2026-01-24 01:29:19,089 - INFO - Epoch 1 train: loss=0.0006, task_acc=0.9998
+Validating: 100%|█████████▉| 4403/4405 [162026-01-24 01:45:37,910 - INFO - Epoch 1 val: loss=0.5967, eer=0.0405, min_dcf=0.3364
+2026-01-24 01:45:38,283 - INFO - New best eer: 0.0405
+2026-01-24 01:45:38,284 - INFO - [epoch_complete] epoch=1, train_loss=0.0006, val_eer=0.0405
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]/gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/.venv/lib64/python3.11/site-packages/torch/nn/functional.py:6044: UserWarning: Support for mismatched key_padding_mask and attn_mask is deprecated. Use same type for both instead.
+  warnings.warn(
+Training:   1%|          | 31/5698 [00:05<15:09,  6.23it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 1 that is less than the current step 227. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  38%|███▊      | 2181/5698 [05:55<09:26,  6.21it/s, loss=0.0002, task_acc=0.9999]2026-01-24 01:51:33,936 - WARNING - NaN gradient detected at batch 2182
+Training:  81%|██�2026-01-24 01:58:06,599 - WARNING - NaN gradient detected at batch 45998]
+Training: 100%|█████████▉| 562026-01-24 02:01:06,149 - INFO - Epoch 2 train: loss=0.0005, task_acc=0.9998
+Validating: 100%|█████████▉| 4394/4405 [16:29<00:02,  4.53it/s2026-01-24 02:17:38,577 - INFO - Epoch 2 val: loss=0.5751, eer=0.0351, min_dcf=0.3076
+2026-01-24 02:17:38,988 - INFO - New best eer: 0.0351
+2026-01-24 02:17:39,015 - INFO - [epoch_complete] epoch=2, train_loss=0.0005, val_eer=0.0351
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]/gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/.venv/lib64/python3.11/site-packages/torch/nn/functional.py:6044: UserWarning: Support for mismatched key_padding_mask and attn_mask is deprecated. Use same type for both instead.
+  warnings.warn(
+Training:   1%|          | 29/5698 [00:05<15:11,  6.22it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 2 that is less than the current step 341. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  19%|█▉    2026-01-24 02:20:32,498 - WARNING - NaN gradient detected at batch 1112
+Training:  66%|█████�2026-01-24 02:27:33,008 - WARNING - NaN gradient detected at batch 3753
+Training: 100%|█████████▉| 5694/5698 [15:07<00:00,  6.98it/s, loss=0.00092026-01-24 02:32:47,139 - INFO - Epoch 3 train: loss=0.0009, task_acc=0.9998
+Va2026-01-24 02:48:57,573 - INFO - Epoch 3 val: loss=0.9071, eer=0.0435, min_dcf=0.3915
+2026-01-24 02:48:57,575 - INFO - [epoch_complete] epoch=3, train_loss=0.0009, val_eer=0.0435
+Training:   1%|          | 33/5698 [00:06<25:34,  3.69it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 3 that is less than the current step 455. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:   2%|▏         | 132/5698 [00:23<15:31,  5.98it/2026-01-24 02:49:21,576 - WARNING - NaN gradient detected at batch 132
+Training:  48%|████▊     2026-01-24 02:56:08,562 - WARNING - NaN gradient detected at batch 2742
+Training:  87%|████�2026-01-24 03:01:48,271 - WARNING - NaN gradient detected at batch 4941
+Training: 100%|██████████| 5698/5698 [14:47<00:00,  7.31it/s, loss=0.0004, task_acc=0.9992026-01-24 03:03:45,577 - INFO - Epoch 4 train: loss=0.0005, task_acc=0.9998
+Validating: 100%|████�2026-01-24 03:20:12,238 - INFO - Epoch 4 val: loss=2.1908, eer=0.0422, min_dcf=0.8333
+2026-01-24 03:20:12,239 - INFO - [epoch_complete] epoch=4, train_loss=0.0005, val_eer=0.0422
+Training:   0%|          | 8/5698 [00:01<15:59,  5.93it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 4 that is less than the current step 569. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  27%|██▋       | 1534/2026-01-24 03:24:23,533 - WARNING - NaN gradient detected at batch 1535
+Training:  65%|██████▌   | 3729/56982026-01-24 03:30:21,584 - WARNING - NaN gradient detected at batch 3734
+Training: 100%|████�2026-01-24 03:35:42,756 - INFO - Epoch 5 train: loss=0.0006, task_acc=0.9999
+Validating: 100%|█████████▉| 4394/4405 [12026-01-24 03:52:01,010 - INFO - Epoch 5 val: loss=1.3246, eer=0.0433, min_dcf=0.5350
+2026-01-24 03:52:01,038 - INFO - [epoch_complete] epoch=5, train_loss=0.0006, val_eer=0.0433
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]/gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/.venv/lib64/python3.11/site-packages/torch/nn/functional.py:6044: UserWarning: Support for mismatched key_padding_mask and attn_mask is deprecated. Use same type for both instead.
+  warnings.warn(
+Training:   0%|          | 13/5698 [00:02<15:36,  6.07it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 5 that is less than the current step 683. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:   3%|▎         | 1672026-01-24 03:52:29,977 - WARNING - NaN gradient detected at batch 177
+Training:  49%|████▉     | 2779/5698 [07:29<08:01,  6.07it/s, loss=0.0004, task_acc=02026-01-24 03:59:31,470 - WARNING - NaN gradient detected at batch 2781
+Training:  95%|█████████▌| 5430/5698 [14:40<00:42,  6.33it/s, loss=0.0004, task_acc=0.9992026-01-24 04:06:43,201 - WARNING - NaN gradient detected at batch 5436
+Training: 1002026-01-24 04:07:25,311 - INFO - Epoch 6 train: loss=0.0004, task_acc=0.99999]
+Valida2026-01-24 04:23:41,548 - INFO - Epoch 6 val: loss=2.0624, eer=0.0497, min_dcf=0.9073
+2026-01-24 04:23:41,556 - INFO - [epoch_complete] epoch=6, train_loss=0.0004, val_eer=0.0497
+Training:   0%|          | 11/5698 [00:02<16:07,  5.88it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 6 that is less than the current step 797. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  46%|████▌     | 2620/5698 [07:07<02026-01-24 04:30:50,268 - WARNING - NaN gradient detected at batch 2628
+Training:  88%|████████▊ | 4995/5698 [13:32<01:55,  6.11it/s, loss=0.2026-01-24 04:37:14,592 - WARNING - NaN gradient detected at batch 4996
+Training: 100%|██████████| 5698/5698 [15:27<00:00,  72026-01-24 04:39:09,321 - INFO - Epoch 7 train: loss=0.0002, task_acc=0.9999
+Validating: 100%|█████████▉| 4397/4405 [16:14<00:01,  4.442026-01-24 04:55:26,152 - INFO - Epoch 7 val: loss=2.0499, eer=0.0526, min_dcf=0.9990
+2026-01-24 04:55:26,165 - INFO - [epoch_complete] epoch=7, train_loss=0.0002, val_eer=0.0526
+Training:   1%|          | 44/5698 [00:07<17:14,  5.47it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 7 that is less than the current step 911. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+T2026-01-24 05:02:50,592 - WARNING - NaN gradient detected at batch 27407, task_acc=0.9999]
+Training: 100%|█████████▉| 5688/5698 [15:01<00:2026-01-24 05:10:28,355 - WARNING - NaN gradient detected at batch 5693
+Training: 100%|█████████▉| 5697/5698 [15:02<00:00,  7.15it/s, l2026-01-24 05:10:29,012 - INFO - Epoch 8 train: loss=0.0008, task_acc=0.9998
+Validating: 100%|█████████▉| 4396/4405 [2026-01-24 05:26:41,276 - INFO - Epoch 8 val: loss=4.3307, eer=0.1177, min_dcf=1.0000
+2026-01-24 05:26:41,278 - INFO - [epoch_complete] epoch=8, train_loss=0.0008, val_eer=0.1177
+Training:   0%|          | 14/5698 [00:02<15:13,  6.22it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 8 that is less than the current step 1025. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  39%|███▉      | 2216/5698 [06:00<08:56,  6.48it/s, loss=0.0000, task_a2026-01-24 05:32:41,563 - WARNING - NaN gradient detected at batch 2216
+Training:  99%|█████████▉| 5628/5698 [15:12<00:11,  6.02it/s, loss=0.0001, task_acc2026-01-24 05:41:55,014 - WARNING - NaN gradient detected at batch 5636
+Training: 100%|█████████▉| 5691/5698 [15:22<00:01,  6.66it/s, loss=0.0001, task_acc2026-01-24 05:42:04,584 - INFO - Epoch 9 train: loss=0.0002, task_acc=0.9999
+Validating: 2026-01-24 05:58:29,346 - INFO - Epoch 9 val: loss=0.3521, eer=0.0547, min_dcf=0.5453
+2026-01-24 05:58:29,347 - INFO - [epoch_complete] epoch=9, train_loss=0.0002, val_eer=0.0547
+Training:   0%|          | 27/5698 [00:04<14:16,  6.62it/s, loss=0.0013, task_acc=1.0000]wandb: WARNING Tried to log to step 9 that is less than the current step 1139. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  47%|████▋     | 2673/5698 [07:14<08:20,  6.05it/s, loss=0.00052026-01-24 06:05:45,335 - WARNING - NaN gradient detected at batch 2681
+Training: 100%|███�2026-01-24 06:13:53,970 - INFO - Epoch 10 train: loss=0.0005, task_acc=0.9999
+Validating: 100%|█████████▉| 4402/4405 [16:17<00:00,  2026-01-24 06:30:12,450 - INFO - Epoch 10 val: loss=2.6855, eer=0.0720, min_dcf=0.9989
+2026-01-24 06:30:12,459 - INFO - [epoch_complete] epoch=10, train_loss=0.0005, val_eer=0.0720
+Training:   0%|          | 0/5698 [00:00<?, ?it/s]/gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/.venv/lib64/python3.11/site-packages/torch/nn/functional.py:6044: UserWarning: Support for mismatched key_padding_mask and attn_mask is deprecated. Use same type for both instead.
+  warnings.warn(
+Training:   0%|          | 4/5698 [00:01<22:08,  4.28it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 10 that is less than the current step 1253. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:   1%|          | 50/5698 [00:08<15:03,  2026-01-24 06:30:22,242 - WARNING - NaN gradient detected at batch 55
+Training:  54%|█████▍   2026-01-24 06:38:09,729 - WARNING - NaN gradient detected at batch 3071
+Training2026-01-24 06:44:57,126 - INFO - Epoch 11 train: loss=0.0003, task_acc=0.9999.9999]
+Validating: 100%|█████████▉| 4402/4402026-01-24 07:01:08,213 - INFO - Epoch 11 val: loss=2.8905, eer=0.0796, min_dcf=0.9991
+2026-01-24 07:01:08,215 - INFO - [epoch_complete] epoch=11, train_loss=0.0003, val_eer=0.0796
+Training:   1%|          | 33/5698 [00:05<15:33,  6.07it/s, loss=0.0000, task_acc=1.0000]wandb: WARNING Tried to log to step 11 that is less than the current step 1367. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Training:  2026-01-24 07:02:46,276 - WARNING - NaN gradient detected at batch 609c=1.0000]
+T2026-01-24 07:09:31,337 - WARNING - NaN gradient detected at batch 31832, task_acc=1.0000]
+Train2026-01-24 07:15:55,021 - INFO - Epoch 12 train: loss=0.0002, task_acc=1.0000c=1.0000]
+Validating2026-01-24 07:32:05,765 - INFO - Epoch 12 val: loss=2.3354, eer=0.0657, min_dcf=0.9987
+2026-01-24 07:32:05,786 - INFO - [epoch_complete] epoch=12, train_loss=0.0002, val_eer=0.0657
+2026-01-24 07:32:05,787 - INFO - Early stopping at epoch 12
+2026-01-24 07:32:06,190 - INFO - [training_complete] {"event_type": "training_complete", "run_id": "wavlm_erm", "timestamp": "2026-01-24T06:32:06.189804Z", "best_epoch": 2, "best_eer": 0.03513008005143392, "final_epoch": 12, "final_val": {"loss": 2.3353
+2026-01-24 07:32:06,192 - INFO - Experiment complete. Logs saved to: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/wavlm_erm
+wandb: updating run metadata
+wandb: uploading output.log; uploading config.yaml
+wandb: uploading console lines 104-110
+wandb:
+wandb: Run history:
+wandb:    train/global_step ▁▁▁▁▂▂▂▂▂▂▂▂▃▃▃▃▃▄▄▄▄▄▅▅▅▆▆▆▆▆▇▇▇▇▇▇▇▇██
+wandb: train/step_grad_norm █▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:      train/step_loss █▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:  train/step_task_acc ▁███████████████████████████████████████
+wandb: train/step_task_loss █▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:
+wandb: Run summary:
+wandb:             best_eer 0.03513
+wandb:           best_epoch 2
+wandb:         total_epochs 13
+wandb:    train/global_step 74050
+wandb: train/step_grad_norm 0.0
+wandb:      train/step_loss 0
+wandb:  train/step_task_acc 1
+wandb: train/step_task_loss 0
+wandb:
+wandb: 🚀 View run wavlm_erm at: https://wandb.ai/mike-cooper-uva/asvspoof5-dann/runs/7bsc8ha4
+wandb: ⭐️ View project at: https://wandb.ai/mike-cooper-uva/asvspoof5-dann
+wandb: Synced 6 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./runs/wavlm_erm/wandb/run-20260124_003801-7bsc8ha4/logs
+wandb: WARNING Tried to log to step 12 that is less than the current step 1481. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+2026-01-24 07:32:07,423 - INFO - ============================================================
+2026-01-24 07:32:07,424 - INFO - Training complete!
+2026-01-24 07:32:07,424 - INFO - Best eer: 0.03513008005143392
+2026-01-24 07:32:07,424 - INFO - Run directory: /gpfs/work5/0/prjs1904/asvspoof5-domain-invariant-cm/runs/wavlm_erm
+2026-01-24 07:32:07,424 - INFO - ============================================================
+Training complete!
+[jcooper@int4 asvspoof5-domain-invariant-cm]$
