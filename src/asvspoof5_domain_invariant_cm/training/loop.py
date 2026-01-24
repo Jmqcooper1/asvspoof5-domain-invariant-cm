@@ -224,10 +224,10 @@ def train_epoch(
                             },
                         },
                     )
-                # Skip optimizer step to avoid poisoning the run. Also back off AMP scale.
-                prev_scale = scaler.get_scale()
-                scaler.update(prev_scale / 2.0)
+                # Skip optimizer step to avoid poisoning the run.
+                # GradScaler will automatically backoff when update() is called without step().
                 optimizer.zero_grad(set_to_none=True)
+                scaler.update()
             else:
                 if orig_norm_value > gradient_clip:
                     grad_clips_count += 1
