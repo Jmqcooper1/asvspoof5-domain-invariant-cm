@@ -62,6 +62,10 @@ dev = [
 xai = [
     "captum>=0.7",
 ]
+trillsson = [
+    "tensorflow",
+    "tensorflow-hub",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/asvspoof5_domain_invariant_cm"]

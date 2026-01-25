@@ -106,8 +106,14 @@ def parse_args():
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=32,
-        help="Batch size",
+        default=None,
+        help="Batch size (default: from config)",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="Number of DataLoader workers (default: from config)",
     )
     parser.add_argument(
         "--device",
@@ -571,13 +577,26 @@ def main():
     fixed_length = int(max_duration * sample_rate)
     collator = AudioCollator(fixed_length=fixed_length, mode="eval")
 
+    dataloader_cfg = config.get("dataloader", {})
+    batch_size = (
+        int(args.batch_size)
+        if args.batch_size is not None
+        else int(dataloader_cfg.get("batch_size", 32))
+    )
+    num_workers = (
+        int(args.num_workers)
+        if args.num_workers is not None
+        else int(dataloader_cfg.get("num_workers", 4))
+    )
+    pin_memory = bool(dataloader_cfg.get("pin_memory", True))
+
     dataloader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=args.batch_size,
+        batch_size=batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=num_workers,
         collate_fn=collator,
-        pin_memory=True,
+        pin_memory=pin_memory,
     )
 
     results = {

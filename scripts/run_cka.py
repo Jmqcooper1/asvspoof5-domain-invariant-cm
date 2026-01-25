@@ -96,8 +96,21 @@ def parse_args():
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=32,
-        help="Batch size",
+        default=None,
+        help="Batch size (default: from config)",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="Number of DataLoader workers (default: from config)",
+    )
+    parser.add_argument(
+        "--representation",
+        type=str,
+        choices=["hidden_states", "mixed", "repr", "layer_contrib"],
+        default="layer_contrib",
+        help="Representation to compare for CKA",
     )
     parser.add_argument(
         "--device",
@@ -223,15 +236,57 @@ def load_model_from_checkpoint(checkpoint_path: Path, device: torch.device):
 
 
 @torch.no_grad()
-def extract_layer_embeddings(
+def _format_layer_label(layer) -> str:
+    if isinstance(layer, int):
+        return f"L{layer}"
+    return str(layer)
+
+
+def _resolve_selected_layer_indices(
+    total_layers: int,
+    method: str,
+    k: int,
+    layer_indices: list[int] | None,
+) -> list[int]:
+    if method == "first_k":
+        return list(range(min(k, total_layers)))
+    if method == "last_k":
+        start = max(total_layers - k, 0)
+        return list(range(start, total_layers))
+    if method == "specific" and layer_indices:
+        return [i for i in layer_indices if i < total_layers]
+    return list(range(total_layers))
+
+
+def _get_layer_weights(
+    model: torch.nn.Module,
+    selected_indices: list[int],
+) -> torch.Tensor:
+    weights = torch.softmax(model.backbone.layer_pooling.weights, dim=0)
+    if weights.numel() != len(selected_indices):
+        logger.warning(
+            "Layer pooling weights size does not match selected layers; "
+            "falling back to uniform weights."
+        )
+        weights = torch.ones(len(selected_indices), device=weights.device) / len(
+            selected_indices
+        )
+    return weights
+
+
+@torch.no_grad()
+def extract_representation_embeddings(
     model: torch.nn.Module,
     dataloader: torch.utils.data.DataLoader,
     device: torch.device,
     max_samples: int = None,
-) -> dict[int, np.ndarray]:
-    """Extract mean-pooled embeddings from each layer."""
-    layer_embeddings = {}
+    representation: str = "layer_contrib",
+) -> dict:
+    """Extract embeddings for a specified representation."""
+    embeddings = {}
     n_samples = 0
+    selected_indices = None
+    weights = None
 
     for batch in tqdm(dataloader, desc="Extracting embeddings"):
         if max_samples and n_samples >= max_samples:
@@ -246,21 +301,45 @@ def extract_layer_embeddings(
 
         all_hidden_states = outputs["all_hidden_states"]
 
-        for layer_idx, hidden_state in enumerate(all_hidden_states):
-            pooled = hidden_state.mean(dim=1).cpu().numpy()
+        if representation == "hidden_states":
+            for layer_idx, hidden_state in enumerate(all_hidden_states):
+                pooled = hidden_state.mean(dim=1).cpu().numpy()
+                embeddings.setdefault(layer_idx, []).append(pooled)
+        elif representation == "repr":
+            embeddings.setdefault("repr", []).append(outputs["repr"].cpu().numpy())
+        else:
+            if selected_indices is None:
+                total_layers = len(all_hidden_states)
+                selection_cfg = model.backbone
+                selected_indices = _resolve_selected_layer_indices(
+                    total_layers=total_layers,
+                    method=selection_cfg.layer_selection,
+                    k=selection_cfg.k,
+                    layer_indices=selection_cfg.layer_indices,
+                )
+                weights = _get_layer_weights(model, selected_indices)
 
-            if layer_idx not in layer_embeddings:
-                layer_embeddings[layer_idx] = []
-            layer_embeddings[layer_idx].append(pooled)
+            selected_states = [all_hidden_states[i] for i in selected_indices]
+            if representation == "mixed":
+                stacked = torch.stack(selected_states, dim=0)
+                mixed = (stacked * weights.view(-1, 1, 1, 1)).sum(dim=0)
+                pooled = mixed.mean(dim=1).cpu().numpy()
+                embeddings.setdefault("mixed", []).append(pooled)
+            elif representation == "layer_contrib":
+                for idx, layer_idx in enumerate(selected_indices):
+                    pooled = selected_states[idx].mean(dim=1) * weights[idx]
+                    embeddings.setdefault(layer_idx, []).append(pooled.cpu().numpy())
+            else:
+                raise ValueError(f"Unknown representation: {representation}")
 
         n_samples += batch_size
 
-    for layer_idx in layer_embeddings:
-        layer_embeddings[layer_idx] = np.concatenate(layer_embeddings[layer_idx], axis=0)
+    for key in embeddings:
+        embeddings[key] = np.concatenate(embeddings[key], axis=0)
         if max_samples:
-            layer_embeddings[layer_idx] = layer_embeddings[layer_idx][:max_samples]
+            embeddings[key] = embeddings[key][:max_samples]
 
-    return layer_embeddings
+    return embeddings
 
 
 def plot_cka_heatmap(
@@ -279,7 +358,7 @@ def plot_cka_heatmap(
     im = ax.imshow(data, aspect="auto", cmap="RdYlBu_r", vmin=0, vmax=1)
 
     ax.set_xticks(range(len(layers)))
-    ax.set_xticklabels([f"L{l}" for l in layers])
+    ax.set_xticklabels([_format_layer_label(l) for l in layers])
     ax.set_yticks([])
     ax.set_xlabel("Layer", fontsize=12)
     ax.set_title("CKA Similarity (ERM vs DANN)", fontsize=14)
@@ -347,8 +426,8 @@ def plot_cka_matrix(
         cmap="RdYlBu_r",
         vmin=0,
         vmax=1,
-        xticklabels=[f"L{l}" for l in layers],
-        yticklabels=[f"L{l}" for l in layers],
+        xticklabels=[_format_layer_label(l) for l in layers],
+        yticklabels=[_format_layer_label(l) for l in layers],
         ax=ax,
     )
 
@@ -439,6 +518,12 @@ def main():
     logger.info(f"Loading DANN model: {args.dann_checkpoint}")
     dann_model, _, _, _ = load_model_from_checkpoint(args.dann_checkpoint, device)
 
+    if args.representation == "hidden_states":
+        logger.warning(
+            "Using hidden_states with a frozen SSL backbone will yield CKA~1.0. "
+            "Consider --representation layer_contrib, mixed, or repr for a meaningful comparison."
+        )
+
     # Create dataset
     audio_cfg = config.get("audio", {})
     sample_rate = audio_cfg.get("sample_rate", 16000)
@@ -463,21 +548,46 @@ def main():
     fixed_length = int(max_duration * sample_rate)
     collator = AudioCollator(fixed_length=fixed_length, mode="eval")
 
+    dataloader_cfg = config.get("dataloader", {})
+    batch_size = (
+        int(args.batch_size)
+        if args.batch_size is not None
+        else int(dataloader_cfg.get("batch_size", 32))
+    )
+    num_workers = (
+        int(args.num_workers)
+        if args.num_workers is not None
+        else int(dataloader_cfg.get("num_workers", 4))
+    )
+    pin_memory = bool(dataloader_cfg.get("pin_memory", True))
+
     dataloader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=args.batch_size,
+        batch_size=batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=num_workers,
         collate_fn=collator,
-        pin_memory=True,
+        pin_memory=pin_memory,
     )
 
     # Extract embeddings from both models
     logger.info("Extracting ERM embeddings...")
-    erm_embeddings = extract_layer_embeddings(erm_model, dataloader, device, args.n_samples)
+    erm_embeddings = extract_representation_embeddings(
+        erm_model,
+        dataloader,
+        device,
+        args.n_samples,
+        representation=args.representation,
+    )
 
     logger.info("Extracting DANN embeddings...")
-    dann_embeddings = extract_layer_embeddings(dann_model, dataloader, device, args.n_samples)
+    dann_embeddings = extract_representation_embeddings(
+        dann_model,
+        dataloader,
+        device,
+        args.n_samples,
+        representation=args.representation,
+    )
 
     # Compute CKA between ERM and DANN
     logger.info("Computing CKA...")
@@ -500,7 +610,7 @@ def main():
     rows = []
     for layer, data in cka_results["per_layer"].items():
         rows.append({
-            "layer": layer,
+            "layer": str(layer),
             "cka": data["cka"],
             "erm_shape": str(data["erm_shape"]),
             "dann_shape": str(data["dann_shape"]),

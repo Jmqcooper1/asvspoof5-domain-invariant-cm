@@ -54,7 +54,6 @@ echo "=== Training Wav2Vec2 + ERM ==="
 srun uv run python scripts/train.py \
     --config configs/w2v2_erm.yaml \
     --name w2v2_erm \
-    --wandb \
-    --amp
+    --wandb
 
 echo "Training complete!"

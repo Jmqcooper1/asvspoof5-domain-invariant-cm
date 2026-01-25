@@ -56,6 +56,7 @@ def train_epoch(
     exp_logger: Optional[ExperimentLogger] = None,
     global_step_start: int = 0,
     log_step_interval: int = 100,
+    nan_grad_abort_count: Optional[int] = None,
 ) -> tuple[dict, int]:
     """Train for one epoch.
 
@@ -228,6 +229,12 @@ def train_epoch(
                 # GradScaler will automatically backoff when update() is called without step().
                 optimizer.zero_grad(set_to_none=True)
                 scaler.update()
+                if nan_grad_abort_count is not None and nan_grad_count >= nan_grad_abort_count:
+                    raise RuntimeError(
+                        f"Aborting: {nan_grad_count} non-finite-gradient batches "
+                        f"in epoch (threshold={nan_grad_abort_count}). "
+                        "Reduce LR, increase warmup, tighten grad clip, or disable AMP."
+                    )
             else:
                 if orig_norm_value > gradient_clip:
                     grad_clips_count += 1
@@ -279,6 +286,12 @@ def train_epoch(
                         },
                     )
                 optimizer.zero_grad(set_to_none=True)
+                if nan_grad_abort_count is not None and nan_grad_count >= nan_grad_abort_count:
+                    raise RuntimeError(
+                        f"Aborting: {nan_grad_count} non-finite-gradient batches "
+                        f"in epoch (threshold={nan_grad_abort_count}). "
+                        "Reduce LR, increase warmup, tighten grad clip, or disable AMP."
+                    )
             else:
                 if orig_norm_value > gradient_clip:
                     grad_clips_count += 1
@@ -648,6 +661,7 @@ class Trainer:
         log_domain_breakdown_every: int = 5,
         codec_vocab: Optional[dict] = None,
         codec_q_vocab: Optional[dict] = None,
+        nan_grad_abort_count: Optional[int] = None,
     ):
         self.model = model
         self.train_loader = train_loader
@@ -677,6 +691,7 @@ class Trainer:
         self.log_domain_breakdown_every = log_domain_breakdown_every
         self.codec_vocab = codec_vocab
         self.codec_q_vocab = codec_q_vocab
+        self.nan_grad_abort_count = nan_grad_abort_count
 
         self.scaler = GradScaler("cuda") if use_amp else None
 
@@ -797,6 +812,7 @@ class Trainer:
                 exp_logger=self.exp_logger,
                 global_step_start=self.global_step,
                 log_step_interval=self.log_interval,
+                nan_grad_abort_count=self.nan_grad_abort_count,
             )
 
             # Extract batch samples for separate logging
