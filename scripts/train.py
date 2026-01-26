@@ -605,6 +605,7 @@ def main():
         log_domain_breakdown_every=logging_cfg.get("log_domain_breakdown_every", 5),
         codec_vocab=codec_vocab,
         codec_q_vocab=codec_q_vocab,
+        nan_grad_abort_count=training_cfg.get("nan_grad_abort_count"),
     )
 
     # Train

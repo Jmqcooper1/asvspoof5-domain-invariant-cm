@@ -35,6 +35,7 @@ from asvspoof5_domain_invariant_cm.analysis import (
     layerwise_probing,
 )
 from asvspoof5_domain_invariant_cm.data import ASVspoof5Dataset, AudioCollator, load_vocab
+from asvspoof5_domain_invariant_cm.data.codec_augment import create_augmentor
 from asvspoof5_domain_invariant_cm.models import (
     ClassifierHead,
     DANNModel,
@@ -94,6 +95,13 @@ def parse_args():
         help="Data split to probe on",
     )
     parser.add_argument(
+        "--domain-source",
+        type=str,
+        choices=["protocol", "synthetic", "auto"],
+        default="auto",
+        help="Domain label source (protocol=manifest, synthetic=augmentation, auto=split-based)",
+    )
+    parser.add_argument(
         "--layers",
         type=str,
         default="all",
@@ -133,8 +141,14 @@ def parse_args():
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=32,
-        help="Batch size for embedding extraction",
+        default=None,
+        help="Batch size for embedding extraction (default: from config)",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="Number of DataLoader workers (default: from config)",
     )
     parser.add_argument(
         "--device",
@@ -266,6 +280,7 @@ def extract_embeddings(
     device: torch.device,
     layer_indices: list[int] = None,
     max_samples: int = None,
+    domain_source: str = "protocol",
 ) -> tuple[dict[int, np.ndarray], np.ndarray, np.ndarray, np.ndarray]:
     """Extract embeddings from each layer.
 
@@ -317,8 +332,12 @@ def extract_embeddings(
         repr_embeddings.append(outputs["repr"].cpu().numpy())
 
         # Get labels
-        all_codec.append(batch["y_codec"].numpy())
-        all_codec_q.append(batch["y_codec_q"].numpy())
+        if domain_source == "synthetic":
+            all_codec.append(batch["y_codec_aug"].numpy())
+            all_codec_q.append(batch["y_codec_q_aug"].numpy())
+        else:
+            all_codec.append(batch["y_codec"].numpy())
+            all_codec_q.append(batch["y_codec_q"].numpy())
 
         n_samples += batch_size
 
@@ -523,19 +542,57 @@ def main():
     first_ckpt = list(checkpoints.values())[0]
     _, config, codec_vocab, codec_q_vocab = load_model_from_checkpoint(first_ckpt, device)
 
+    # Resolve domain source
+    if args.domain_source == "auto":
+        domain_source = "protocol" if args.split == "eval" else "synthetic"
+    else:
+        domain_source = args.domain_source
+
+    if domain_source == "protocol" and args.split != "eval":
+        logger.warning(
+            "Protocol labels on train/dev are often single-class (all NONE). "
+            "Probe results may be skipped/NaN. Consider --domain-source synthetic."
+        )
+    if domain_source == "synthetic" and args.split == "eval":
+        logger.warning(
+            "Synthetic labels on eval are generated from augmentation, not protocol codecs."
+        )
+
     # Create dataset
     audio_cfg = config.get("audio", {})
     sample_rate = audio_cfg.get("sample_rate", 16000)
     max_duration = audio_cfg.get("max_duration_sec", 6.0)
 
-    dataset = ASVspoof5Dataset(
-        manifest_path=get_manifest_path(args.split),
-        codec_vocab=codec_vocab,
-        codec_q_vocab=codec_q_vocab,
-        max_duration_sec=max_duration,
-        sample_rate=sample_rate,
-        mode="eval",
-    )
+    augmentation_cfg = config.get("augmentation", {})
+    dataloader_cfg = config.get("dataloader", {})
+    if domain_source == "synthetic":
+        aug_config_with_sr = dict(augmentation_cfg)
+        aug_config_with_sr["sample_rate"] = sample_rate
+        augmentor = create_augmentor(aug_config_with_sr)
+        if augmentor is None:
+            raise RuntimeError(
+                "Synthetic probing requested but augmentation is disabled. "
+                "Set augmentation.enabled=true in the config or use --domain-source protocol."
+            )
+        dataset = ASVspoof5Dataset(
+            manifest_path=get_manifest_path(args.split),
+            codec_vocab=codec_vocab,
+            codec_q_vocab=codec_q_vocab,
+            max_duration_sec=max_duration,
+            sample_rate=sample_rate,
+            mode="train",
+            augmentor=augmentor,
+            use_synthetic_labels=True,
+        )
+    else:
+        dataset = ASVspoof5Dataset(
+            manifest_path=get_manifest_path(args.split),
+            codec_vocab=codec_vocab,
+            codec_q_vocab=codec_q_vocab,
+            max_duration_sec=max_duration,
+            sample_rate=sample_rate,
+            mode="eval",
+        )
 
     # Limit samples
     if args.n_samples and args.n_samples < len(dataset):
@@ -547,13 +604,25 @@ def main():
     fixed_length = int(max_duration * sample_rate)
     collator = AudioCollator(fixed_length=fixed_length, mode="eval")
 
+    batch_size = (
+        int(args.batch_size)
+        if args.batch_size is not None
+        else int(dataloader_cfg.get("batch_size", 32))
+    )
+    num_workers = (
+        int(args.num_workers)
+        if args.num_workers is not None
+        else int(dataloader_cfg.get("num_workers", 4))
+    )
+    pin_memory = bool(dataloader_cfg.get("pin_memory", True))
+
     dataloader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=args.batch_size,
+        batch_size=batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=num_workers,
         collate_fn=collator,
-        pin_memory=True,
+        pin_memory=pin_memory,
     )
 
     # Extract embeddings for each model
@@ -565,8 +634,33 @@ def main():
         model, _, _, _ = load_model_from_checkpoint(ckpt_path, device)
 
         layer_embeddings, codec_labels, codec_q_labels, repr_embeddings = extract_embeddings(
-            model, dataloader, device, layer_indices, args.n_samples
+            model,
+            dataloader,
+            device,
+            layer_indices,
+            args.n_samples,
+            domain_source=domain_source,
         )
+
+        if len(codec_labels) == 0 or len(codec_q_labels) == 0:
+            logger.warning(f"No labels extracted for {model_name}; skipping.")
+            continue
+
+        if domain_source == "synthetic":
+            non_none_rate = float((codec_labels != 0).mean())
+            if len(codec_labels) >= 200 and non_none_rate < 0.05:
+                raise RuntimeError(
+                    f"Synthetic probing has low augmentation rate ({non_none_rate:.1%}). "
+                    "Check ffmpeg encoder support, augmentation.codecs, and codec_prob."
+                )
+
+        def log_label_distribution(name: str, labels: np.ndarray) -> None:
+            unique, counts = np.unique(labels, return_counts=True)
+            distribution = {int(k): int(v) for k, v in zip(unique, counts)}
+            logger.info(f"{model_name} {name} label distribution: {distribution}")
+
+        log_label_distribution("codec", codec_labels)
+        log_label_distribution("codec_q", codec_q_labels)
 
         # Add projection repr as a special "layer"
         layer_embeddings["repr"] = repr_embeddings
@@ -588,6 +682,27 @@ def main():
                 cv_folds=args.cv_folds,
                 seed=args.seed,
             )
+
+            def log_probe_skip_summary(domain_name: str, probe_results: dict) -> None:
+                per_layer = probe_results.get("per_layer", {})
+                status_counts = {}
+                skip_reasons = {}
+                for data in per_layer.values():
+                    status = data.get("status", "unknown")
+                    status_counts[status] = status_counts.get(status, 0) + 1
+                    if status != "ok":
+                        reason = data.get("skip_reason", "unknown")
+                        skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
+                if any(status != "ok" for status in status_counts):
+                    logger.info(
+                        f"{model_name} {domain_name} probe status counts: {status_counts}"
+                    )
+                if skip_reasons:
+                    logger.info(
+                        f"{model_name} {domain_name} probe skip reasons: {skip_reasons}"
+                    )
+
+            log_probe_skip_summary(domain, results)
 
             model_results[domain] = results
 

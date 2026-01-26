@@ -62,7 +62,6 @@ echo ""
 srun uv run python scripts/train.py \
     --config configs/w2v2_dann.yaml \
     --name w2v2_dann \
-    --wandb \
-    --amp
+    --wandb
 
 echo "Training complete!"

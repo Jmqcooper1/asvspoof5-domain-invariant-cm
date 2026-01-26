@@ -90,8 +90,8 @@ srun uv run python scripts/run_cka.py \
 echo ""
 echo "--- Activation Patching (WavLM) ---"
 srun uv run python scripts/run_patching.py \
-    --source-checkpoint runs/wavlm_dann/checkpoints/best.pt \
-    --target-checkpoint runs/wavlm_erm/checkpoints/best.pt \
+    --source runs/wavlm_dann/checkpoints/best.pt \
+    --target runs/wavlm_erm/checkpoints/best.pt \
     --output-dir runs/analysis/patching_wavlm \
     --n-samples 500
 

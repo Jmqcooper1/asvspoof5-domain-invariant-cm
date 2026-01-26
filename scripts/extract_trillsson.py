@@ -5,7 +5,7 @@ TRILLsson is a non-semantic audio embedding model from Google.
 This script extracts embeddings and saves them for downstream classification.
 
 Requirements:
-    pip install tensorflow tensorflow-hub
+    uv sync --extra trillsson
 
 Usage:
     python scripts/extract_trillsson.py --split train
@@ -79,7 +79,7 @@ def load_trillsson_model(model_name: str):
     except ImportError:
         raise ImportError(
             "TensorFlow Hub is required for TRILLsson extraction.\n"
-            "Install with: pip install tensorflow tensorflow-hub"
+            "Install with: uv sync --extra trillsson"
         )
 
     # TRILLsson model URLs
@@ -213,7 +213,7 @@ def main():
     except ImportError:
         logger.error(
             "TensorFlow is required for TRILLsson extraction.\n"
-            "Install with: pip install tensorflow tensorflow-hub"
+            "Install with: uv sync --extra trillsson"
         )
         return 1
 
