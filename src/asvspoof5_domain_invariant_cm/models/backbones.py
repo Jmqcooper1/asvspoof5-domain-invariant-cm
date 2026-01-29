@@ -125,6 +125,7 @@ class WavLMBackbone(SSLBackbone):
         init_lower_bias: bool = True,
     ):
         super().__init__()
+        self._freeze = freeze
         self.model = WavLMModel.from_pretrained(
             pretrained,
             output_hidden_states=True,
@@ -135,6 +136,9 @@ class WavLMBackbone(SSLBackbone):
         if freeze:
             for param in self.model.parameters():
                 param.requires_grad = False
+            # Important: even if frozen, nn.Module.train() would re-enable dropout.
+            # Keep the HF backbone in eval mode during training for numerical stability.
+            self.model.eval()
 
         self.layer_selection = layer_selection
         self.k = k
@@ -152,6 +156,12 @@ class WavLMBackbone(SSLBackbone):
             num_weighted,
             init_lower_bias=init_lower_bias,
         )
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        if self._freeze:
+            self.model.eval()
+        return self
 
     def forward(
         self,
@@ -208,6 +218,7 @@ class Wav2Vec2Backbone(SSLBackbone):
         init_lower_bias: bool = True,
     ):
         super().__init__()
+        self._freeze = freeze
         self.model = Wav2Vec2Model.from_pretrained(
             pretrained,
             output_hidden_states=True,
@@ -218,6 +229,9 @@ class Wav2Vec2Backbone(SSLBackbone):
         if freeze:
             for param in self.model.parameters():
                 param.requires_grad = False
+            # Important: even if frozen, nn.Module.train() would re-enable dropout.
+            # Keep the HF backbone in eval mode during training for numerical stability.
+            self.model.eval()
 
         self.layer_selection = layer_selection
         self.k = k
@@ -235,6 +249,12 @@ class Wav2Vec2Backbone(SSLBackbone):
             num_weighted,
             init_lower_bias=init_lower_bias,
         )
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        if self._freeze:
+            self.model.eval()
+        return self
 
     def forward(
         self,

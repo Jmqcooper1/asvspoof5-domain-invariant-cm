@@ -315,6 +315,7 @@ class CodecAugmentor:
         self.config = config
         self._ffmpeg_available = None
         self._supported_codecs = None
+        self._codec_vocab = None
 
         if config.cache_dir:
             self.cache_dir = Path(config.cache_dir)
@@ -358,6 +359,27 @@ class CodecAugmentor:
                     self._supported_codecs,
                 )
         return self._supported_codecs
+
+    @property
+    def codec_vocab(self) -> dict[str, int]:
+        """Dynamic synthetic codec vocab aligned to actual supported codecs.
+
+        Always includes:
+        - NONE: 0
+
+        Then assigns consecutive IDs to the codecs that are both requested and
+        supported by ffmpeg, in the order they appear in the config.
+
+        This guarantees:
+        - discriminator output dim == number of actually reachable codec classes
+        - y_codec_aug indices are consistent with saved vocab JSON
+        """
+        if self._codec_vocab is None:
+            supported = self.supported_codecs
+            self._codec_vocab = {"NONE": 0}
+            for i, codec in enumerate(supported, start=1):
+                self._codec_vocab[codec] = i
+        return self._codec_vocab
 
     def augment(
         self,
@@ -507,7 +529,7 @@ class CodecAugmentor:
         Returns:
             Tuple of (codec_id, quality_id).
         """
-        codec_id = SYNTHETIC_CODEC_VOCAB.get(codec, 0)
+        codec_id = self.codec_vocab.get(codec, 0)
         quality_id = SYNTHETIC_QUALITY_VOCAB.get(str(quality), 0)
         return codec_id, quality_id
 
