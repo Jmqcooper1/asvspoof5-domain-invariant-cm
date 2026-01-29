@@ -132,9 +132,9 @@ def train_epoch(
                 for i in bad_idx[:5]:
                     bad_samples.append(
                         {
-                            "flac_file": (metadata.get("flac_file") or [None])[i],
-                            "codec_seed": (metadata.get("codec_seed") or [None])[i],
-                            "speaker_id": (metadata.get("speaker_id") or [None])[i],
+                            "flac_file": (metadata.get("flac_file") or [None] * len(bad_idx))[i],
+                            "codec_seed": (metadata.get("codec_seed") or [None] * len(bad_idx))[i],
+                            "speaker_id": (metadata.get("speaker_id") or [None] * len(bad_idx))[i],
                             "length": int(lengths[i].item()),
                         }
                     )
