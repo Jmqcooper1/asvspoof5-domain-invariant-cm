@@ -250,9 +250,9 @@ def train_epoch(
             for i in range(min(waveform.shape[0], 5)):
                 sample_ids.append(
                     {
-                        "flac_file": (metadata.get("flac_file") or [None])[i],
-                        "codec_seed": (metadata.get("codec_seed") or [None])[i],
-                        "speaker_id": (metadata.get("speaker_id") or [None])[i],
+                        "flac_file": (metadata.get("flac_file") or [None] * min(waveform.shape[0], 5))[i],
+                        "codec_seed": (metadata.get("codec_seed") or [None] * min(waveform.shape[0], 5))[i],
+                        "speaker_id": (metadata.get("speaker_id") or [None] * min(waveform.shape[0], 5))[i],
                     }
                 )
             repr_stats = None
