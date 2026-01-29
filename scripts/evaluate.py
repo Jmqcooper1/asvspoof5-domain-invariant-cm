@@ -26,7 +26,12 @@ import seaborn as sns
 import torch
 from tqdm import tqdm
 
-from asvspoof5_domain_invariant_cm.data import ASVspoof5Dataset, AudioCollator, load_vocab
+from asvspoof5_domain_invariant_cm.data import (
+    ASVspoof5Dataset,
+    AudioCollator,
+    load_vocab,
+    normalize_domain_value,
+)
 from asvspoof5_domain_invariant_cm.evaluation import (
     generate_overall_metrics,
     save_domain_tables,
@@ -137,11 +142,28 @@ def parse_args():
         default=None,
         help="Wandb entity (team or username)",
     )
+    parser.add_argument(
+        "--quick-eval",
+        action="store_true",
+        help="Evaluate on a random subset for quick signal (uses --max-samples)",
+    )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=50000,
+        help="Maximum samples for quick-eval/subset mode",
+    )
+    parser.add_argument(
+        "--subset-seed",
+        type=int,
+        default=42,
+        help="Random seed for quick-eval subset sampling",
+    )
     return parser.parse_args()
 
 
 def load_model_from_checkpoint(checkpoint_path: Path, device: torch.device):
-    """Load model from checkpoint."""
+    """Load model from checkpoint (uses run_dir vocabs for head sizes)."""
     checkpoint = torch.load(checkpoint_path, map_location=device)
     config = checkpoint.get("config", {})
 
@@ -231,7 +253,17 @@ def load_model_from_checkpoint(checkpoint_path: Path, device: torch.device):
     model = model.to(device)
     model.eval()
 
-    return model, config, codec_vocab, codec_q_vocab
+    # Prefer manifest vocabs for evaluation reporting if available.
+    manifest_codec_vocab_path = run_dir / "manifest_codec_vocab.json"
+    manifest_codec_q_vocab_path = run_dir / "manifest_codec_q_vocab.json"
+    if manifest_codec_vocab_path.exists() and manifest_codec_q_vocab_path.exists():
+        eval_codec_vocab = load_vocab(manifest_codec_vocab_path)
+        eval_codec_q_vocab = load_vocab(manifest_codec_q_vocab_path)
+    else:
+        eval_codec_vocab = codec_vocab
+        eval_codec_q_vocab = codec_q_vocab
+
+    return model, config, codec_vocab, codec_q_vocab, eval_codec_vocab, eval_codec_q_vocab
 
 
 @torch.no_grad()
@@ -479,7 +511,7 @@ def main():
 
     # Load model
     logger.info(f"Loading checkpoint: {args.checkpoint}")
-    model, config, codec_vocab, codec_q_vocab = load_model_from_checkpoint(
+    model, config, _model_codec_vocab, _model_codec_q_vocab, eval_codec_vocab, eval_codec_q_vocab = load_model_from_checkpoint(
         args.checkpoint, device
     )
 
@@ -505,14 +537,26 @@ def main():
 
     dataset = ASVspoof5Dataset(
         manifest_path=get_manifest_path(args.split),
-        codec_vocab=codec_vocab,
-        codec_q_vocab=codec_q_vocab,
+        codec_vocab=eval_codec_vocab,
+        codec_q_vocab=eval_codec_q_vocab,
         max_duration_sec=max_duration,
         sample_rate=sample_rate,
         mode="eval",
     )
 
-    logger.info(f"Evaluation samples: {len(dataset)}")
+    # Optional quick-eval subset
+    total_samples = len(dataset)
+    if args.quick_eval or (args.max_samples and args.max_samples < total_samples):
+        subset_size = min(args.max_samples, total_samples)
+        rng = np.random.default_rng(args.subset_seed)
+        subset_indices = rng.choice(total_samples, size=subset_size, replace=False)
+        dataset = torch.utils.data.Subset(dataset, subset_indices)
+        logger.info(
+            f"Quick-eval enabled: using {subset_size} / {total_samples} samples "
+            f"(seed={args.subset_seed})"
+        )
+    else:
+        logger.info(f"Evaluation samples: {total_samples}")
 
     # Create dataloader
     fixed_length = int(max_duration * sample_rate)
@@ -532,6 +576,12 @@ def main():
 
     # Convert to DataFrame
     df = pd.DataFrame(predictions)
+
+    # Normalize domain labels for consistent reporting
+    if "codec" in df.columns:
+        df["codec"] = df["codec"].apply(lambda v: normalize_domain_value(v, is_codec_q=False))
+    if "codec_q" in df.columns:
+        df["codec_q"] = df["codec_q"].apply(lambda v: normalize_domain_value(v, is_codec_q=True))
 
     # Save predictions
     pred_path = output_dir / "predictions.tsv"
@@ -587,22 +637,18 @@ def main():
             logger.info(f"\n{domain.upper()} breakdown:")
             logger.info(domain_df.to_string(index=False))
 
-        # Compute per-domain metrics for wandb
+        # Compute per-domain metrics for wandb (use normalized string labels)
         from asvspoof5_domain_invariant_cm.evaluation.metrics import compute_eer
-
-        codec_id_to_name = {v: k for k, v in codec_vocab.items()}
-        codec_q_id_to_name = {v: k for k, v in codec_q_vocab.items()}
 
         # Per-CODEC metrics
         codec_metrics = {}
-        for codec_id in df["y_codec"].unique():
-            mask = df["y_codec"] == codec_id
+        for codec_name in df["codec"].unique():
+            mask = df["codec"] == codec_name
             if mask.sum() > 10:
                 codec_scores = df.loc[mask, "score"].values
                 codec_labels = df.loc[mask, "y_task"].values
                 if len(np.unique(codec_labels)) == 2:
                     codec_eer, _ = compute_eer(codec_scores, codec_labels)
-                    codec_name = codec_id_to_name.get(codec_id, str(codec_id))
                     codec_metrics[codec_name] = {
                         "eer": float(codec_eer),
                         "n_samples": int(mask.sum()),
@@ -618,15 +664,14 @@ def main():
 
         # Per-CODEC_Q metrics
         codec_q_metrics = {}
-        for codec_q_id in df["y_codec_q"].unique():
-            mask = df["y_codec_q"] == codec_q_id
+        for codec_q_name in df["codec_q"].unique():
+            mask = df["codec_q"] == codec_q_name
             if mask.sum() > 10:
                 cq_scores = df.loc[mask, "score"].values
                 cq_labels = df.loc[mask, "y_task"].values
                 if len(np.unique(cq_labels)) == 2:
                     cq_eer, _ = compute_eer(cq_scores, cq_labels)
-                    cq_name = codec_q_id_to_name.get(codec_q_id, str(codec_q_id))
-                    codec_q_metrics[cq_name] = {
+                    codec_q_metrics[codec_q_name] = {
                         "eer": float(cq_eer),
                         "n_samples": int(mask.sum()),
                     }

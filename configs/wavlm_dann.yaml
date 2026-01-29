@@ -55,7 +55,7 @@ training:
   max_epochs: 50
   patience: 10
   min_delta: 0.001  # Minimum improvement to count as progress (for EER)
-  train_loss_threshold: 0.01  # Stop if train loss below this for plateau_patience epochs
+  train_loss_threshold: 0.0  # Disable train-loss early stopping for DANN
   plateau_patience: 3  # Consecutive low train loss epochs before early stop
   gradient_clip: 1.0
 
@@ -89,7 +89,7 @@ dann:
     type: linear
     start: 0.0
     end: 1.0
-    warmup_epochs: 5
+    warmup_epochs: 0
 
   discriminator:
     hidden_dim: 256

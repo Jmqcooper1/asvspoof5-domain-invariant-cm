@@ -384,27 +384,31 @@ def main():
     aug_cfg = config.get("augmentation", {})
     augmentor = None
 
-    if method == "dann" and aug_cfg.get("enabled", False):
+    # Codec augmentation can be used as a control even for ERM:
+    #   A) ERM (no aug)
+    #   B) ERM (codec aug)
+    #   C) DANN (codec aug, adversarial λ>0)
+    if aug_cfg.get("enabled", False):
         # Inject sample_rate into augmentation config
         aug_cfg_with_sr = {**aug_cfg, "sample_rate": sample_rate}
         augmentor = create_augmentor(aug_cfg_with_sr)
 
         if augmentor is not None:
+            logger.info(
+                f"Codec augmentor initialized: supported_codecs={augmentor.supported_codecs}, "
+                f"codec_prob={aug_cfg.get('codec_prob', 0.5)}"
+            )
             # Critical: DANN requires domain diversity
-            if len(augmentor.supported_codecs) < 2:
+            if method == "dann" and len(augmentor.supported_codecs) < 2:
                 raise RuntimeError(
                     f"DANN requires >=2 supported codecs, got {len(augmentor.supported_codecs)}. "
                     f"Supported: {augmentor.supported_codecs}. "
                     "Check ffmpeg encoder support: ffmpeg -encoders | grep -E 'mp3|aac|opus'"
                 )
-            logger.info(
-                f"Codec augmentor initialized: supported_codecs={augmentor.supported_codecs}, "
-                f"codec_prob={aug_cfg.get('codec_prob', 0.5)}"
-            )
         else:
             logger.warning(
                 "Augmentation enabled in config but augmentor is None - "
-                "DANN will train on constant NONE domain (degenerates to ERM)!"
+                "codec augmentation will be disabled for this run."
             )
 
     # Create datasets
@@ -416,7 +420,10 @@ def main():
         sample_rate=sample_rate,
         mode="train",
         augmentor=augmentor,
-        use_synthetic_labels=augmentor is not None,
+        # Expose y_codec_aug/y_codec_q_aug when augmentation is enabled so we can:
+        # - assert domain diversity early for DANN
+        # - log augmentation rate for ERM+aug control runs
+        use_synthetic_labels=augmentor is not None and aug_cfg.get("use_synthetic_labels", True),
     )
 
     val_dataset = ASVspoof5Dataset(
@@ -463,20 +470,29 @@ def main():
         pin_memory=True,
     )
 
-    # Build model - use synthetic vocab sizes for DANN with augmentation
-    if augmentor is not None:
-        num_codecs = len(SYNTHETIC_CODEC_VOCAB)
+    # Build model vocab sizes and save vocabs.
+    #
+    # IMPORTANT: for DANN+augmentation, the discriminator head sizes MUST match the
+    # synthetic vocab used to generate y_codec_aug/y_codec_q_aug.
+    #
+    # For ERM(+augmentation), evaluation should remain interpretable wrt real ASVspoof5
+    # codec labels, so we keep the manifest vocabs as the primary run vocabs.
+    import json
+    if method == "dann" and augmentor is not None:
+        num_codecs = len(augmentor.codec_vocab)  # 1 + len(supported_codecs)
         num_codec_qs = len(SYNTHETIC_QUALITY_VOCAB)
         logger.info(
-            f"DANN with augmentation: domain discriminator sizes "
+            "DANN with augmentation: domain discriminator sizes "
             f"num_codecs={num_codecs}, num_codec_qs={num_codec_qs}"
         )
         # Save synthetic vocabs so evaluate.py can rebuild model with correct head sizes
-        import json
         with open(run_dir / "codec_vocab.json", "w") as f:
-            json.dump(SYNTHETIC_CODEC_VOCAB, f, indent=2)
+            json.dump(augmentor.codec_vocab, f, indent=2)
         with open(run_dir / "codec_q_vocab.json", "w") as f:
             json.dump(SYNTHETIC_QUALITY_VOCAB, f, indent=2)
+        # Also save manifest vocabs for reporting on eval (12/9 classes)
+        shutil.copy(manifests_dir / "codec_vocab.json", run_dir / "manifest_codec_vocab.json")
+        shutil.copy(manifests_dir / "codec_q_vocab.json", run_dir / "manifest_codec_q_vocab.json")
         logger.info("Saved synthetic vocabs to run dir (DANN with augmentation)")
     else:
         num_codecs = len(codec_vocab)
@@ -484,6 +500,13 @@ def main():
         # Save manifest vocabs for ERM or DANN without augmentation
         shutil.copy(manifests_dir / "codec_vocab.json", run_dir / "codec_vocab.json")
         shutil.copy(manifests_dir / "codec_q_vocab.json", run_dir / "codec_q_vocab.json")
+        # If augmentation is enabled as a control, also save the synthetic vocab used
+        # to generate y_codec_aug/y_codec_q_aug for transparency/debugging.
+        if augmentor is not None:
+            with open(run_dir / "synthetic_codec_vocab.json", "w") as f:
+                json.dump(augmentor.codec_vocab, f, indent=2)
+            with open(run_dir / "synthetic_codec_q_vocab.json", "w") as f:
+                json.dump(SYNTHETIC_QUALITY_VOCAB, f, indent=2)
 
     model = build_model(config, num_codecs, num_codec_qs)
     model = model.to(device)

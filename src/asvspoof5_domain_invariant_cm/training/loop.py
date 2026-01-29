@@ -96,15 +96,20 @@ def train_epoch(
     grad_clips_count = 0
     nan_grad_count = 0
 
-    # Augmentation rate tracking (for DANN)
+    # Augmentation rate tracking (for DANN and ERM+aug controls)
     total_aug_samples = 0
     total_non_none_samples = 0
+    saw_aug_labels = False
 
     # Batch-level logging samples
     batch_samples = []
 
     # Global step tracking
     global_step = global_step_start
+
+    # Fail-fast domain diversity tracking for DANN (across first N batches)
+    dann_domain_check_batches = 200
+    seen_codec_ids_first_n_batches: set[int] = set()
 
     pbar = tqdm(dataloader, desc="Training", leave=False)
 
@@ -116,10 +121,86 @@ def train_epoch(
         lengths = batch["lengths"].to(device)
         y_task = batch["y_task"].to(device)
 
+        # Pre-forward sanity checks to catch the most common NaN sources early.
+        # (e.g., 0-length waveforms -> empty attention -> backbone NaNs)
+        if lengths.numel() > 0:
+            min_len = int(lengths.min().item())
+            if min_len <= 0:
+                metadata = batch.get("metadata", {})
+                bad_idx = (lengths <= 0).nonzero(as_tuple=False).view(-1).tolist()
+                bad_samples = []
+                for i in bad_idx[:5]:
+                    bad_samples.append(
+                        {
+                            "flac_file": (metadata.get("flac_file") or [None] * len(bad_idx))[i],
+                            "codec_seed": (metadata.get("codec_seed") or [None] * len(bad_idx))[i],
+                            "speaker_id": (metadata.get("speaker_id") or [None] * len(bad_idx))[i],
+                            "length": int(lengths[i].item()),
+                        }
+                    )
+                logger.warning(
+                    f"Skipping batch {batch_idx} (global_step={global_step}): "
+                    f"non-positive lengths detected (min_len={min_len}). "
+                    f"bad_samples={bad_samples}"
+                )
+                optimizer.zero_grad(set_to_none=True)
+                global_step += 1
+                continue
+
+        if not torch.isfinite(waveform).all().item():
+            metadata = batch.get("metadata", {})
+            bad_samples = []
+            for i in range(min(waveform.shape[0], 5)):
+                bad_samples.append(
+                    {
+                        "flac_file": (metadata.get("flac_file") or [None])[i],
+                        "codec_seed": (metadata.get("codec_seed") or [None])[i],
+                        "speaker_id": (metadata.get("speaker_id") or [None])[i],
+                    }
+                )
+            logger.warning(
+                f"Skipping batch {batch_idx} (global_step={global_step}): "
+                "non-finite waveform values detected. "
+                f"waveform_stats={{'min': {float(waveform.min().item()):.6g}, "
+                f"'max': {float(waveform.max().item()):.6g}, "
+                f"'mean': {float(waveform.mean().item()):.6g}}} "
+                f"samples={bad_samples}"
+            )
+            optimizer.zero_grad(set_to_none=True)
+            global_step += 1
+            continue
+
+        # Attention mask must have at least one True per sample.
+        if attention_mask.numel() > 0:
+            per_sample_valid = attention_mask.any(dim=1)
+            if (~per_sample_valid).any().item():
+                metadata = batch.get("metadata", {})
+                bad_idx = (~per_sample_valid).nonzero(as_tuple=False).view(-1).tolist()
+                bad_samples = []
+                for i in bad_idx[:5]:
+                    bad_samples.append(
+                        {
+                            "flac_file": (metadata.get("flac_file") or [None])[i],
+                            "codec_seed": (metadata.get("codec_seed") or [None])[i],
+                            "speaker_id": (metadata.get("speaker_id") or [None])[i],
+                            "attention_true": int(attention_mask[i].sum().item()),
+                            "length": int(lengths[i].item()) if lengths.numel() else None,
+                        }
+                    )
+                logger.warning(
+                    f"Skipping batch {batch_idx} (global_step={global_step}): "
+                    "empty attention masks detected. "
+                    f"bad_samples={bad_samples}"
+                )
+                optimizer.zero_grad(set_to_none=True)
+                global_step += 1
+                continue
+
         # Use augmented domain labels when available (for DANN with synthetic augmentation)
         if "y_codec_aug" in batch and batch["y_codec_aug"] is not None:
             y_codec = batch["y_codec_aug"].to(device)
             y_codec_q = batch["y_codec_q_aug"].to(device)
+            saw_aug_labels = True
         else:
             y_codec = batch["y_codec"].to(device)
             y_codec_q = batch["y_codec_q"].to(device)
@@ -133,15 +214,18 @@ def train_epoch(
             outputs = model(waveform, attention_mask, lengths)
 
             if method == "dann":
-                # Fail-fast: DANN requires domain diversity in early training
-                # Check first 10 batches to catch wiring bugs immediately
-                if batch_idx < 10:
-                    unique_codecs = y_codec.unique().numel()
-                    if unique_codecs < 2:
+                # Fail-fast: DANN requires domain diversity in early training.
+                # Requirement: >1 unique y_codec_aug class across the first N batches.
+                if batch_idx < dann_domain_check_batches:
+                    for v in y_codec.detach().cpu().unique().tolist():
+                        seen_codec_ids_first_n_batches.add(int(v))
+                    if batch_idx == dann_domain_check_batches - 1 and len(seen_codec_ids_first_n_batches) < 2:
                         raise RuntimeError(
-                            f"DANN requires domain diversity but batch {batch_idx} has only "
-                            f"{unique_codecs} unique codec(s). Check: augmentor wired? "
-                            f"ffmpeg available? supported_codecs>=2? codec_prob>0?"
+                            "DANN requires domain diversity but the first "
+                            f"{dann_domain_check_batches} batches only contained "
+                            f"{len(seen_codec_ids_first_n_batches)} unique codec id(s): "
+                            f"{sorted(seen_codec_ids_first_n_batches)}. "
+                            "Check: augmentor wired? ffmpeg available? supported_codecs>=2? codec_prob>0?"
                         )
 
                 losses = loss_fn(
@@ -161,10 +245,35 @@ def train_epoch(
         # This happens in unstable regimes (too-large LR, AMP overflow, bad batch),
         # and letting it backpropagate will poison the optimizer state.
         if not torch.isfinite(loss).item():
+            metadata = batch.get("metadata", {})
+            sample_ids = []
+            for i in range(min(waveform.shape[0], 5)):
+                sample_ids.append(
+                    {
+                        "flac_file": (metadata.get("flac_file") or [None] * min(waveform.shape[0], 5))[i],
+                        "codec_seed": (metadata.get("codec_seed") or [None] * min(waveform.shape[0], 5))[i],
+                        "speaker_id": (metadata.get("speaker_id") or [None] * min(waveform.shape[0], 5))[i],
+                    }
+                )
+            repr_stats = None
+            if isinstance(outputs, dict) and "repr" in outputs:
+                repr_tensor = outputs["repr"].detach().float()
+                repr_stats = {
+                    "min": float(repr_tensor.min().item()),
+                    "max": float(repr_tensor.max().item()),
+                    "mean": float(repr_tensor.mean().item()),
+                }
             non_finite_loss_event = {
                 "batch_idx": batch_idx,
                 "global_step": global_step,
                 "method": method,
+                "sample_ids": sample_ids,
+                "waveform_stats": {
+                    "min": float(waveform.min().item()),
+                    "max": float(waveform.max().item()),
+                    "mean": float(waveform.mean().item()),
+                },
+                "repr_stats": repr_stats,
                 "losses": {
                     k: (v.item() if isinstance(v, torch.Tensor) and v.numel() == 1 else v)
                     for k, v in losses.items()
@@ -204,10 +313,33 @@ def train_epoch(
             if not grads_are_finite:
                 nan_grad_count += 1
                 non_finite_grad_params = get_non_finite_grad_parameter_names(model, max_names=10)
+                metadata = batch.get("metadata", {})
+                sample_ids = []
+                for i in range(min(waveform.shape[0], 5)):
+                    sample_ids.append(
+                        {
+                            "flac_file": (metadata.get("flac_file") or [None])[i],
+                            "codec_seed": (metadata.get("codec_seed") or [None])[i],
+                            "speaker_id": (metadata.get("speaker_id") or [None])[i],
+                        }
+                    )
+                repr_stats = None
+                if isinstance(outputs, dict) and "repr" in outputs:
+                    repr_tensor = outputs["repr"].detach().float()
+                    repr_stats = {
+                        "min": float(repr_tensor.min().item()),
+                        "max": float(repr_tensor.max().item()),
+                        "mean": float(repr_tensor.mean().item()),
+                    }
                 logger.warning(
                     "Non-finite gradients detected at batch "
                     f"{batch_idx} (global_step={global_step}, grad_norm={orig_norm_value}). "
-                    f"params={non_finite_grad_params}"
+                    f"params={non_finite_grad_params} "
+                    f"sample_ids={sample_ids} "
+                    f"waveform_stats={{'min': {float(waveform.min().item()):.6g}, "
+                    f"'max': {float(waveform.max().item()):.6g}, "
+                    f"'mean': {float(waveform.mean().item()):.6g}}} "
+                    f"repr_stats={repr_stats}"
                 )
                 if exp_logger is not None:
                     exp_logger.log_wide_event(
@@ -219,6 +351,13 @@ def train_epoch(
                             "grad_norm": grad_norm,
                             "clipped_grad_norm": orig_norm_value,
                             "params": non_finite_grad_params,
+                            "sample_ids": sample_ids,
+                            "waveform_stats": {
+                                "min": float(waveform.min().item()),
+                                "max": float(waveform.max().item()),
+                                "mean": float(waveform.mean().item()),
+                            },
+                            "repr_stats": repr_stats,
                             "losses": {
                                 k: (v.item() if isinstance(v, torch.Tensor) and v.numel() == 1 else v)
                                 for k, v in losses.items()
@@ -264,10 +403,33 @@ def train_epoch(
             if not grads_are_finite:
                 nan_grad_count += 1
                 non_finite_grad_params = get_non_finite_grad_parameter_names(model, max_names=10)
+                metadata = batch.get("metadata", {})
+                sample_ids = []
+                for i in range(min(waveform.shape[0], 5)):
+                    sample_ids.append(
+                        {
+                            "flac_file": (metadata.get("flac_file") or [None])[i],
+                            "codec_seed": (metadata.get("codec_seed") or [None])[i],
+                            "speaker_id": (metadata.get("speaker_id") or [None])[i],
+                        }
+                    )
+                repr_stats = None
+                if isinstance(outputs, dict) and "repr" in outputs:
+                    repr_tensor = outputs["repr"].detach().float()
+                    repr_stats = {
+                        "min": float(repr_tensor.min().item()),
+                        "max": float(repr_tensor.max().item()),
+                        "mean": float(repr_tensor.mean().item()),
+                    }
                 logger.warning(
                     "Non-finite gradients detected at batch "
                     f"{batch_idx} (global_step={global_step}, grad_norm={orig_norm_value}). "
-                    f"params={non_finite_grad_params}"
+                    f"params={non_finite_grad_params} "
+                    f"sample_ids={sample_ids} "
+                    f"waveform_stats={{'min': {float(waveform.min().item()):.6g}, "
+                    f"'max': {float(waveform.max().item()):.6g}, "
+                    f"'mean': {float(waveform.mean().item()):.6g}}} "
+                    f"repr_stats={repr_stats}"
                 )
                 if exp_logger is not None:
                     exp_logger.log_wide_event(
@@ -279,6 +441,13 @@ def train_epoch(
                             "grad_norm": grad_norm,
                             "clipped_grad_norm": orig_norm_value,
                             "params": non_finite_grad_params,
+                            "sample_ids": sample_ids,
+                            "waveform_stats": {
+                                "min": float(waveform.min().item()),
+                                "max": float(waveform.max().item()),
+                                "mean": float(waveform.mean().item()),
+                            },
+                            "repr_stats": repr_stats,
                             "losses": {
                                 k: (v.item() if isinstance(v, torch.Tensor) and v.numel() == 1 else v)
                                 for k, v in losses.items()
@@ -322,11 +491,12 @@ def train_epoch(
             total_codec_acc += codec_acc
             total_codec_q_acc += codec_q_acc
 
-            # Track augmentation rate (assuming 0 = NONE in synthetic vocab)
+        # Track augmentation rate whenever synthetic labels are present.
+        if saw_aug_labels:
             total_aug_samples += y_codec.numel()
             total_non_none_samples += (y_codec != 0).sum().item()
 
-            # Log augmentation rate periodically and fail if too low
+            # Log augmentation rate periodically and fail if too low (DANN only)
             if batch_idx > 0 and batch_idx % 100 == 0:
                 aug_rate = total_non_none_samples / max(total_aug_samples, 1)
                 logger.info(
@@ -335,7 +505,7 @@ def train_epoch(
                 )
 
                 # Fail if augmentation rate is near zero after sufficient steps
-                if batch_idx >= 500 and aug_rate < 0.05:
+                if method == "dann" and batch_idx >= 500 and aug_rate < 0.05:
                     raise RuntimeError(
                         f"Augmentation rate {aug_rate:.1%} < 5% after {batch_idx} steps. "
                         f"DANN requires domain diversity. Check codec_prob and ffmpeg codec support."
@@ -395,9 +565,9 @@ def train_epoch(
         metrics["codec_q_loss"] = total_codec_q_loss / num_batches
         metrics["codec_acc"] = total_codec_acc / num_batches
         metrics["codec_q_acc"] = total_codec_q_acc / num_batches
-        # Augmentation rate metric
-        if total_aug_samples > 0:
-            metrics["aug_rate"] = total_non_none_samples / total_aug_samples
+    # Augmentation rate metric (for DANN and ERM+aug controls)
+    if saw_aug_labels and total_aug_samples > 0:
+        metrics["aug_rate"] = total_non_none_samples / total_aug_samples
 
     # Gradient statistics
     if track_gradients and grad_norms:
@@ -793,7 +963,44 @@ class Trainer:
                 self.model.set_lambda(current_lambda)
                 if hasattr(self.loss_fn, "set_lambda"):
                     self.loss_fn.set_lambda(current_lambda)
-                logger.info(f"Epoch {epoch}: lambda = {current_lambda:.4f}")
+                lambda_grl = float(self.model.get_lambda()) if hasattr(self.model, "get_lambda") else float(current_lambda)
+                if hasattr(self.loss_fn, "lambda_domain"):
+                    lambda_domain_loss = float(self.loss_fn.lambda_domain)
+                elif hasattr(self.loss_fn, "lambda_"):
+                    lambda_domain_loss = float(self.loss_fn.lambda_)
+                else:
+                    lambda_domain_loss = float(current_lambda) if current_lambda is not None else None
+                logger.info(
+                    f"Epoch {epoch}: lambda_grl={lambda_grl:.6f}, "
+                    f"lambda_domain_loss={float(lambda_domain_loss):.6f}"
+                )
+            elif self.method == "dann":
+                # Even with a constant λ (no scheduler), ensure model and loss are synced.
+                lambda_grl = float(self.model.get_lambda()) if hasattr(self.model, "get_lambda") else None
+                # Sync loss function lambda to match model's GRL lambda (for consistency)
+                if lambda_grl is not None and hasattr(self.loss_fn, "set_lambda"):
+                    self.loss_fn.set_lambda(lambda_grl)
+                if hasattr(self.loss_fn, "lambda_domain"):
+                    lambda_domain_loss = float(self.loss_fn.lambda_domain)
+                elif hasattr(self.loss_fn, "lambda_"):
+                    lambda_domain_loss = float(self.loss_fn.lambda_)
+                else:
+                    lambda_domain_loss = float(lambda_grl) if lambda_grl is not None else 0.0
+                if lambda_grl is not None:
+                    logger.info(
+                        f"Epoch {epoch}: lambda_grl={lambda_grl:.6f}, "
+                        f"lambda_domain_loss={lambda_domain_loss:.6f} (no scheduler)"
+                    )
+
+            # Fail-fast correctness assertions for DANN.
+            # Requirement: λ_grl must be > 0 by epoch 1.
+            if self.method == "dann" and epoch >= 1 and hasattr(self.model, "get_lambda"):
+                lambda_grl_epoch = float(self.model.get_lambda())
+                if lambda_grl_epoch <= 0.0:
+                    raise RuntimeError(
+                        f"DANN requires lambda_grl > 0 by epoch 1, but got lambda_grl={lambda_grl_epoch}. "
+                        "Fix: reduce/disable warmup_epochs and ensure training isn't cut off early."
+                    )
 
             # Train
             train_metrics, self.global_step = train_epoch(
@@ -910,9 +1117,16 @@ class Trainer:
             if self.scheduler is not None:
                 epoch_event["learning_rate"] = self.scheduler.get_last_lr()[0]
 
-            # DANN lambda
-            if current_lambda is not None:
-                epoch_event["lambda_domain"] = current_lambda
+            # DANN lambda (log both GRL and domain-loss weight separately)
+            if self.method == "dann":
+                if hasattr(self.model, "get_lambda"):
+                    epoch_event["lambda_grl"] = float(self.model.get_lambda())
+                if hasattr(self.loss_fn, "lambda_domain"):
+                    epoch_event["lambda_domain_loss"] = float(self.loss_fn.lambda_domain)
+                elif hasattr(self.loss_fn, "lambda_"):
+                    epoch_event["lambda_domain_loss"] = float(self.loss_fn.lambda_)
+                if current_lambda is not None:
+                    epoch_event["lambda_domain"] = float(current_lambda)
 
             # Layer weights
             layer_weights = get_layer_weights(self.model)
