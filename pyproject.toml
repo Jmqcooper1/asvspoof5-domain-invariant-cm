@@ -9,7 +9,7 @@ description = "Domain-invariant speech deepfake detection on ASVspoof 5 (Track 1
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
-authors = [{ name = "Mike", email = "your.email@student.uva.nl" }]
+authors = [{ name = "Mike", email = "jmqcooper@gmail.com" }]
 keywords = [
     "audio",
     "deepfake",

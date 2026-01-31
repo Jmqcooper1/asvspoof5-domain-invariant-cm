@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Held-out codec domain generalization experiment.
 
-This script evaluates domain generalization by training models with one CODEC
+This script evaluates domain generalization by training models with one synthetic CODEC
 held out, then testing on the held-out CODEC to measure the generalization gap.
 
 Compares ERM vs DANN to show whether domain-adversarial training improves
@@ -9,7 +9,7 @@ generalization to unseen codecs.
 
 Usage:
     python scripts/run_held_out_codec.py --config configs/wavlm_dann.yaml
-    python scripts/run_held_out_codec.py --top-n 5 --output-dir runs/held_out
+    python scripts/run_held_out_codec.py --top-n 3 --output-dir runs/held_out
 """
 
 import argparse
@@ -22,7 +22,13 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from asvspoof5_domain_invariant_cm.data import ASVspoof5Dataset, load_vocab
+from asvspoof5_domain_invariant_cm.data import (
+    ASVspoof5Dataset, 
+    load_vocab, 
+    create_augmentor,
+    SYNTHETIC_CODEC_VOCAB,
+    SYNTHETIC_QUALITY_VOCAB,
+)
 from asvspoof5_domain_invariant_cm.data.audio import AudioCollator
 from asvspoof5_domain_invariant_cm.evaluation import (
     compute_domain_gap,
@@ -57,8 +63,8 @@ def parse_args():
     parser.add_argument(
         "--top-n",
         type=int,
-        default=5,
-        help="Number of top CODECs to evaluate (by sample count)",
+        default=3,
+        help="Number of top synthetic CODECs to evaluate",
     )
     parser.add_argument(
         "--output-dir",
@@ -91,70 +97,95 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_top_codecs(manifest_path: Path, top_n: int) -> list[str]:
-    """Get top N CODECs by sample count.
+def get_synthetic_codecs(config: dict) -> list[str]:
+    """Get codec families from augmentation config.
 
     Args:
-        manifest_path: Path to manifest file.
-        top_n: Number of top codecs to return.
+        config: Configuration dictionary.
 
     Returns:
-        List of codec names sorted by sample count (descending).
+        List of synthetic codec names.
     """
-    df = pd.read_parquet(manifest_path)
-    codec_counts = df["codec"].value_counts()
-    return codec_counts.head(top_n).index.tolist()
+    aug_config = config.get("augmentation", {})
+    if not aug_config.get("enabled", False):
+        raise ValueError("Augmentation must be enabled for held-out codec experiment")
+    
+    # Get supported codecs from augmentation config
+    codecs = aug_config.get("codecs", ["MP3", "AAC", "OPUS"])
+    return codecs
 
 
-def create_held_out_splits(
-    manifest_path: Path,
-    held_out_codec: str,
-    codec_vocab: dict,
-    codec_q_vocab: dict,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Create train/test splits with one CODEC held out.
-
-    Groups by codec_seed to prevent leakage between coded variants.
+def create_augmentor_excluding_codec(
+    config: dict, 
+    excluded_codec: str,
+    sample_rate: int = 16000,
+) -> object:
+    """Create augmentor that excludes a specific codec.
 
     Args:
-        manifest_path: Path to manifest file.
-        held_out_codec: CODEC value to hold out for testing.
-        codec_vocab: CODEC vocabulary.
-        codec_q_vocab: CODEC_Q vocabulary.
+        config: Configuration dictionary.
+        excluded_codec: Codec to exclude from augmentation.
+        sample_rate: Sample rate for audio.
 
     Returns:
-        Tuple of (train_df, test_df).
+        Augmentor with excluded codec removed.
     """
-    df = pd.read_parquet(manifest_path)
+    aug_config = config.get("augmentation", {}).copy()
+    
+    # Remove the held-out codec from the supported codecs list
+    original_codecs = aug_config.get("codecs", ["MP3", "AAC", "OPUS"])
+    remaining_codecs = [c for c in original_codecs if c != excluded_codec]
+    
+    if len(remaining_codecs) == 0:
+        raise ValueError(f"Cannot exclude {excluded_codec}: no remaining codecs")
+    
+    aug_config["codecs"] = remaining_codecs
+    aug_config["sample_rate"] = sample_rate
+    
+    logger.info(f"Creating augmentor with codecs: {remaining_codecs} (excluding {excluded_codec})")
+    
+    return create_augmentor(aug_config)
 
-    # Split by CODEC
-    train_df = df[df["codec"] != held_out_codec].copy()
-    test_df = df[df["codec"] == held_out_codec].copy()
 
-    logger.info(f"Held-out CODEC: {held_out_codec}")
-    logger.info(f"  Train samples: {len(train_df)}")
-    logger.info(f"  Test samples: {len(test_df)}")
+def create_augmentor_only_codec(
+    config: dict, 
+    only_codec: str,
+    sample_rate: int = 16000,
+) -> object:
+    """Create augmentor that uses only a specific codec.
 
-    return train_df, test_df
+    Args:
+        config: Configuration dictionary.
+        only_codec: Codec to use exclusively.
+        sample_rate: Sample rate for audio.
+
+    Returns:
+        Augmentor with only the specified codec.
+    """
+    aug_config = config.get("augmentation", {}).copy()
+    aug_config["codecs"] = [only_codec]
+    aug_config["sample_rate"] = sample_rate
+    # Force codec application
+    aug_config["codec_prob"] = 1.0
+    
+    return create_augmentor(aug_config)
 
 
 def evaluate_model_on_split(
     model: torch.nn.Module,
     df: pd.DataFrame,
-    codec_vocab: dict,
-    codec_q_vocab: dict,
+    augmentor: object,
     device: torch.device,
     batch_size: int = 32,
     max_duration_sec: float = 6.0,
     sample_rate: int = 16000,
 ) -> dict:
-    """Evaluate a model on a given dataframe split.
+    """Evaluate a model on a given dataframe split with augmentation.
 
     Args:
         model: Trained model.
         df: DataFrame with samples to evaluate.
-        codec_vocab: CODEC vocabulary.
-        codec_q_vocab: CODEC_Q vocabulary.
+        augmentor: Augmentor to apply (or None).
         device: Device to use.
         batch_size: Batch size.
         max_duration_sec: Max audio duration.
@@ -164,13 +195,25 @@ def evaluate_model_on_split(
         Dictionary with EER and minDCF metrics.
     """
     from torch.utils.data import DataLoader
-
-    # Save temporary manifest
     import tempfile
 
+    # Save temporary manifest
     with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
         temp_path = Path(f.name)
         df.to_parquet(temp_path)
+
+    # Use synthetic vocab if augmentation is enabled
+    if augmentor is not None:
+        codec_vocab = augmentor.codec_vocab
+        codec_q_vocab = SYNTHETIC_QUALITY_VOCAB
+        use_synthetic_labels = True
+    else:
+        # Fallback to original vocabs
+        from asvspoof5_domain_invariant_cm.utils import get_manifests_dir
+        manifests_dir = get_manifests_dir()
+        codec_vocab = load_vocab(manifests_dir / "codec_vocab.json")
+        codec_q_vocab = load_vocab(manifests_dir / "codec_q_vocab.json")
+        use_synthetic_labels = False
 
     dataset = ASVspoof5Dataset(
         manifest_path=temp_path,
@@ -179,6 +222,8 @@ def evaluate_model_on_split(
         max_duration_sec=max_duration_sec,
         sample_rate=sample_rate,
         mode="eval",
+        augmentor=augmentor,
+        use_synthetic_labels=use_synthetic_labels,
     )
 
     fixed_length = int(max_duration_sec * sample_rate)
@@ -259,32 +304,20 @@ def run_held_out_experiment(
     set_seed(seed)
     device = get_device()
 
-    # Load vocabularies
-    vocab_dir = get_manifest_path("train").parent
-    codec_vocab = load_vocab(vocab_dir / "codec_vocab.json")
-    codec_q_vocab = load_vocab(vocab_dir / "codec_q_vocab.json")
-
     # Create output directory
     exp_dir = output_dir / f"held_out_{held_out_codec}"
     exp_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create train/test splits
+    # Load train/dev manifests
     train_manifest = get_manifest_path("train")
     dev_manifest = get_manifest_path("dev")
-
-    train_df, test_df = create_held_out_splits(
-        train_manifest, held_out_codec, codec_vocab, codec_q_vocab
-    )
-
-    # Also create held-out split from dev set
+    train_df = pd.read_parquet(train_manifest)
     dev_df = pd.read_parquet(dev_manifest)
-    dev_in_domain = dev_df[dev_df["codec"] != held_out_codec]
-    dev_out_domain = dev_df[dev_df["codec"] == held_out_codec]
 
     results = {
         "held_out_codec": held_out_codec,
         "train_samples": len(train_df),
-        "test_samples": len(test_df),
+        "dev_samples": len(dev_df),
     }
 
     # Train and evaluate both ERM and DANN
@@ -299,44 +332,60 @@ def run_held_out_experiment(
         if skip_training and checkpoint_path.exists():
             logger.info(f"Loading existing checkpoint: {checkpoint_path}")
         else:
-            # Save temporary train manifest
-            import tempfile
+            # Create augmentor excluding the held-out codec (for training)
+            train_augmentor = create_augmentor_excluding_codec(
+                config, held_out_codec, sample_rate=config["audio"]["sample_rate"]
+            )
 
-            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
-                temp_train_path = Path(f.name)
-                train_df.to_parquet(temp_train_path)
-
-            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
-                temp_val_path = Path(f.name)
-                dev_in_domain.to_parquet(temp_val_path)
-
-            # Create datasets
-            from asvspoof5_domain_invariant_cm.data import create_dataloader
-
-            train_loader = create_dataloader(
-                manifest_path=temp_train_path,
-                codec_vocab=codec_vocab,
-                codec_q_vocab=codec_q_vocab,
-                batch_size=config["dataloader"]["batch_size"],
+            # Create datasets for training
+            train_dataset = ASVspoof5Dataset(
+                manifest_path=train_manifest,
+                codec_vocab=train_augmentor.codec_vocab,
+                codec_q_vocab=SYNTHETIC_QUALITY_VOCAB,
                 max_duration_sec=config["audio"]["max_duration_sec"],
                 sample_rate=config["audio"]["sample_rate"],
                 mode="train",
-                num_workers=config["dataloader"].get("num_workers", 4),
-                shuffle=True,
-                drop_last=True,
+                augmentor=train_augmentor,
+                use_synthetic_labels=True,
             )
 
-            val_loader = create_dataloader(
-                manifest_path=temp_val_path,
-                codec_vocab=codec_vocab,
-                codec_q_vocab=codec_q_vocab,
-                batch_size=config["dataloader"]["batch_size"],
+            val_dataset = ASVspoof5Dataset(
+                manifest_path=dev_manifest,
+                codec_vocab=train_augmentor.codec_vocab,
+                codec_q_vocab=SYNTHETIC_QUALITY_VOCAB,
                 max_duration_sec=config["audio"]["max_duration_sec"],
                 sample_rate=config["audio"]["sample_rate"],
                 mode="eval",
+                augmentor=train_augmentor,
+                use_synthetic_labels=True,
+            )
+
+            logger.info(f"Train samples: {len(train_dataset)}")
+            logger.info(f"Val samples: {len(val_dataset)}")
+
+            # Create dataloaders
+            fixed_length = int(config["audio"]["max_duration_sec"] * config["audio"]["sample_rate"])
+            train_collator = AudioCollator(fixed_length=fixed_length, mode="train")
+            val_collator = AudioCollator(fixed_length=fixed_length, mode="eval")
+
+            train_loader = torch.utils.data.DataLoader(
+                train_dataset,
+                batch_size=config["dataloader"]["batch_size"],
+                shuffle=True,
                 num_workers=config["dataloader"].get("num_workers", 4),
+                collate_fn=train_collator,
+                drop_last=True,
+                pin_memory=True,
+            )
+
+            val_loader = torch.utils.data.DataLoader(
+                val_dataset,
+                batch_size=config["dataloader"]["batch_size"],
                 shuffle=False,
+                num_workers=config["dataloader"].get("num_workers", 4),
+                collate_fn=val_collator,
                 drop_last=False,
+                pin_memory=True,
             )
 
             # Build model
@@ -381,8 +430,8 @@ def run_held_out_experiment(
                 domain_discriminator = MultiHeadDomainDiscriminator(
                     input_dim=config["projection"]["output_dim"],
                     hidden_dim=config["dann"]["discriminator"]["hidden_dim"],
-                    num_codecs=len(codec_vocab),
-                    num_codec_qs=len(codec_q_vocab),
+                    num_codecs=len(train_augmentor.codec_vocab),
+                    num_codec_qs=len(SYNTHETIC_QUALITY_VOCAB),
                     dropout=config["dann"]["discriminator"].get("dropout", 0.1),
                 )
 
@@ -415,8 +464,8 @@ def run_held_out_experiment(
             loss_fn = build_loss(
                 method=method,
                 config=config["training"],
-                num_codecs=len(codec_vocab),
-                num_codec_qs=len(codec_q_vocab),
+                num_codecs=len(train_augmentor.codec_vocab),
+                num_codec_qs=len(SYNTHETIC_QUALITY_VOCAB),
             )
 
             # Lambda scheduler for DANN
@@ -432,6 +481,13 @@ def run_held_out_experiment(
                     end_value=lambda_sched_cfg.get("end", 1.0),
                     warmup_epochs=lambda_sched_cfg.get("warmup_epochs", 0),
                 )
+
+            # Save vocabs to run directory
+            import json
+            with open(method_dir / "codec_vocab.json", "w") as f:
+                json.dump(train_augmentor.codec_vocab, f, indent=2)
+            with open(method_dir / "codec_q_vocab.json", "w") as f:
+                json.dump(SYNTHETIC_QUALITY_VOCAB, f, indent=2)
 
             # Train
             trainer = Trainer(
@@ -457,20 +513,19 @@ def run_held_out_experiment(
                 wandb_project=wandb_project,
                 wandb_run_name=f"held_out_{held_out_codec}_{method}",
                 wandb_tags=["held-out", held_out_codec, method],
-                codec_vocab=codec_vocab,
-                codec_q_vocab=codec_q_vocab,
+                codec_vocab=train_augmentor.codec_vocab,
+                codec_q_vocab=SYNTHETIC_QUALITY_VOCAB,
             )
 
             trainer.train()
 
-            # Cleanup temp files
-            temp_train_path.unlink()
-            temp_val_path.unlink()
-
         # Load best model and evaluate
         checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
-        # Rebuild model for loading
+        # Rebuild model for loading (using the saved vocab)
+        saved_codec_vocab = load_vocab(method_dir / "codec_vocab.json")
+        saved_codec_q_vocab = load_vocab(method_dir / "codec_q_vocab.json")
+
         backbone_config = config["backbone"]
         backbone = create_backbone(
             backbone_config["name"],
@@ -512,8 +567,8 @@ def run_held_out_experiment(
             domain_discriminator = MultiHeadDomainDiscriminator(
                 input_dim=config["projection"]["output_dim"],
                 hidden_dim=config["dann"]["discriminator"]["hidden_dim"],
-                num_codecs=len(codec_vocab),
-                num_codec_qs=len(codec_q_vocab),
+                num_codecs=len(saved_codec_vocab),
+                num_codec_qs=len(saved_codec_q_vocab),
             )
 
             model = DANNModel(
@@ -535,21 +590,35 @@ def run_held_out_experiment(
         model.load_state_dict(checkpoint["model_state_dict"])
         model = model.to(device)
 
-        # Evaluate on in-domain (other codecs from dev set)
-        in_domain_metrics = evaluate_model_on_split(
-            model, dev_in_domain, codec_vocab, codec_q_vocab, device
+        # Create evaluation augmentors
+        # In-domain: use the training augmentor (excludes held-out codec)
+        in_domain_augmentor = create_augmentor_excluding_codec(
+            config, held_out_codec, sample_rate=config["audio"]["sample_rate"]
+        )
+        
+        # Out-of-domain: use only the held-out codec
+        out_domain_augmentor = create_augmentor_only_codec(
+            config, held_out_codec, sample_rate=config["audio"]["sample_rate"]
         )
 
-        # Evaluate on out-of-domain (held-out codec from dev set)
-        if len(dev_out_domain) > 0:
-            out_domain_metrics = evaluate_model_on_split(
-                model, dev_out_domain, codec_vocab, codec_q_vocab, device
-            )
+        # Evaluate on in-domain (dev set with remaining codecs)
+        in_domain_metrics = evaluate_model_on_split(
+            model, dev_df, in_domain_augmentor, device,
+            batch_size=config["dataloader"]["batch_size"],
+            max_duration_sec=config["audio"]["max_duration_sec"],
+            sample_rate=config["audio"]["sample_rate"],
+        )
 
-            gap = compute_domain_gap(in_domain_metrics, out_domain_metrics)
-        else:
-            out_domain_metrics = {"eer": None, "min_dcf": None, "n_samples": 0}
-            gap = {"eer_gap": None, "min_dcf_gap": None}
+        # Evaluate on out-of-domain (dev set with only held-out codec)
+        out_domain_metrics = evaluate_model_on_split(
+            model, dev_df, out_domain_augmentor, device,
+            batch_size=config["dataloader"]["batch_size"],
+            max_duration_sec=config["audio"]["max_duration_sec"],
+            sample_rate=config["audio"]["sample_rate"],
+        )
+
+        # Compute domain gap
+        gap = compute_domain_gap(in_domain_metrics, out_domain_metrics)
 
         results[f"{method}_in_domain"] = in_domain_metrics
         results[f"{method}_out_domain"] = out_domain_metrics
@@ -557,9 +626,8 @@ def run_held_out_experiment(
 
         logger.info(f"{method.upper()} Results:")
         logger.info(f"  In-domain EER: {in_domain_metrics['eer']:.4f}")
-        if out_domain_metrics["eer"] is not None:
-            logger.info(f"  Out-domain EER: {out_domain_metrics['eer']:.4f}")
-            logger.info(f"  EER Gap: {gap['eer_gap']:.4f}")
+        logger.info(f"  Out-domain EER: {out_domain_metrics['eer']:.4f}")
+        logger.info(f"  EER Gap: {gap['eer_gap']:.4f}")
 
     return results
 
@@ -572,12 +640,15 @@ def main():
     # Load config
     config = load_config(args.config)
 
+    # Ensure augmentation is enabled
+    if not config.get("augmentation", {}).get("enabled", False):
+        raise ValueError("Augmentation must be enabled in config for held-out codec experiment")
+
     # Output directory
     if args.output_dir:
         output_dir = args.output_dir
     else:
         from asvspoof5_domain_invariant_cm.utils import get_runs_dir
-
         output_dir = get_runs_dir() / "held_out_codec"
 
     output_dir = Path(output_dir)
@@ -589,7 +660,6 @@ def main():
     if args.wandb:
         try:
             import wandb
-
             wandb.init(
                 project=args.wandb_project,
                 name=f"held_out_top{args.top_n}",
@@ -598,10 +668,10 @@ def main():
         except ImportError:
             logger.warning("Wandb not installed, skipping logging")
 
-    # Get top N codecs
-    train_manifest = get_manifest_path("train")
-    top_codecs = get_top_codecs(train_manifest, args.top_n)
-    logger.info(f"Top {args.top_n} CODECs: {top_codecs}")
+    # Get top N synthetic codecs
+    all_codecs = get_synthetic_codecs(config)
+    top_codecs = all_codecs[:args.top_n]
+    logger.info(f"Top {args.top_n} synthetic CODECs: {top_codecs}")
 
     # Run experiments
     all_results = []
@@ -623,7 +693,7 @@ def main():
         row = {
             "held_out_codec": r["held_out_codec"],
             "train_samples": r["train_samples"],
-            "test_samples": r["test_samples"],
+            "dev_samples": r["dev_samples"],
         }
 
         for method in ["erm", "dann"]:
@@ -635,11 +705,11 @@ def main():
                 row[f"{method}_in_eer"] = r[in_key]["eer"]
                 row[f"{method}_in_dcf"] = r[in_key]["min_dcf"]
 
-            if out_key in r and r[out_key]["eer"] is not None:
+            if out_key in r:
                 row[f"{method}_out_eer"] = r[out_key]["eer"]
                 row[f"{method}_out_dcf"] = r[out_key]["min_dcf"]
 
-            if gap_key in r and r[gap_key]["eer_gap"] is not None:
+            if gap_key in r:
                 row[f"{method}_eer_gap"] = r[gap_key]["eer_gap"]
                 row[f"{method}_dcf_gap"] = r[gap_key]["min_dcf_gap"]
 
@@ -673,7 +743,6 @@ def main():
         if args.wandb:
             try:
                 import wandb
-
                 wandb.log({
                     "avg_erm_eer_gap": avg_erm_gap,
                     "avg_dann_eer_gap": avg_dann_gap,

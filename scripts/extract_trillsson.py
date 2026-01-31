@@ -7,6 +7,16 @@ This script extracts embeddings and saves them for downstream classification.
 Requirements:
     uv sync --extra trillsson
 
+Offline extraction workflow (recommended for Snellius):
+1. On local machine with TensorFlow:
+   pip install tensorflow tensorflow-hub torchaudio numpy pandas
+   python scripts/extract_trillsson.py --split train --output-dir data/features/trillsson
+   python scripts/extract_trillsson.py --split dev --output-dir data/features/trillsson
+2. Upload to Snellius:
+   rsync -avz data/features/trillsson/ snellius:$ASVSPOOF5_ROOT/../features/trillsson/
+3. On Snellius, run classifier training (no TF needed):
+   python scripts/train_trillsson.py --config configs/trillsson_baseline.yaml
+
 Usage:
     python scripts/extract_trillsson.py --split train
     python scripts/extract_trillsson.py --split dev

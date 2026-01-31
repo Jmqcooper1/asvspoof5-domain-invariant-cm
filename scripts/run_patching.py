@@ -153,8 +153,17 @@ def load_model_from_checkpoint(checkpoint_path: Path, device: torch.device):
     config = checkpoint.get("config", {})
 
     run_dir = checkpoint_path.parent.parent
-    codec_vocab = load_vocab(run_dir / "codec_vocab.json")
-    codec_q_vocab = load_vocab(run_dir / "codec_q_vocab.json")
+    
+    # Try to load vocabularies with fallback for older runs
+    try:
+        codec_vocab = load_vocab(run_dir / "codec_vocab.json")
+        codec_q_vocab = load_vocab(run_dir / "codec_q_vocab.json")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(
+            f"Could not load vocabulary files from {run_dir}. "
+            f"Missing file: {e.filename}. "
+            f"This checkpoint may be from an older run format."
+        )
 
     num_codecs = len(codec_vocab)
     num_codec_qs = len(codec_q_vocab)
@@ -232,6 +241,26 @@ def load_model_from_checkpoint(checkpoint_path: Path, device: torch.device):
         )
 
     model.load_state_dict(checkpoint["model_state_dict"])
+    
+    # Validate discriminator head sizes match vocab sizes
+    if hasattr(model, 'domain_discriminator'):
+        expected_codec_head = model.domain_discriminator.codec_head.out_features
+        expected_codec_q_head = model.domain_discriminator.codec_q_head.out_features
+        
+        if expected_codec_head != num_codecs:
+            raise ValueError(
+                f"Codec head size mismatch: model has {expected_codec_head} but vocab has {num_codecs}. "
+                f"This checkpoint may have been trained with a different vocab. "
+                f"Check {run_dir} for synthetic_codec_vocab.json or correct vocab files."
+            )
+        
+        if expected_codec_q_head != num_codec_qs:
+            raise ValueError(
+                f"Codec Q head size mismatch: model has {expected_codec_q_head} but vocab has {num_codec_qs}. "
+                f"This checkpoint may have been trained with a different vocab. "
+                f"Check {run_dir} for synthetic_codec_q_vocab.json or correct vocab files."
+            )
+    
     model = model.to(device)
     model.eval()
 
