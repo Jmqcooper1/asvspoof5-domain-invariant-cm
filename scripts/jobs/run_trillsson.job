@@ -1,0 +1,165 @@
+#!/bin/bash
+#SBATCH --partition=gpu_a100
+#SBATCH --gpus=1
+#SBATCH --job-name=TRILLsson
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=9
+#SBATCH --time=12:00:00
+#SBATCH --mem=64G
+#SBATCH --output=./scripts/jobs/out/%x_%A.out
+
+# =============================================================================
+# TRILLsson Baseline: Extract embeddings + Train classifier
+#
+# Uses a separate pip virtualenv for TensorFlow (extraction phase),
+# then switches back to the project uv env for classifier training.
+#
+# Usage:
+#   sbatch scripts/jobs/run_trillsson.job
+# =============================================================================
+
+set -euo pipefail
+
+module purge
+module load 2025
+
+# Navigate to repo root
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  cd "$SLURM_SUBMIT_DIR"
+fi
+if [[ ! -f "pyproject.toml" ]]; then
+  echo "ERROR: pyproject.toml not found in $(pwd). Set SLURM_SUBMIT_DIR or run from repo root." >&2
+  exit 1
+fi
+echo "Repo root: $(pwd)"
+
+# Load env + require ASVSPOOF5_ROOT
+source scripts/jobs/_job_common.sh
+load_and_require_asvspoof5_root
+
+# ── Phase 0: Ensure output directory exists ──────────────────────────────────
+mkdir -p scripts/jobs/out
+mkdir -p data/features/trillsson
+
+# ── Phase 1: TRILLsson Embedding Extraction (TensorFlow) ────────────────────
+echo ""
+echo "================================================================="
+echo "Phase 1: TRILLsson Embedding Extraction"
+echo "================================================================="
+
+TRILLSSON_VENV="${HOME}/.trillsson-venv"
+
+# Create a standalone Python venv with TensorFlow (only once)
+if [[ ! -f "${TRILLSSON_VENV}/bin/activate" ]]; then
+  echo "Creating TRILLsson virtualenv at ${TRILLSSON_VENV}..."
+  python3 -m venv "${TRILLSSON_VENV}"
+  source "${TRILLSSON_VENV}/bin/activate"
+
+  pip install --upgrade pip
+  pip install \
+    "tensorflow>=2.15,<2.18" \
+    "tensorflow-hub>=0.16" \
+    "torchaudio>=2.0" \
+    "torch>=2.0" \
+    "numpy>=1.26" \
+    "pandas>=2.0" \
+    "tqdm>=4.66" \
+    "soundfile>=0.12" \
+    "scipy>=1.11"
+
+  echo "TRILLsson venv created successfully."
+else
+  echo "Reusing existing TRILLsson venv at ${TRILLSSON_VENV}"
+  source "${TRILLSSON_VENV}/bin/activate"
+fi
+
+# Verify TensorFlow works
+python -c "
+import tensorflow as tf
+print(f'TensorFlow version: {tf.__version__}')
+gpus = tf.config.list_physical_devices('GPU')
+print(f'TF GPU devices: {len(gpus)}')
+for g in gpus:
+    print(f'  {g}')
+"
+
+# Set TF cache dir to scratch (models are large)
+export TFHUB_CACHE_DIR="${ASVSPOOF5_ROOT}/../.cache/tfhub"
+mkdir -p "${TFHUB_CACHE_DIR}"
+
+# The extraction script imports from our package, so add src to PYTHONPATH
+export PYTHONPATH="${PWD}/src:${PYTHONPATH:-}"
+
+# Extract embeddings for train and dev
+echo ""
+echo "--- Extracting TRILLsson3 embeddings (train) ---"
+srun python scripts/extract_trillsson.py \
+  --split train \
+  --output-dir data/features/trillsson \
+  --model trillsson3 \
+  --batch-size 64 \
+  --max-duration 6.0
+
+echo ""
+echo "--- Extracting TRILLsson3 embeddings (dev) ---"
+srun python scripts/extract_trillsson.py \
+  --split dev \
+  --output-dir data/features/trillsson \
+  --model trillsson3 \
+  --batch-size 64 \
+  --max-duration 6.0
+
+# Deactivate TF venv
+deactivate
+
+# Verify embeddings were created
+echo ""
+echo "--- Checking extracted embeddings ---"
+for split in train dev; do
+  if [[ -f "data/features/trillsson/${split}.npy" ]]; then
+    python3 -c "
+import numpy as np
+emb = np.load('data/features/trillsson/${split}.npy')
+print(f'${split}: shape={emb.shape}, dtype={emb.dtype}, size={emb.nbytes/(1024**2):.1f} MB')
+"
+  else
+    echo "ERROR: data/features/trillsson/${split}.npy not found!" >&2
+    exit 1
+  fi
+done
+
+# ── Phase 2: Classifier Training (uv env, no TensorFlow needed) ─────────────
+echo ""
+echo "================================================================="
+echo "Phase 2: TRILLsson Classifier Training"
+echo "================================================================="
+
+# Install/sync the project uv env
+curl -LsSf https://astral.sh/uv/install.sh | sh 2>/dev/null || true
+export PATH="$HOME/.local/bin:$PATH"
+uv sync --locked
+
+export WANDB_PROJECT=${WANDB_PROJECT:-asvspoof5-dann}
+
+# Train logistic regression classifier
+echo ""
+echo "--- Training Logistic Regression ---"
+srun uv run python scripts/train_trillsson.py \
+  --classifier logistic \
+  --features-dir data/features/trillsson \
+  --wandb \
+  --wandb-project "${WANDB_PROJECT}"
+
+# Train MLP classifier
+echo ""
+echo "--- Training MLP ---"
+srun uv run python scripts/train_trillsson.py \
+  --classifier mlp \
+  --features-dir data/features/trillsson \
+  --wandb \
+  --wandb-project "${WANDB_PROJECT}"
+
+echo ""
+echo "================================================================="
+echo "TRILLsson baseline complete!"
+echo "================================================================="
