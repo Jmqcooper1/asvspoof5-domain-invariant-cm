@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import copy
 import json
 import logging
 from pathlib import Path
@@ -130,7 +131,7 @@ def create_augmentor_excluding_codec(
     Returns:
         Augmentor with excluded codec removed.
     """
-    aug_config = config.get("augmentation", {}).copy()
+    aug_config = copy.deepcopy(config.get("augmentation", {}))
     
     # Remove the held-out codec from the supported codecs list
     original_codecs = aug_config.get("codecs", ["MP3", "AAC", "OPUS"])
@@ -162,7 +163,7 @@ def create_augmentor_only_codec(
     Returns:
         Augmentor with only the specified codec.
     """
-    aug_config = config.get("augmentation", {}).copy()
+    aug_config = copy.deepcopy(config.get("augmentation", {}))
     aug_config["codecs"] = [only_codec]
     aug_config["sample_rate"] = sample_rate
     # Force codec application
