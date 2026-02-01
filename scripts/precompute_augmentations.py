@@ -1,0 +1,735 @@
+#!/usr/bin/env python3
+"""Pre-compute codec augmentations offline for DANN training.
+
+Instead of running ffmpeg on-the-fly during training (~4h/epoch), pre-compute
+all codec × quality augmentations so DANN training speed approaches ERM (~0.8h/epoch).
+
+For each audio file in the training manifest, creates augmented versions:
+  3 codecs × 5 quality levels = 15 augmented versions per file
+
+Output structure:
+  {output_dir}/
+  ├── MP3/q1/  MP3/q2/  ...  MP3/q5/
+  ├── AAC/q1/  AAC/q2/  ...  AAC/q5/
+  ├── OPUS/q1/ OPUS/q2/ ... OPUS/q5/
+  └── manifest.json
+
+Usage:
+    python scripts/precompute_augmentations.py \\
+        --data-root $ASVSPOOF5_ROOT \\
+        --output-dir /scratch/augmented_cache \\
+        --codecs MP3 AAC OPUS \\
+        --qualities 1 2 3 4 5 \\
+        --num-workers 8 \\
+        --split train
+"""
+
+import argparse
+import json
+import logging
+import os
+import shutil
+import sys
+import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Pre-compute codec augmentations for DANN training",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=None,
+        help="ASVspoof5 data root (overrides ASVSPOOF5_ROOT env var)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Output directory for pre-computed augmentations",
+    )
+    parser.add_argument(
+        "--codecs",
+        nargs="+",
+        default=["MP3", "AAC", "OPUS"],
+        help="Codecs to use (default: MP3 AAC OPUS)",
+    )
+    parser.add_argument(
+        "--qualities",
+        nargs="+",
+        type=int,
+        default=[1, 2, 3, 4, 5],
+        help="Quality levels to use (default: 1 2 3 4 5)",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=8,
+        help="Number of parallel workers (default: 8)",
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        default="train",
+        choices=["train", "dev", "eval"],
+        help="Data split to process (default: train)",
+    )
+    parser.add_argument(
+        "--sample-rate",
+        type=int,
+        default=16000,
+        help="Target sample rate (default: 16000)",
+    )
+    parser.add_argument(
+        "--manifest-dir",
+        type=Path,
+        default=None,
+        help="Directory with manifest parquet files (default: data/manifests)",
+    )
+    parser.add_argument(
+        "--output-format",
+        type=str,
+        default="flac",
+        choices=["flac", "wav"],
+        help="Output audio format (default: flac)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be done without actually processing",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Process only first N files (for testing)",
+    )
+    return parser.parse_args()
+
+
+def check_ffmpeg() -> bool:
+    """Check that ffmpeg is available."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            check=True,
+        )
+        version_line = result.stdout.decode().split("\n")[0]
+        logger.info(f"ffmpeg found: {version_line}")
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+def check_encoder_support(codecs: list[str]) -> list[str]:
+    """Check which codecs are supported by ffmpeg."""
+    import subprocess
+
+    encoder_map = {
+        "MP3": "libmp3lame",
+        "AAC": "aac",
+        "OPUS": "libopus",
+        "SPEEX": "libspeex",
+        "AMR": "libopencore_amrnb",
+    }
+
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-encoders"],
+            capture_output=True,
+            text=True,
+        )
+        encoder_output = result.stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        logger.error("Cannot query ffmpeg encoders")
+        return []
+
+    supported = []
+    for codec in codecs:
+        encoder = encoder_map.get(codec)
+        if encoder and encoder in encoder_output:
+            supported.append(codec)
+            logger.info(f"  ✓ {codec} ({encoder}) supported")
+        else:
+            logger.warning(f"  ✗ {codec} ({encoder}) NOT supported — skipping")
+
+    return supported
+
+
+# Bitrate configurations per codec and quality level (kbps)
+# Must match codec_augment.py exactly
+CODEC_BITRATES = {
+    "MP3": {1: 64, 2: 96, 3: 128, 4: 192, 5: 256},
+    "AAC": {1: 32, 2: 64, 3: 96, 4: 128, 5: 192},
+    "OPUS": {1: 12, 2: 24, 3: 48, 4: 64, 5: 96},
+    "SPEEX": {1: 8, 2: 16, 3: 24, 4: 32, 5: 44},
+    "AMR": {1: 6, 2: 9, 3: 12, 4: 18, 5: 23},
+}
+
+# ffmpeg encoder and format config (matches codec_augment.py)
+CODEC_CONFIG = {
+    "MP3": {"encoder": "libmp3lame", "format": "mp3", "ext": ".mp3"},
+    "AAC": {"encoder": "aac", "format": "adts", "ext": ".aac"},
+    "OPUS": {"encoder": "libopus", "format": "opus", "ext": ".opus"},
+    "SPEEX": {"encoder": "libspeex", "format": "ogg", "ext": ".spx"},
+    "AMR": {
+        "encoder": "libopencore_amrnb",
+        "format": "amr",
+        "ext": ".amr",
+        "sample_rate": 8000,
+    },
+}
+
+
+def apply_codec_to_file(
+    input_path: str,
+    output_path: str,
+    codec: str,
+    quality: int,
+    sample_rate: int = 16000,
+) -> tuple[bool, str]:
+    """Apply codec compression to an audio file.
+
+    Encode input → codec format → decode back to output format.
+    This matches the on-the-fly augmentation pipeline exactly.
+
+    Args:
+        input_path: Path to input audio file.
+        output_path: Path to write output audio file.
+        codec: Codec name (MP3, AAC, OPUS, etc.).
+        quality: Quality level (1-5).
+        sample_rate: Target sample rate.
+
+    Returns:
+        Tuple of (success: bool, error_message: str).
+    """
+    import subprocess
+    import tempfile
+
+    bitrate = CODEC_BITRATES.get(codec, {}).get(quality)
+    if bitrate is None:
+        return False, f"Unknown codec/quality: {codec}/{quality}"
+
+    config = CODEC_CONFIG.get(codec)
+    if config is None:
+        return False, f"Unknown codec config: {codec}"
+
+    target_sr = config.get("sample_rate", sample_rate)
+    tmp_encoded = None
+
+    try:
+        # Create temp file for the intermediate encoded format
+        with tempfile.NamedTemporaryFile(
+            suffix=config["ext"], delete=False
+        ) as tmp:
+            tmp_encoded = tmp.name
+
+        # Step 1: Encode (input → codec format)
+        encode_cmd = [
+            "ffmpeg",
+            "-y",
+            "-i", str(input_path),
+            "-ar", str(target_sr),
+            "-ac", "1",
+            "-c:a", config["encoder"],
+            "-b:a", f"{bitrate}k",
+            "-f", config["format"],
+            tmp_encoded,
+        ]
+
+        subprocess.run(
+            encode_cmd,
+            capture_output=True,
+            check=True,
+        )
+
+        # Step 2: Decode back (codec format → output format)
+        decode_cmd = [
+            "ffmpeg",
+            "-y",
+            "-i", tmp_encoded,
+            "-ar", str(sample_rate),
+            "-ac", "1",
+            str(output_path),
+        ]
+
+        subprocess.run(
+            decode_cmd,
+            capture_output=True,
+            check=True,
+        )
+
+        return True, ""
+
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.decode()[:300] if e.stderr else "unknown error"
+        return False, f"ffmpeg error: {stderr}"
+    except Exception as e:
+        return False, str(e)
+    finally:
+        if tmp_encoded is not None:
+            try:
+                os.unlink(tmp_encoded)
+            except OSError:
+                pass
+
+
+def process_single_file(args_tuple: tuple) -> dict:
+    """Process a single audio file for one codec/quality combination.
+
+    Designed to be called from ProcessPoolExecutor. Takes a single tuple
+    argument for compatibility with map().
+
+    Args:
+        args_tuple: (input_path, output_path, codec, quality, sample_rate, output_format)
+
+    Returns:
+        Dict with status info.
+    """
+    input_path, output_path, codec, quality, sample_rate, output_format = args_tuple
+
+    output_path = Path(output_path)
+
+    # Skip if output already exists (resume support)
+    if output_path.exists() and output_path.stat().st_size > 0:
+        return {
+            "input_path": str(input_path),
+            "output_path": str(output_path),
+            "codec": codec,
+            "quality": quality,
+            "status": "skipped",
+            "error": "",
+        }
+
+    # Ensure output directory exists
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Write to temp file first, then atomically rename (crash safety)
+    temp_path = output_path.with_suffix(f".tmp.{output_format}")
+
+    success, error = apply_codec_to_file(
+        input_path=str(input_path),
+        output_path=str(temp_path),
+        codec=codec,
+        quality=quality,
+        sample_rate=sample_rate,
+    )
+
+    if success:
+        # Atomic rename
+        os.replace(str(temp_path), str(output_path))
+        return {
+            "input_path": str(input_path),
+            "output_path": str(output_path),
+            "codec": codec,
+            "quality": quality,
+            "status": "success",
+            "error": "",
+        }
+    else:
+        # Clean up temp file on failure
+        try:
+            if os.path.exists(str(temp_path)):
+                os.unlink(str(temp_path))
+        except OSError:
+            pass
+        return {
+            "input_path": str(input_path),
+            "output_path": str(output_path),
+            "codec": codec,
+            "quality": quality,
+            "status": "failed",
+            "error": error,
+        }
+
+
+def load_manifest(manifest_dir: Path, split: str) -> list[str]:
+    """Load audio file paths from manifest.
+
+    Args:
+        manifest_dir: Directory containing manifest parquet files.
+        split: Data split name.
+
+    Returns:
+        List of audio file paths.
+    """
+    import pandas as pd
+
+    manifest_path = manifest_dir / f"{split}.parquet"
+    if not manifest_path.exists():
+        raise FileNotFoundError(
+            f"Manifest not found: {manifest_path}\n"
+            f"Run `python scripts/prepare_asvspoof5.py` first to create manifests."
+        )
+
+    df = pd.read_parquet(manifest_path)
+    logger.info(f"Loaded manifest: {manifest_path} ({len(df)} samples)")
+
+    if "audio_path" not in df.columns:
+        raise ValueError(
+            f"Manifest missing 'audio_path' column. "
+            f"Available columns: {list(df.columns)}"
+        )
+
+    audio_paths = df["audio_path"].tolist()
+
+    return audio_paths
+
+
+def build_task_list(
+    audio_paths: list[str],
+    output_dir: Path,
+    codecs: list[str],
+    qualities: list[int],
+    sample_rate: int,
+    output_format: str,
+) -> list[tuple]:
+    """Build the full list of (input, output, codec, quality) tasks.
+
+    Args:
+        audio_paths: List of input audio file paths.
+        output_dir: Base output directory.
+        codecs: List of codec names.
+        qualities: List of quality levels.
+        sample_rate: Target sample rate.
+        output_format: Output file format extension.
+
+    Returns:
+        List of task tuples for process_single_file.
+    """
+    tasks = []
+    for audio_path in audio_paths:
+        # Use the flac filename (without directory) as the output filename
+        stem = Path(audio_path).stem
+        for codec in codecs:
+            for quality in qualities:
+                output_path = (
+                    output_dir / codec / f"q{quality}" / f"{stem}.{output_format}"
+                )
+                tasks.append(
+                    (audio_path, str(output_path), codec, quality, sample_rate, output_format)
+                )
+    return tasks
+
+
+def build_manifest(
+    audio_paths: list[str],
+    output_dir: Path,
+    codecs: list[str],
+    qualities: list[int],
+    output_format: str,
+) -> dict:
+    """Build the augmentation manifest mapping originals to augmented files.
+
+    Args:
+        audio_paths: List of original audio file paths.
+        output_dir: Base output directory.
+        codecs: List of codec names.
+        qualities: List of quality levels.
+        output_format: Output file format extension.
+
+    Returns:
+        Manifest dict with metadata and per-file mappings.
+    """
+    # Build codec label vocab (matches CodecAugmentor.codec_vocab)
+    codec_vocab = {"NONE": 0}
+    for i, codec in enumerate(codecs, start=1):
+        codec_vocab[codec] = i
+
+    entries = []
+    for audio_path in audio_paths:
+        stem = Path(audio_path).stem
+        augmented_files = []
+        for codec in codecs:
+            for quality in qualities:
+                aug_path = str(
+                    output_dir / codec / f"q{quality}" / f"{stem}.{output_format}"
+                )
+                augmented_files.append(
+                    {
+                        "path": aug_path,
+                        "codec": codec,
+                        "quality": quality,
+                        "codec_label": codec_vocab[codec],
+                        "codec_q_label": f"{codec}_Q{quality}",
+                    }
+                )
+        entries.append(
+            {
+                "original_file": audio_path,
+                "flac_stem": stem,
+                "augmented_files": augmented_files,
+            }
+        )
+
+    manifest = {
+        "version": 1,
+        "codecs": codecs,
+        "qualities": qualities,
+        "codec_vocab": codec_vocab,
+        "num_originals": len(audio_paths),
+        "augmentations_per_file": len(codecs) * len(qualities),
+        "total_augmented_files": len(audio_paths) * len(codecs) * len(qualities),
+        "entries": entries,
+    }
+
+    return manifest
+
+
+def get_dir_size(path: Path) -> int:
+    """Get total size of directory in bytes."""
+    total = 0
+    if path.exists():
+        for f in path.rglob("*"):
+            if f.is_file():
+                total += f.stat().st_size
+    return total
+
+
+def format_size(size_bytes: int) -> str:
+    """Format byte count as human-readable string."""
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if size_bytes < 1024:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024
+    return f"{size_bytes:.1f} PB"
+
+
+def main():
+    args = parse_args()
+
+    # Resolve data root
+    if args.data_root:
+        data_root = args.data_root
+    else:
+        data_root_env = os.environ.get("ASVSPOOF5_ROOT")
+        if data_root_env:
+            data_root = Path(data_root_env)
+        else:
+            logger.error(
+                "No data root specified. Use --data-root or set ASVSPOOF5_ROOT env var."
+            )
+            sys.exit(1)
+
+    # Resolve manifest directory
+    if args.manifest_dir:
+        manifest_dir = args.manifest_dir
+    else:
+        # Use the project's default manifest location
+        project_root = Path(__file__).resolve().parent.parent
+        manifest_dir = project_root / "data" / "manifests"
+
+    logger.info("=" * 70)
+    logger.info("Pre-compute Codec Augmentations for DANN Training")
+    logger.info("=" * 70)
+    logger.info(f"Data root:    {data_root}")
+    logger.info(f"Manifest dir: {manifest_dir}")
+    logger.info(f"Output dir:   {args.output_dir}")
+    logger.info(f"Split:        {args.split}")
+    logger.info(f"Codecs:       {args.codecs}")
+    logger.info(f"Qualities:    {args.qualities}")
+    logger.info(f"Workers:      {args.num_workers}")
+    logger.info(f"Sample rate:  {args.sample_rate}")
+    logger.info(f"Format:       {args.output_format}")
+    logger.info("")
+
+    # Check ffmpeg
+    if not check_ffmpeg():
+        logger.error("ffmpeg not found. Install ffmpeg or load the module.")
+        logger.error("On Snellius: module load FFmpeg/7.1.1-GCCcore-14.2.0")
+        sys.exit(1)
+
+    # Check codec support
+    logger.info("Checking ffmpeg codec support:")
+    supported_codecs = check_encoder_support(args.codecs)
+    if not supported_codecs:
+        logger.error("No requested codecs are supported by ffmpeg!")
+        sys.exit(1)
+
+    if len(supported_codecs) < len(args.codecs):
+        logger.warning(
+            f"Only {len(supported_codecs)}/{len(args.codecs)} codecs supported. "
+            f"Proceeding with: {supported_codecs}"
+        )
+
+    # Load manifest
+    audio_paths = load_manifest(manifest_dir, args.split)
+
+    # Apply limit if specified
+    if args.limit:
+        audio_paths = audio_paths[: args.limit]
+        logger.info(f"Limited to first {args.limit} files")
+
+    # Build task list
+    tasks = build_task_list(
+        audio_paths=audio_paths,
+        output_dir=args.output_dir,
+        codecs=supported_codecs,
+        qualities=args.qualities,
+        sample_rate=args.sample_rate,
+        output_format=args.output_format,
+    )
+
+    total_tasks = len(tasks)
+    augs_per_file = len(supported_codecs) * len(args.qualities)
+
+    logger.info(f"Audio files:            {len(audio_paths)}")
+    logger.info(f"Codecs × Qualities:     {len(supported_codecs)} × {len(args.qualities)} = {augs_per_file}")
+    logger.info(f"Total augmentations:    {total_tasks}")
+    logger.info("")
+
+    # Estimate disk usage
+    # Training files are ~6s of 16kHz mono FLAC ≈ ~50-100KB per file
+    # Augmented FLAC is similar size
+    avg_file_kb = 80  # rough estimate
+    estimated_total_kb = total_tasks * avg_file_kb
+    logger.info(
+        f"Estimated disk usage:   ~{format_size(estimated_total_kb * 1024)} "
+        f"(assuming ~{avg_file_kb}KB/file)"
+    )
+    logger.info("")
+
+    if args.dry_run:
+        logger.info("[DRY RUN] Would process the above. Exiting.")
+        # Show a few example tasks
+        for task in tasks[:5]:
+            logger.info(f"  {Path(task[0]).name} → {task[2]}/q{task[3]}")
+        if len(tasks) > 5:
+            logger.info(f"  ... and {len(tasks) - 5} more")
+        return
+
+    # Create output directory
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Process with multiprocessing
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        logger.warning("tqdm not installed, using simple progress logging")
+        tqdm = None
+
+    start_time = time.time()
+    results = {"success": 0, "skipped": 0, "failed": 0}
+    errors = []
+
+    logger.info(f"Starting processing with {args.num_workers} workers...")
+
+    with ProcessPoolExecutor(max_workers=args.num_workers) as executor:
+        futures = {
+            executor.submit(process_single_file, task): task for task in tasks
+        }
+
+        if tqdm is not None:
+            progress = tqdm(
+                as_completed(futures),
+                total=total_tasks,
+                desc="Augmenting",
+                unit="file",
+                ncols=100,
+            )
+        else:
+            progress = as_completed(futures)
+
+        completed = 0
+        for future in progress:
+            try:
+                result = future.result(timeout=120)
+                results[result["status"]] += 1
+
+                if result["status"] == "failed":
+                    errors.append(result)
+                    if len(errors) <= 10:
+                        logger.warning(
+                            f"Failed: {Path(result['input_path']).name} "
+                            f"({result['codec']}/q{result['quality']}): "
+                            f"{result['error'][:100]}"
+                        )
+            except Exception as e:
+                results["failed"] += 1
+                errors.append({"error": str(e)})
+                logger.warning(f"Worker exception: {e}")
+
+            completed += 1
+
+            # Log progress every 5000 tasks if no tqdm
+            if tqdm is None and completed % 5000 == 0:
+                elapsed = time.time() - start_time
+                rate = completed / elapsed
+                eta = (total_tasks - completed) / rate if rate > 0 else 0
+                logger.info(
+                    f"Progress: {completed}/{total_tasks} "
+                    f"({100 * completed / total_tasks:.1f}%) "
+                    f"ETA: {eta / 60:.1f}min"
+                )
+
+    elapsed = time.time() - start_time
+
+    # Build and save manifest
+    logger.info("Building augmentation manifest...")
+    manifest = build_manifest(
+        audio_paths=audio_paths,
+        output_dir=args.output_dir,
+        codecs=supported_codecs,
+        qualities=args.qualities,
+        output_format=args.output_format,
+    )
+    manifest_path = args.output_dir / "manifest.json"
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2)
+    logger.info(f"Manifest saved: {manifest_path}")
+
+    # Measure actual disk usage
+    actual_size = get_dir_size(args.output_dir)
+
+    # Print summary
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("SUMMARY")
+    logger.info("=" * 70)
+    logger.info(f"Total time:      {elapsed:.1f}s ({elapsed / 60:.1f}min)")
+    logger.info(f"Total tasks:     {total_tasks}")
+    logger.info(f"  Succeeded:     {results['success']}")
+    logger.info(f"  Skipped:       {results['skipped']} (already existed)")
+    logger.info(f"  Failed:        {results['failed']}")
+    logger.info(f"Throughput:      {total_tasks / elapsed:.1f} files/sec")
+    logger.info(f"Disk usage:      {format_size(actual_size)}")
+    logger.info(f"Output dir:      {args.output_dir}")
+    logger.info(f"Manifest:        {manifest_path}")
+    logger.info("")
+
+    if results["failed"] > 0:
+        logger.warning(
+            f"{results['failed']} augmentations failed. "
+            f"Re-run the script to retry (resume support will skip completed files)."
+        )
+        # Save error log
+        error_log_path = args.output_dir / "errors.json"
+        with open(error_log_path, "w") as f:
+            json.dump(errors[:100], f, indent=2)  # Save first 100 errors
+        logger.info(f"Error log saved: {error_log_path}")
+
+    logger.info("")
+    logger.info("Next steps:")
+    logger.info("  1. Set cache_dir in your config:")
+    logger.info(f"     augmentation.cache_dir: {args.output_dir}")
+    logger.info("  2. Run training as usual:")
+    logger.info("     python scripts/train.py --config configs/wavlm_dann.yaml")
+    logger.info("=" * 70)
+
+
+if __name__ == "__main__":
+    main()

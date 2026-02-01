@@ -5,8 +5,12 @@ Label convention: bonafide=0, spoof=1.
 """
 
 import json
+import logging
+import random
 from pathlib import Path
 from typing import Literal, Optional
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 import torch
@@ -169,6 +173,12 @@ class ASVspoof5Dataset(Dataset):
         self.augmentor = augmentor
         self.use_synthetic_labels = use_synthetic_labels
 
+        # Pre-computed augmentation cache
+        self._aug_cache_manifest = None
+        self._aug_cache_index = None  # flac_stem → list of augmented file info
+        if augmentor is not None and augmentor.cache_dir is not None:
+            self._load_aug_cache(augmentor.cache_dir)
+
         # Load manifest
         self.df = pd.read_parquet(self.manifest_path)
 
@@ -183,8 +193,75 @@ class ASVspoof5Dataset(Dataset):
         else:
             self.codec_q_vocab = build_vocab(self.df["codec_q"])
 
+    def _load_aug_cache(self, cache_dir: Path) -> None:
+        """Load pre-computed augmentation manifest for fast cache lookup.
+
+        When cache_dir contains a manifest.json (created by
+        scripts/precompute_augmentations.py), we build an index from
+        flac_stem → list of augmented file entries so __getitem__ can
+        randomly pick a pre-computed augmentation instead of running ffmpeg.
+        """
+        manifest_path = Path(cache_dir) / "manifest.json"
+        if not manifest_path.exists():
+            logger.debug(
+                "No manifest.json in cache_dir %s — falling back to on-the-fly augmentation",
+                cache_dir,
+            )
+            return
+
+        with open(manifest_path) as f:
+            self._aug_cache_manifest = json.load(f)
+
+        # Build index: flac_stem → list of augmented file info
+        self._aug_cache_index = {}
+        for entry in self._aug_cache_manifest.get("entries", []):
+            stem = entry["flac_stem"]
+            self._aug_cache_index[stem] = entry["augmented_files"]
+
+        logger.info(
+            "Loaded pre-computed augmentation cache: %d files, %d augmentations/file",
+            len(self._aug_cache_index),
+            self._aug_cache_manifest.get("augmentations_per_file", 0),
+        )
+
     def __len__(self) -> int:
         return len(self.df)
+
+    def _get_cached_augmentation(
+        self, audio_path: str, flac_file: str
+    ) -> Optional[tuple["torch.Tensor", str, int]]:
+        """Try to load a random pre-computed augmentation from cache.
+
+        Args:
+            audio_path: Original audio file path.
+            flac_file: FLAC filename (e.g., 'T_0001' or 'T_0001.flac').
+
+        Returns:
+            Tuple of (waveform, codec_name, quality) or None if cache miss.
+        """
+        if self._aug_cache_index is None:
+            return None
+
+        stem = Path(flac_file).stem
+
+        aug_files = self._aug_cache_index.get(stem)
+        if not aug_files:
+            return None
+
+        # Randomly pick one of the pre-computed augmentations
+        choice = random.choice(aug_files)
+        aug_path = choice["path"]
+
+        if not Path(aug_path).exists():
+            logger.debug("Cache miss (file not found): %s", aug_path)
+            return None
+
+        try:
+            waveform, sr = load_waveform(aug_path, target_sr=self.sample_rate)
+            return waveform, choice["codec"], choice["quality"]
+        except Exception as e:
+            logger.debug("Failed to load cached augmentation %s: %s", aug_path, e)
+            return None
 
     def __getitem__(self, idx: int) -> dict:
         row = self.df.iloc[idx]
@@ -201,12 +278,35 @@ class ASVspoof5Dataset(Dataset):
         applied_quality = 0
 
         if self.augmentor is not None and self.mode == "train":
-            waveform, applied_codec, applied_quality = self.augmentor.augment(
-                waveform, self.sample_rate, audio_path
-            )
-            y_codec_aug, y_codec_q_aug = self.augmentor.get_domain_labels(
-                applied_codec, applied_quality
-            )
+            if self._aug_cache_index is not None:
+                # Pre-computed cache path: we handle codec_prob ourselves since
+                # augmentor.augment() is bypassed. This avoids double-checking
+                # the probability (augmentor.augment also checks codec_prob).
+                if random.random() <= self.augmentor.config.codec_prob:
+                    cached = self._get_cached_augmentation(audio_path, row["flac_file"])
+                    if cached is not None:
+                        waveform, applied_codec, applied_quality = cached
+                        y_codec_aug, y_codec_q_aug = self.augmentor.get_domain_labels(
+                            applied_codec, applied_quality
+                        )
+                    else:
+                        # Cache miss — fall back to on-the-fly (rare)
+                        waveform, applied_codec, applied_quality = self.augmentor.augment(
+                            waveform, self.sample_rate, audio_path
+                        )
+                        y_codec_aug, y_codec_q_aug = self.augmentor.get_domain_labels(
+                            applied_codec, applied_quality
+                        )
+                # else: keep original (NONE/0) — no augmentation for this sample
+            else:
+                # No pre-computed cache — use on-the-fly augmentation as before
+                # (augmentor.augment handles codec_prob internally)
+                waveform, applied_codec, applied_quality = self.augmentor.augment(
+                    waveform, self.sample_rate, audio_path
+                )
+                y_codec_aug, y_codec_q_aug = self.augmentor.get_domain_labels(
+                    applied_codec, applied_quality
+                )
 
         # Crop or pad to fixed length
         waveform = crop_or_pad(waveform, self.max_samples, mode=self.mode)
