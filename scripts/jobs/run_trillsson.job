@@ -14,6 +14,10 @@
 # Uses a separate pip virtualenv for TensorFlow (extraction phase),
 # then switches back to the project uv env for classifier training.
 #
+# IMPORTANT: The TF venv deliberately installs tensorflow[and-cuda] to get
+# GPU support without conflicting with PyTorch's CUDA libs. PyTorch is NOT
+# installed in this venv — audio loading uses soundfile instead.
+#
 # Usage:
 #   sbatch scripts/jobs/run_trillsson.job
 # =============================================================================
@@ -37,7 +41,7 @@ echo "Repo root: $(pwd)"
 source scripts/jobs/_job_common.sh
 load_and_require_asvspoof5_root
 
-# ── Phase 0: Ensure output directory exists ──────────────────────────────────
+# ── Phase 0: Ensure output directories exist ─────────────────────────────────
 mkdir -p scripts/jobs/out
 mkdir -p data/features/trillsson
 
@@ -49,28 +53,39 @@ echo "================================================================="
 
 TRILLSSON_VENV="${HOME}/.trillsson-venv"
 
-# Create a standalone Python venv with TensorFlow (only once)
-if [[ ! -f "${TRILLSSON_VENV}/bin/activate" ]]; then
-  echo "Creating TRILLsson virtualenv at ${TRILLSSON_VENV}..."
-  python3 -m venv "${TRILLSSON_VENV}"
-  source "${TRILLSSON_VENV}/bin/activate"
+# Recreate the venv to fix CUDA conflicts from previous attempt
+if [[ -f "${TRILLSSON_VENV}/bin/activate" ]]; then
+  echo "Removing old TRILLsson venv (may have CUDA conflicts)..."
+  rm -rf "${TRILLSSON_VENV}"
+fi
 
-  pip install --upgrade pip
-  pip install \
-    "tensorflow>=2.15,<2.18" \
-    "tensorflow-hub>=0.16" \
-    "torchaudio>=2.0" \
-    "torch>=2.0" \
-    "numpy>=1.26" \
-    "pandas>=2.0" \
-    "tqdm>=4.66" \
-    "soundfile>=0.12" \
-    "scipy>=1.11"
+echo "Creating TRILLsson virtualenv at ${TRILLSSON_VENV}..."
+python3 -m venv "${TRILLSSON_VENV}"
+source "${TRILLSSON_VENV}/bin/activate"
 
-  echo "TRILLsson venv created successfully."
-else
-  echo "Reusing existing TRILLsson venv at ${TRILLSSON_VENV}"
-  source "${TRILLSSON_VENV}/bin/activate"
+pip install --upgrade pip
+
+# Install TensorFlow with CUDA support (self-contained, no PyTorch)
+# tensorflow[and-cuda] bundles the correct CUDA/cuDNN libs for TF
+# We do NOT install torch/torchaudio — use soundfile for audio loading
+pip install \
+  "tensorflow[and-cuda]>=2.16,<2.18" \
+  "tensorflow-hub>=0.16" \
+  "numpy>=1.26,<2.0" \
+  "pandas>=2.0" \
+  "tqdm>=4.66" \
+  "soundfile>=0.12" \
+  "scipy>=1.11" \
+  "librosa>=0.10"
+
+echo "TRILLsson venv created successfully."
+
+# Fix CUDA visibility: tensorflow[and-cuda] ships its own CUDA in site-packages
+# Point LD_LIBRARY_PATH to TF's bundled CUDA libs
+TF_CUDA_PATH=$(python -c "import tensorflow as tf; import os; print(os.path.join(os.path.dirname(tf.__file__), '..', 'nvidia'))" 2>/dev/null || true)
+if [[ -d "$TF_CUDA_PATH" ]]; then
+  echo "Adding TF-bundled CUDA libs to LD_LIBRARY_PATH: $TF_CUDA_PATH"
+  export LD_LIBRARY_PATH="${TF_CUDA_PATH}/cublas/lib:${TF_CUDA_PATH}/cuda_runtime/lib:${TF_CUDA_PATH}/cudnn/lib:${TF_CUDA_PATH}/cufft/lib:${LD_LIBRARY_PATH:-}"
 fi
 
 # Verify TensorFlow works
@@ -81,6 +96,8 @@ gpus = tf.config.list_physical_devices('GPU')
 print(f'TF GPU devices: {len(gpus)}')
 for g in gpus:
     print(f'  {g}')
+if not gpus:
+    print('WARNING: No GPU detected. Extraction will run on CPU (slower but functional).')
 "
 
 # Set TF cache dir to scratch (models are large)
