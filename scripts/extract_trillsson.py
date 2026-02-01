@@ -228,7 +228,7 @@ def main():
         return 1
 
     # Get paths
-    from asvspoof5_domain_invariant_cm.utils import get_features_dir, get_manifest_path
+    from asvspoof5_domain_invariant_cm.utils.paths import get_features_dir, get_manifest_path
 
     # Output directory
     if args.output_dir:
