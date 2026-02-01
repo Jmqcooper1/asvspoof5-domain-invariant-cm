@@ -961,8 +961,6 @@ class Trainer:
             if self.lambda_scheduler is not None and self.method == "dann":
                 current_lambda = self.lambda_scheduler.get_lambda(epoch)
                 self.model.set_lambda(current_lambda)
-                if hasattr(self.loss_fn, "set_lambda"):
-                    self.loss_fn.set_lambda(current_lambda)
                 lambda_grl = float(self.model.get_lambda()) if hasattr(self.model, "get_lambda") else float(current_lambda)
                 if hasattr(self.loss_fn, "lambda_domain"):
                     lambda_domain_loss = float(self.loss_fn.lambda_domain)
@@ -975,11 +973,8 @@ class Trainer:
                     f"lambda_domain_loss={float(lambda_domain_loss):.6f}"
                 )
             elif self.method == "dann":
-                # Even with a constant λ (no scheduler), ensure model and loss are synced.
+                # Even with a constant λ (no scheduler), log the current values.
                 lambda_grl = float(self.model.get_lambda()) if hasattr(self.model, "get_lambda") else None
-                # Sync loss function lambda to match model's GRL lambda (for consistency)
-                if lambda_grl is not None and hasattr(self.loss_fn, "set_lambda"):
-                    self.loss_fn.set_lambda(lambda_grl)
                 if hasattr(self.loss_fn, "lambda_domain"):
                     lambda_domain_loss = float(self.loss_fn.lambda_domain)
                 elif hasattr(self.loss_fn, "lambda_"):

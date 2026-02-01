@@ -221,12 +221,12 @@ class TestMultiHeadDomainDiscriminator:
 
     def test_output_shapes(self):
         disc = MultiHeadDomainDiscriminator(
-            input_dim=256,
+            input_dim=1536,
             num_codecs=10,
             num_codec_qs=5,
-            hidden_dim=256,
+            hidden_dim=512,
         )
-        x = torch.randn(4, 256)
+        x = torch.randn(4, 1536)
         codec_logits, codec_q_logits = disc(x)
 
         assert codec_logits.shape == (4, 10)
@@ -234,7 +234,7 @@ class TestMultiHeadDomainDiscriminator:
 
     def test_shared_layers_exist(self):
         disc = MultiHeadDomainDiscriminator(
-            input_dim=256,
+            input_dim=1536,
             num_codecs=10,
             num_codec_qs=5,
         )

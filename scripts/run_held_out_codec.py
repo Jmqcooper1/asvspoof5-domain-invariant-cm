@@ -428,9 +428,13 @@ def run_held_out_experiment(
                 )
 
                 grl = GradientReversalLayer(lambda_=config["dann"].get("lambda_", 0.0))
+                # Discriminator taps pre-projection pooled features
+                disc_input_dim = config["dann"]["discriminator"].get(
+                    "input_dim", config["projection"]["input_dim"]
+                )
                 domain_discriminator = MultiHeadDomainDiscriminator(
-                    input_dim=config["projection"]["output_dim"],
-                    hidden_dim=config["dann"]["discriminator"]["hidden_dim"],
+                    input_dim=disc_input_dim,
+                    hidden_dim=config["dann"]["discriminator"].get("hidden_dim", 512),
                     num_codecs=len(train_augmentor.codec_vocab),
                     num_codec_qs=len(SYNTHETIC_QUALITY_VOCAB),
                     dropout=config["dann"]["discriminator"].get("dropout", 0.1),
@@ -565,9 +569,13 @@ def run_held_out_experiment(
             )
 
             grl = GradientReversalLayer()
+            # Discriminator taps pre-projection pooled features
+            disc_input_dim = config["dann"]["discriminator"].get(
+                "input_dim", config["projection"]["input_dim"]
+            )
             domain_discriminator = MultiHeadDomainDiscriminator(
-                input_dim=config["projection"]["output_dim"],
-                hidden_dim=config["dann"]["discriminator"]["hidden_dim"],
+                input_dim=disc_input_dim,
+                hidden_dim=config["dann"]["discriminator"].get("hidden_dim", 512),
                 num_codecs=len(saved_codec_vocab),
                 num_codec_qs=len(saved_codec_q_vocab),
             )

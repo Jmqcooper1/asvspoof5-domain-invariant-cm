@@ -53,17 +53,18 @@ loss:
 
 # DANN-specific settings
 dann:
-  lambda_: 0.1
+  lambda_: 0.01
   
   lambda_schedule:
-    enabled: false
-    type: linear  # linear, exponential
-    start: 0.0
+    enabled: true
+    type: exponential  # linear, exponential
+    start: 0.01
     end: 1.0
     warmup_epochs: 0
   
   discriminator:
-    shared_dim: 256
+    input_dim: 1536   # stats pooling output (768*2) — pre-projection features
+    shared_dim: 512
     dropout: 0.1
 
 # Synthetic codec augmentation (REQUIRED for meaningful DANN on ASVspoof5)
