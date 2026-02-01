@@ -9,7 +9,7 @@ description = "Domain-invariant speech deepfake detection on ASVspoof 5 (Track 1
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
-authors = [{ name = "Mike", email = "jmqcooper@gmail.com" }]
+authors = [{ name = "Mike Cooper", email = "mike.cooper@student.uva.nl" }]
 keywords = [
     "audio",
     "deepfake",
@@ -65,6 +65,9 @@ xai = [
 trillsson = [
     "tensorflow",
     "tensorflow-hub",
+    "pyarrow>=14.0",
+    "soundfile>=0.12",
+    "scipy>=1.11",
 ]
 
 [tool.hatch.build.targets.wheel]
