@@ -28,7 +28,6 @@ import argparse
 import json
 import logging
 import os
-import shutil
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -319,7 +318,7 @@ def process_single_file(args_tuple: tuple) -> dict:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Write to temp file first, then atomically rename (crash safety)
-    temp_path = output_path.with_suffix(f".tmp.{output_format}")
+    temp_path = output_path.with_suffix(f".{output_format}.tmp")
 
     success, error = apply_codec_to_file(
         input_path=str(input_path),
