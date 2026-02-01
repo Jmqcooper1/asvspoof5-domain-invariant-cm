@@ -1,0 +1,78 @@
+#!/bin/bash
+#SBATCH --partition=thin
+#SBATCH --job-name=precompute_aug
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=18
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --output=./scripts/jobs/out/%x_%A.out
+
+# =============================================================================
+# Pre-compute Codec Augmentations for DANN Training
+# =============================================================================
+#
+# Run this BEFORE training jobs. It pre-computes all codec × quality
+# augmentations offline so DANN training doesn't need on-the-fly ffmpeg.
+#
+# Expected runtime: ~30-60 min with 18 workers (depends on dataset size)
+# Expected disk usage: ~5-10 GB for train split (15 augmentations/file)
+#
+# Submit from repo root:
+#   sbatch scripts/jobs/precompute_augmentations.job
+# =============================================================================
+
+module purge
+module load 2025
+
+# Navigate to repo root
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  cd "$SLURM_SUBMIT_DIR"
+fi
+if [[ ! -f "pyproject.toml" ]]; then
+  echo "ERROR: pyproject.toml not found in $(pwd). Submit from repo root." >&2
+  exit 1
+fi
+echo "Repo root: $(pwd)"
+
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+uv sync --locked
+
+# Load env + require ASVSPOOF5_ROOT
+# shellcheck disable=SC1091
+source scripts/jobs/_job_common.sh
+load_dotenv_if_present
+require_env_var "ASVSPOOF5_ROOT"
+print_env_diagnostics
+
+# Load FFmpeg (required for codec encoding/decoding)
+load_ffmpeg_module
+check_ffmpeg_encoders_or_fail
+
+# Output directory — use scratch for fast I/O
+OUTPUT_DIR="${AUGMENTATION_CACHE_DIR:-/scratch-shared/$USER/asvspoof5_augmented_cache}"
+
+echo ""
+echo "=== Pre-compute Codec Augmentations ==="
+echo "Output: $OUTPUT_DIR"
+echo "Workers: ${SLURM_CPUS_PER_TASK}"
+echo ""
+
+srun uv run python scripts/precompute_augmentations.py \
+    --data-root "$ASVSPOOF5_ROOT" \
+    --output-dir "$OUTPUT_DIR" \
+    --codecs MP3 AAC OPUS \
+    --qualities 1 2 3 4 5 \
+    --num-workers "${SLURM_CPUS_PER_TASK}" \
+    --split train
+
+echo ""
+echo "=== Done ==="
+echo "Cache directory: $OUTPUT_DIR"
+echo ""
+echo "To use with training, set in your config or .env:"
+echo "  augmentation.cache_dir: $OUTPUT_DIR"
+echo ""
+echo "Or add to .env:"
+echo "  AUGMENTATION_CACHE_DIR=$OUTPUT_DIR"

@@ -386,6 +386,7 @@ class CodecAugmentor:
         waveform: torch.Tensor,
         sample_rate: int,
         audio_path: Optional[str] = None,
+        force: bool = False,
     ) -> tuple[torch.Tensor, str, int]:
         """Apply random codec augmentation.
 
@@ -393,6 +394,9 @@ class CodecAugmentor:
             waveform: Input waveform tensor [C, T] or [T].
             sample_rate: Sample rate.
             audio_path: Original audio path (for caching).
+            force: If True, skip the codec_prob check and always apply
+                augmentation. Used by ASVspoof5Dataset on cache miss when
+                the caller has already rolled codec_prob.
 
         Returns:
             Tuple of (augmented_waveform, codec_name, quality_level).
@@ -401,8 +405,8 @@ class CodecAugmentor:
         if not self.config.enabled:
             return waveform, "NONE", 0
 
-        # Decide whether to augment
-        if random.random() > self.config.codec_prob:
+        # Decide whether to augment (skip check when caller already decided)
+        if not force and random.random() > self.config.codec_prob:
             return waveform, "NONE", 0
 
         if not self.ffmpeg_available or not self.supported_codecs:
