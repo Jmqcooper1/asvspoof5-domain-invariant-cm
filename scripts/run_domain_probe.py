@@ -293,14 +293,14 @@ def generate_synthetic_audio(num_samples: int, seed: int) -> list[np.ndarray]:
         # Add harmonics
         for h in range(1, rng.randint(4, 12)):
             amp = rng.uniform(0.05, 0.3) / h
-            signal += amp * np.sin(2 * np.pi * f0 * h * t + rng.uniform(0, 2 * np.pi)).astype(np.float32)
+            signal += np.float32(amp) * np.sin(np.float32(2 * np.pi * f0 * h) * t + np.float32(rng.uniform(0, 2 * np.pi)))
 
         # Add formant peaks (speech-like resonances)
         for _ in range(rng.randint(2, 5)):
             formant_f = rng.uniform(300, 4000)
             formant_bw = rng.uniform(50, 200)
             amp = rng.uniform(0.02, 0.15)
-            signal += amp * np.sin(2 * np.pi * formant_f * t).astype(np.float32)
+            signal += np.float32(amp) * np.sin(np.float32(2 * np.pi * formant_f) * t)
 
         # Add some noise
         noise_level = rng.uniform(0.001, 0.02)
