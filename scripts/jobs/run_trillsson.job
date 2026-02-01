@@ -76,7 +76,6 @@ pip install \
   "tqdm>=4.66" \
   "soundfile>=0.12" \
   "scipy>=1.11" \
-  "librosa>=0.10"
 
 echo "TRILLsson venv created successfully."
 
