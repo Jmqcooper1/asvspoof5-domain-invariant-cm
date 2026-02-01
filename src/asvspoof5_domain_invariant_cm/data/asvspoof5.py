@@ -200,6 +200,11 @@ class ASVspoof5Dataset(Dataset):
         scripts/precompute_augmentations.py), we build an index from
         flac_stem → list of augmented file entries so __getitem__ can
         randomly pick a pre-computed augmentation instead of running ffmpeg.
+
+        The manifest includes a ``codec_vocab`` that was built at pre-compute
+        time. We validate it against the augmentor's live vocab to catch
+        divergence early (e.g., codecs added/removed between pre-compute and
+        training).
         """
         manifest_path = Path(cache_dir) / "manifest.json"
         if not manifest_path.exists():
@@ -211,6 +216,23 @@ class ASVspoof5Dataset(Dataset):
 
         with open(manifest_path) as f:
             self._aug_cache_manifest = json.load(f)
+
+        # Validate that the manifest's codec vocab matches the augmentor's
+        # live vocab.  The pre-compute script (scripts/precompute_augmentations.py)
+        # saves its codec_vocab in the manifest; if codecs were added/removed
+        # since pre-computation, the label IDs would silently diverge.
+        manifest_vocab = self._aug_cache_manifest.get("codec_vocab")
+        if manifest_vocab is not None and self.augmentor is not None:
+            live_vocab = self.augmentor.codec_vocab
+            if manifest_vocab != live_vocab:
+                logger.warning(
+                    "Codec vocab mismatch between pre-computed manifest and "
+                    "augmentor! manifest=%s, augmentor=%s. Domain label IDs "
+                    "may be inconsistent. Re-run precompute_augmentations.py "
+                    "with the same codec list.",
+                    manifest_vocab,
+                    live_vocab,
+                )
 
         # Build index: flac_stem → list of augmented file info
         self._aug_cache_index = {}
@@ -290,9 +312,12 @@ class ASVspoof5Dataset(Dataset):
                             applied_codec, applied_quality
                         )
                     else:
-                        # Cache miss — fall back to on-the-fly (rare)
+                        # Cache miss — fall back to on-the-fly (rare).
+                        # Use force=True because we already passed the
+                        # codec_prob check above; without it, augmentor.augment()
+                        # would roll codec_prob a second time.
                         waveform, applied_codec, applied_quality = self.augmentor.augment(
-                            waveform, self.sample_rate, audio_path
+                            waveform, self.sample_rate, audio_path, force=True
                         )
                         y_codec_aug, y_codec_q_aug = self.augmentor.get_domain_labels(
                             applied_codec, applied_quality

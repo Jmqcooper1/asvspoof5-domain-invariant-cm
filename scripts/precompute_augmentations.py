@@ -241,6 +241,7 @@ def apply_codec_to_file(
         encode_cmd = [
             "ffmpeg",
             "-y",
+            "-loglevel", "error",
             "-i", str(input_path),
             "-ar", str(target_sr),
             "-ac", "1",
@@ -260,6 +261,7 @@ def apply_codec_to_file(
         decode_cmd = [
             "ffmpeg",
             "-y",
+            "-loglevel", "error",
             "-i", tmp_encoded,
             "-ar", str(sample_rate),
             "-ac", "1",
@@ -444,7 +446,13 @@ def build_manifest(
     Returns:
         Manifest dict with metadata and per-file mappings.
     """
-    # Build codec label vocab (matches CodecAugmentor.codec_vocab)
+    # Build codec label vocab.
+    # IMPORTANT: This vocab MUST match the one built by
+    # CodecAugmentor.codec_vocab (in codec_augment.py). Both use the same
+    # scheme: NONE=0, then supported codecs in order starting at 1.
+    # When the dataset loads this manifest via _load_aug_cache(), it will
+    # validate that the manifest's codec_vocab matches the augmentor's
+    # live vocab to catch any divergence early.
     codec_vocab = {"NONE": 0}
     for i, codec in enumerate(codecs, start=1):
         codec_vocab[codec] = i
