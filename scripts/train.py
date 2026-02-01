@@ -258,11 +258,13 @@ def build_model(config: dict, num_codecs: int, num_codec_qs: int) -> torch.nn.Mo
         dann_cfg = config.get("dann", {})
         disc_cfg = dann_cfg.get("discriminator", {})
 
+        # Discriminator taps pre-projection pooled features (e.g. 1536-dim stats pooling)
+        disc_input_dim = disc_cfg.get("input_dim", proj_input_dim)
         domain_discriminator = MultiHeadDomainDiscriminator(
-            input_dim=repr_dim,
+            input_dim=disc_input_dim,
             num_codecs=num_codecs,
             num_codec_qs=num_codec_qs,
-            hidden_dim=disc_cfg.get("hidden_dim", 256),
+            hidden_dim=disc_cfg.get("hidden_dim", 512),
             dropout=disc_cfg.get("dropout", 0.1),
         )
 

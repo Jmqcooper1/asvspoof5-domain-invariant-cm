@@ -102,7 +102,7 @@ class TestModelInstantiation:
         classifier = ClassifierHead(input_dim=hidden * 2, hidden_dim=256, num_classes=2)
         domain_disc = MultiHeadDomainDiscriminator(
             input_dim=hidden * 2,
-            hidden_dim=256,
+            hidden_dim=512,
             num_codecs=dummy_config["num_codecs"],
             num_codec_qs=dummy_config["num_codec_qs"],
         )

@@ -111,7 +111,7 @@ class CombinedDANNLoss(nn.Module):
         self,
         task_label_smoothing: float = 0.0,
         task_class_weights: Optional[torch.Tensor] = None,
-        lambda_domain: float = 0.1,
+        lambda_domain: float = 1.0,
         none_codec_id: int = 0,
         mask_codec_q_for_none: bool = True,
     ):
@@ -227,7 +227,7 @@ def build_loss(
     method: str,
     task_label_smoothing: float = 0.0,
     task_class_weights: Optional[torch.Tensor] = None,
-    lambda_domain: float = 0.1,
+    lambda_domain: float = 1.0,
     none_codec_id: int = 0,
     mask_codec_q_for_none: bool = True,
 ) -> nn.Module:

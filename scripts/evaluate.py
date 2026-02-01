@@ -224,11 +224,13 @@ def load_model_from_checkpoint(checkpoint_path: Path, device: torch.device):
         dann_cfg = config.get("dann", {})
         disc_cfg = dann_cfg.get("discriminator", {})
 
+        # Discriminator taps pre-projection pooled features (e.g. 1536-dim stats pooling)
+        disc_input_dim = disc_cfg.get("input_dim", proj_input_dim)
         domain_discriminator = MultiHeadDomainDiscriminator(
-            input_dim=repr_dim,
+            input_dim=disc_input_dim,
             num_codecs=num_codecs,
             num_codec_qs=num_codec_qs,
-            hidden_dim=disc_cfg.get("hidden_dim", 256),
+            hidden_dim=disc_cfg.get("hidden_dim", 512),
             dropout=disc_cfg.get("dropout", 0.1),
         )
 

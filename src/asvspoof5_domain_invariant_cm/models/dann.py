@@ -68,7 +68,7 @@ class MultiHeadDomainDiscriminator(nn.Module):
         input_dim: int,
         num_codecs: int,
         num_codec_qs: int,
-        hidden_dim: int = 256,
+        hidden_dim: int = 512,
         dropout: float = 0.1,
     ):
         super().__init__()
@@ -107,9 +107,10 @@ class MultiHeadDomainDiscriminator(nn.Module):
 class DANNModel(nn.Module):
     """Complete DANN model for domain-invariant deepfake detection.
 
-    Pipeline: backbone -> layer_mix -> stats_pool -> projection -> repr
+    Pipeline: backbone -> layer_mix -> stats_pool -> pooled
+              projection(pooled) -> repr
               task_head(repr) -> task_logits
-              domain_disc(GRL(repr)) -> codec_logits, codec_q_logits
+              domain_disc(GRL(pooled)) -> codec_logits, codec_q_logits
 
     Args:
         backbone: SSL backbone (WavLM, Wav2Vec2).
@@ -170,9 +171,10 @@ class DANNModel(nn.Module):
         # Task head
         task_logits = self.task_head(repr_)
 
-        # Domain discriminator with GRL
-        reversed_repr = self.grl(repr_)
-        codec_logits, codec_q_logits = self.domain_discriminator(reversed_repr)
+        # Domain discriminator with GRL — tap pre-projection pooled features
+        # so the discriminator sees the full 1536-dim signal before compression
+        reversed_pooled = self.grl(pooled)
+        codec_logits, codec_q_logits = self.domain_discriminator(reversed_pooled)
 
         return {
             "task_logits": task_logits,
