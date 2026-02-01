@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --partition=thin
+#SBATCH --partition=gpu_mig
+#SBATCH --gpus=1
 #SBATCH --job-name=precompute_aug
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=18
-#SBATCH --mem=32G
+#SBATCH --cpus-per-task=9
 #SBATCH --time=04:00:00
 #SBATCH --output=./scripts/jobs/out/%x_%A.out
 
@@ -14,7 +14,7 @@
 # Run this BEFORE training jobs. It pre-computes all codec × quality
 # augmentations offline so DANN training doesn't need on-the-fly ffmpeg.
 #
-# Expected runtime: ~30-60 min with 18 workers (depends on dataset size)
+# Expected runtime: ~60-90 min with 9 workers (depends on dataset size)
 # Expected disk usage: ~5-10 GB for train split (15 augmentations/file)
 #
 # Submit from repo root:
