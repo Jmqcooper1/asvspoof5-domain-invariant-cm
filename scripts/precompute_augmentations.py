@@ -126,6 +126,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Total number of shards",
     )
+    parser.add_argument(
+        "--merge-manifests",
+        action="store_true",
+        help="Merge per-shard manifests into final manifest.json (run after all shards complete)",
+    )
     return parser.parse_args()
 
 
@@ -531,6 +536,36 @@ def format_size(size_bytes: int) -> str:
 def main():
     args = parse_args()
 
+    # Handle manifest merge mode (run after all shards complete)
+    if args.merge_manifests:
+        logger.info("Merging per-shard manifests...")
+        shard_files = sorted(args.output_dir.glob("manifest_shard_*.json"))
+        if not shard_files:
+            logger.error(f"No shard manifests found in {args.output_dir}")
+            sys.exit(1)
+
+        merged_entries = []
+        base_manifest = None
+        for sf in shard_files:
+            with open(sf) as f:
+                shard_manifest = json.load(f)
+            if base_manifest is None:
+                base_manifest = shard_manifest
+            merged_entries.extend(shard_manifest["entries"])
+            logger.info(f"  {sf.name}: {len(shard_manifest['entries'])} entries")
+
+        base_manifest["entries"] = merged_entries
+        base_manifest["num_originals"] = len(merged_entries)
+        base_manifest["total_augmented_files"] = (
+            len(merged_entries) * base_manifest["augmentations_per_file"]
+        )
+
+        manifest_path = args.output_dir / "manifest.json"
+        with open(manifest_path, "w") as f:
+            json.dump(base_manifest, f, indent=2)
+        logger.info(f"Merged manifest: {manifest_path} ({len(merged_entries)} entries from {len(shard_files)} shards)")
+        return
+
     # Resolve data root
     if args.data_root:
         data_root = args.data_root
@@ -594,7 +629,14 @@ def main():
         logger.info(f"Limited to first {args.limit} files")
 
     # Shard the file list for parallel job arrays
-    if args.shard_index is not None and args.num_shards is not None:
+    is_sharded = args.shard_index is not None and args.num_shards is not None
+    if is_sharded:
+        if args.shard_index < 0 or args.shard_index >= args.num_shards:
+            logger.error(
+                f"Invalid shard args: --shard-index {args.shard_index} "
+                f"must be in range [0, {args.num_shards})"
+            )
+            sys.exit(1)
         total_files = len(audio_paths)
         shard_size = (total_files + args.num_shards - 1) // args.num_shards  # ceiling division
         start = args.shard_index * shard_size
@@ -707,6 +749,8 @@ def main():
     elapsed = time.time() - start_time
 
     # Build and save manifest
+    # When sharded, write per-shard manifests to avoid race conditions.
+    # A separate merge step (--merge-manifests) combines them after all shards complete.
     logger.info("Building augmentation manifest...")
     manifest = build_manifest(
         audio_paths=audio_paths,
@@ -715,7 +759,10 @@ def main():
         qualities=args.qualities,
         output_format=args.output_format,
     )
-    manifest_path = args.output_dir / "manifest.json"
+    if is_sharded:
+        manifest_path = args.output_dir / f"manifest_shard_{args.shard_index}.json"
+    else:
+        manifest_path = args.output_dir / "manifest.json"
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2)
     logger.info(f"Manifest saved: {manifest_path}")

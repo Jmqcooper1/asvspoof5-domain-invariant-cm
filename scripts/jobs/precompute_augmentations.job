@@ -23,8 +23,14 @@
 # Resume support: re-running skips already-completed files, so it's safe to
 # resubmit if any shard fails or times out.
 #
-# Submit from repo root:
+# Submit from repo root (2 steps):
+#   1. JOB_ID=$(sbatch --parsable scripts/jobs/precompute_augmentations.job)
+#   2. sbatch --dependency=afterok:$JOB_ID scripts/jobs/merge_augmentation_manifests.job
+#
+# Or simply:
 #   sbatch scripts/jobs/precompute_augmentations.job
+#   # After all shards finish, run the merge:
+#   uv run python scripts/precompute_augmentations.py --output-dir /scratch-shared/$USER/asvspoof5_augmented_cache --merge-manifests
 # =============================================================================
 
 module purge

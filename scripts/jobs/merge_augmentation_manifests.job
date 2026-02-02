@@ -1,0 +1,48 @@
+#!/bin/bash
+#SBATCH --partition=gpu_mig
+#SBATCH --gpus=1
+#SBATCH --job-name=merge_aug_manifest
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --time=00:10:00
+#SBATCH --output=./scripts/jobs/out/%x_%A.out
+
+# =============================================================================
+# Merge Per-Shard Augmentation Manifests
+# =============================================================================
+#
+# Run AFTER all precompute_augmentations.job array tasks complete.
+# Merges manifest_shard_*.json files into a single manifest.json.
+#
+# Submit with dependency:
+#   JOB_ID=$(sbatch --parsable scripts/jobs/precompute_augmentations.job)
+#   sbatch --dependency=afterok:$JOB_ID scripts/jobs/merge_augmentation_manifests.job
+# =============================================================================
+
+module purge
+module load 2025
+
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  cd "$SLURM_SUBMIT_DIR"
+fi
+
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+uv sync --locked
+
+# Load env
+source scripts/jobs/_job_common.sh
+load_dotenv_if_present
+
+OUTPUT_DIR="${AUGMENTATION_CACHE_DIR:-/scratch-shared/$USER/asvspoof5_augmented_cache}"
+
+echo "=== Merging Augmentation Manifests ==="
+echo "Output dir: $OUTPUT_DIR"
+
+srun uv run python scripts/precompute_augmentations.py \
+    --output-dir "$OUTPUT_DIR" \
+    --merge-manifests
+
+echo "=== Done ==="
+echo "manifest.json is ready for training."
