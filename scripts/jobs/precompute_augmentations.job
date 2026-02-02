@@ -4,21 +4,33 @@
 #SBATCH --job-name=precompute_aug
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
-#SBATCH --time=04:00:00
-#SBATCH --output=./scripts/jobs/out/%x_%A.out
+#SBATCH --time=08:00:00
+#SBATCH --array=0-14
+#SBATCH --output=./scripts/jobs/out/%x_%A_%a.out
 
 # =============================================================================
-# Pre-compute Codec Augmentations for DANN Training
+# Pre-compute Codec Augmentations for DANN Training (SLURM Job Array)
 # =============================================================================
 #
 # Run this BEFORE training jobs. It pre-computes all codec × quality
 # augmentations offline so DANN training doesn't need on-the-fly ffmpeg.
 #
-# Expected runtime: ~60-90 min with 9 workers (depends on dataset size)
-# Expected disk usage: ~5-10 GB for train split (15 augmentations/file)
+# Uses a SLURM job array (15 shards) to parallelize across ~1.8M files.
+# Each shard processes ~122k files with 9 workers on a gpu_mig slice (cheapest GPU partition).
+# Expected runtime: ~2-4h per shard (8h wall-clock limit for safety margin).
+# Expected disk usage: ~5-10 GB for train split (15 augmentations/file).
 #
-# Submit from repo root:
+# Resume support: re-running skips already-completed files, so it's safe to
+# resubmit if any shard fails or times out.
+#
+# Submit from repo root (2 steps):
+#   1. JOB_ID=$(sbatch --parsable scripts/jobs/precompute_augmentations.job)
+#   2. sbatch --dependency=afterok:$JOB_ID scripts/jobs/merge_augmentation_manifests.job
+#
+# Or simply:
 #   sbatch scripts/jobs/precompute_augmentations.job
+#   # After all shards finish, run the merge:
+#   uv run python scripts/precompute_augmentations.py --output-dir /scratch-shared/$USER/asvspoof5_augmented_cache --merge-manifests
 # =============================================================================
 
 module purge
@@ -54,7 +66,7 @@ check_ffmpeg_encoders_or_fail
 OUTPUT_DIR="${AUGMENTATION_CACHE_DIR:-/scratch-shared/$USER/asvspoof5_augmented_cache}"
 
 echo ""
-echo "=== Pre-compute Codec Augmentations ==="
+echo "=== Pre-compute Codec Augmentations (Shard ${SLURM_ARRAY_TASK_ID}/15) ==="
 echo "Output: $OUTPUT_DIR"
 echo "Workers: ${SLURM_CPUS_PER_TASK}"
 echo ""
@@ -65,10 +77,12 @@ srun uv run python scripts/precompute_augmentations.py \
     --codecs MP3 AAC OPUS \
     --qualities 1 2 3 4 5 \
     --num-workers "${SLURM_CPUS_PER_TASK}" \
-    --split train
+    --split train \
+    --shard-index "${SLURM_ARRAY_TASK_ID}" \
+    --num-shards 15
 
 echo ""
-echo "=== Done ==="
+echo "=== Done (Shard ${SLURM_ARRAY_TASK_ID}/15) ==="
 echo "Cache directory: $OUTPUT_DIR"
 echo ""
 echo "To use with training, set in your config or .env:"
