@@ -649,7 +649,13 @@ def main():
         logger.info(f"Limited to first {args.limit} files")
 
     # Shard the file list for parallel job arrays
-    is_sharded = args.shard_index is not None and args.num_shards is not None
+    # Validate shard arguments are both provided or both omitted
+    has_shard_index = args.shard_index is not None
+    has_num_shards = args.num_shards is not None
+    if has_shard_index != has_num_shards:
+        logger.error("--shard-index and --num-shards must be used together")
+        sys.exit(1)
+    is_sharded = has_shard_index and has_num_shards
     if is_sharded:
         if args.num_shards <= 0:
             logger.error(f"--num-shards must be > 0, got {args.num_shards}")
