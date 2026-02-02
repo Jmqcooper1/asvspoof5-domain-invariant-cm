@@ -4,8 +4,8 @@
 #SBATCH --job-name=precompute_aug
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
-#SBATCH --time=08:00:00
-#SBATCH --array=0-14
+#SBATCH --time=24:00:00
+#SBATCH --array=0-29
 #SBATCH --output=./scripts/jobs/out/%x_%A_%a.out
 
 # =============================================================================
@@ -15,9 +15,10 @@
 # Run this BEFORE training jobs. It pre-computes all codec × quality
 # augmentations offline so DANN training doesn't need on-the-fly ffmpeg.
 #
-# Uses a SLURM job array (15 shards) to parallelize across ~1.8M files.
-# Each shard processes ~122k files with 9 workers on a gpu_mig slice (cheapest GPU partition).
-# Expected runtime: ~2-4h per shard (8h wall-clock limit for safety margin).
+# Uses a SLURM job array (30 shards) to parallelize across ~1.8M files.
+# Each shard processes ~61k files with 9 workers on a gpu_mig slice (cheapest GPU partition).
+# Expected runtime: ~8-12h per shard (24h wall-clock limit for safety margin).
+# Note: shared filesystem I/O contention reduces per-shard throughput significantly.
 # Expected disk usage: ~5-10 GB for train split (15 augmentations/file).
 #
 # Resume support: re-running skips already-completed files, so it's safe to
@@ -66,7 +67,7 @@ check_ffmpeg_encoders_or_fail
 OUTPUT_DIR="${AUGMENTATION_CACHE_DIR:-/scratch-shared/$USER/asvspoof5_augmented_cache}"
 
 echo ""
-echo "=== Pre-compute Codec Augmentations (Shard ${SLURM_ARRAY_TASK_ID}/15) ==="
+echo "=== Pre-compute Codec Augmentations (Shard ${SLURM_ARRAY_TASK_ID}/30) ==="
 echo "Output: $OUTPUT_DIR"
 echo "Workers: ${SLURM_CPUS_PER_TASK}"
 echo ""
@@ -79,10 +80,10 @@ srun uv run python scripts/precompute_augmentations.py \
     --num-workers "${SLURM_CPUS_PER_TASK}" \
     --split train \
     --shard-index "${SLURM_ARRAY_TASK_ID}" \
-    --num-shards 15
+    --num-shards 30
 
 echo ""
-echo "=== Done (Shard ${SLURM_ARRAY_TASK_ID}/15) ==="
+echo "=== Done (Shard ${SLURM_ARRAY_TASK_ID}/30) ==="
 echo "Cache directory: $OUTPUT_DIR"
 echo ""
 echo "To use with training, set in your config or .env:"
