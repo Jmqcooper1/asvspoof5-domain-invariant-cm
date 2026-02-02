@@ -114,6 +114,18 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Process only first N files (for testing)",
     )
+    parser.add_argument(
+        "--shard-index",
+        type=int,
+        default=None,
+        help="Shard index (0-based) for parallel processing",
+    )
+    parser.add_argument(
+        "--num-shards",
+        type=int,
+        default=None,
+        help="Total number of shards",
+    )
     return parser.parse_args()
 
 
@@ -580,6 +592,15 @@ def main():
     if args.limit:
         audio_paths = audio_paths[: args.limit]
         logger.info(f"Limited to first {args.limit} files")
+
+    # Shard the file list for parallel job arrays
+    if args.shard_index is not None and args.num_shards is not None:
+        total_files = len(audio_paths)
+        shard_size = (total_files + args.num_shards - 1) // args.num_shards  # ceiling division
+        start = args.shard_index * shard_size
+        end = min(start + shard_size, total_files)
+        audio_paths = audio_paths[start:end]
+        logger.info(f"Shard {args.shard_index}/{args.num_shards}: files {start}-{end} ({len(audio_paths)} files)")
 
     # Build task list
     tasks = build_task_list(
