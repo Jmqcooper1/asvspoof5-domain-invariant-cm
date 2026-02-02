@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --partition=gpu_a100
+#SBATCH --partition=gpu_mig
 #SBATCH --gpus=1
 #SBATCH --job-name=precompute_aug
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=18
+#SBATCH --cpus-per-task=9
 #SBATCH --time=08:00:00
 #SBATCH --array=0-14
 #SBATCH --output=./scripts/jobs/out/%x_%A_%a.out
@@ -16,8 +16,8 @@
 # augmentations offline so DANN training doesn't need on-the-fly ffmpeg.
 #
 # Uses a SLURM job array (15 shards) to parallelize across ~1.8M files.
-# Each shard processes ~122k files with 18 workers on a gpu_a100 quarter-node.
-# Expected runtime: ~2h per shard (8h wall-clock limit for safety margin).
+# Each shard processes ~122k files with 9 workers on a gpu_mig slice (cheapest GPU partition).
+# Expected runtime: ~4h per shard (8h wall-clock limit for safety margin).
 # Expected disk usage: ~5-10 GB for train split (15 augmentations/file).
 #
 # Resume support: re-running skips already-completed files, so it's safe to
