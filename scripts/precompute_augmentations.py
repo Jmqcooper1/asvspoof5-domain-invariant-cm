@@ -538,11 +538,28 @@ def main():
 
     # Handle manifest merge mode (run after all shards complete)
     if args.merge_manifests:
+        import re
+
         logger.info("Merging per-shard manifests...")
         shard_files = sorted(args.output_dir.glob("manifest_shard_*.json"))
         if not shard_files:
             logger.error(f"No shard manifests found in {args.output_dir}")
             sys.exit(1)
+
+        # Validate all expected shards are present
+        shard_indices = set()
+        for sf in shard_files:
+            match = re.match(r"manifest_shard_(\d+)\.json", sf.name)
+            if match:
+                shard_indices.add(int(match.group(1)))
+        expected = set(range(max(shard_indices) + 1)) if shard_indices else set()
+        missing = expected - shard_indices
+        if missing:
+            logger.warning(
+                f"Missing shard manifests: {sorted(missing)}. "
+                f"Found {len(shard_indices)}/{len(expected)}. "
+                f"Proceeding with partial merge — training data may be incomplete."
+            )
 
         merged_entries = []
         base_manifest = None
@@ -560,9 +577,12 @@ def main():
             len(merged_entries) * base_manifest["augmentations_per_file"]
         )
 
+        # Atomic write — use temp file + os.replace to prevent corruption
         manifest_path = args.output_dir / "manifest.json"
-        with open(manifest_path, "w") as f:
+        temp_path = manifest_path.with_suffix(".json.tmp")
+        with open(temp_path, "w") as f:
             json.dump(base_manifest, f, indent=2)
+        os.replace(str(temp_path), str(manifest_path))
         logger.info(f"Merged manifest: {manifest_path} ({len(merged_entries)} entries from {len(shard_files)} shards)")
         return
 
@@ -631,10 +651,13 @@ def main():
     # Shard the file list for parallel job arrays
     is_sharded = args.shard_index is not None and args.num_shards is not None
     if is_sharded:
-        if args.shard_index < 0 or args.shard_index >= args.num_shards:
+        if args.num_shards <= 0:
+            logger.error(f"--num-shards must be > 0, got {args.num_shards}")
+            sys.exit(1)
+        if not (0 <= args.shard_index < args.num_shards):
             logger.error(
-                f"Invalid shard args: --shard-index {args.shard_index} "
-                f"must be in range [0, {args.num_shards})"
+                f"--shard-index must be in range [0, {args.num_shards}), "
+                f"got {args.shard_index}"
             )
             sys.exit(1)
         total_files = len(audio_paths)

@@ -17,7 +17,7 @@
 #
 # Uses a SLURM job array (15 shards) to parallelize across ~1.8M files.
 # Each shard processes ~122k files with 9 workers on a gpu_mig slice (cheapest GPU partition).
-# Expected runtime: ~4h per shard (8h wall-clock limit for safety margin).
+# Expected runtime: ~2-4h per shard (8h wall-clock limit for safety margin).
 # Expected disk usage: ~5-10 GB for train split (15 augmentations/file).
 #
 # Resume support: re-running skips already-completed files, so it's safe to
