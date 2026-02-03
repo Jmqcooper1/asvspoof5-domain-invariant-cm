@@ -131,6 +131,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Merge per-shard manifests into final manifest.json (run after all shards complete)",
     )
+    parser.add_argument(
+        "--smoke-test",
+        action="store_true",
+        help="Run a quick smoke test with one file before full processing (recommended for first run)",
+    )
     return parser.parse_args()
 
 
@@ -186,6 +191,107 @@ def check_encoder_support(codecs: list[str]) -> list[str]:
     return supported
 
 
+def run_smoke_test(
+    audio_path: str,
+    output_dir: Path,
+    codecs: list[str],
+    sample_rate: int,
+    output_format: str,
+) -> bool:
+    """Run a quick smoke test to verify the pipeline works.
+
+    Tests a single file with all codec/quality combinations to catch
+    configuration issues before committing to a long run.
+
+    Args:
+        audio_path: Path to a test audio file.
+        output_dir: Output directory for test files.
+        codecs: List of codecs to test.
+        sample_rate: Target sample rate.
+        output_format: Output format (flac, wav).
+
+    Returns:
+        True if all tests passed, False otherwise.
+    """
+    import tempfile
+
+    logger.info("")
+    logger.info("=" * 50)
+    logger.info("SMOKE TEST")
+    logger.info("=" * 50)
+    logger.info(f"Testing with: {audio_path}")
+
+    test_dir = output_dir / "_smoke_test"
+    test_dir.mkdir(parents=True, exist_ok=True)
+
+    passed = 0
+    failed = 0
+    errors = []
+
+    stem = Path(audio_path).stem
+
+    for codec in codecs:
+        for quality in [1, 3, 5]:  # Test low, mid, high quality
+            output_path = test_dir / codec / f"q{quality}" / f"{stem}.{output_format}"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Use the same temp path logic as process_single_file
+            temp_path = output_path.with_suffix(f".{output_format}.tmp")
+
+            success, error = apply_codec_to_file(
+                input_path=audio_path,
+                output_path=str(temp_path),
+                codec=codec,
+                quality=quality,
+                sample_rate=sample_rate,
+                output_format=output_format,
+            )
+
+            if success:
+                # Rename temp to final
+                os.replace(str(temp_path), str(output_path))
+
+                # Verify output is valid audio
+                try:
+                    import soundfile as sf
+                    data, sr = sf.read(str(output_path))
+                    if len(data) > 0 and sr > 0:
+                        logger.info(f"  ✓ {codec}/q{quality}: OK ({len(data)} samples)")
+                        passed += 1
+                    else:
+                        logger.error(f"  ✗ {codec}/q{quality}: Empty output")
+                        failed += 1
+                        errors.append(f"{codec}/q{quality}: Empty output")
+                except Exception as e:
+                    logger.error(f"  ✗ {codec}/q{quality}: Invalid output: {e}")
+                    failed += 1
+                    errors.append(f"{codec}/q{quality}: {e}")
+            else:
+                logger.error(f"  ✗ {codec}/q{quality}: {error[:100]}")
+                failed += 1
+                errors.append(f"{codec}/q{quality}: {error[:100]}")
+
+                # Clean up failed temp file
+                if temp_path.exists():
+                    temp_path.unlink()
+
+    # Clean up test directory
+    import shutil
+    shutil.rmtree(test_dir, ignore_errors=True)
+
+    logger.info("")
+    logger.info(f"Smoke test: {passed} passed, {failed} failed")
+
+    if failed > 0:
+        logger.error("Smoke test FAILED! Fix the issues before running the full job.")
+        for err in errors[:5]:
+            logger.error(f"  - {err}")
+        return False
+    else:
+        logger.info("Smoke test PASSED! Safe to proceed with full run.")
+        return True
+
+
 # Bitrate configurations per codec and quality level (kbps)
 # Must match codec_augment.py exactly
 CODEC_BITRATES = {
@@ -217,6 +323,7 @@ def apply_codec_to_file(
     codec: str,
     quality: int,
     sample_rate: int = 16000,
+    output_format: str = "flac",
 ) -> tuple[bool, str]:
     """Apply codec compression to an audio file.
 
@@ -229,6 +336,8 @@ def apply_codec_to_file(
         codec: Codec name (MP3, AAC, OPUS, etc.).
         quality: Quality level (1-5).
         sample_rate: Target sample rate.
+        output_format: Output audio format (flac, wav). Required for temp files
+            with non-standard extensions like .flac.tmp.
 
     Returns:
         Tuple of (success: bool, error_message: str).
@@ -275,6 +384,8 @@ def apply_codec_to_file(
         )
 
         # Step 2: Decode back (codec format → output format)
+        # Explicitly specify output format with -f since temp files may have
+        # non-standard extensions like .flac.tmp that ffmpeg can't infer from.
         decode_cmd = [
             "ffmpeg",
             "-y",
@@ -282,6 +393,7 @@ def apply_codec_to_file(
             "-i", tmp_encoded,
             "-ar", str(sample_rate),
             "-ac", "1",
+            "-f", output_format,
             str(output_path),
         ]
 
@@ -345,6 +457,7 @@ def process_single_file(args_tuple: tuple) -> dict:
         codec=codec,
         quality=quality,
         sample_rate=sample_rate,
+        output_format=output_format,
     )
 
     if success:
@@ -642,6 +755,22 @@ def main():
 
     # Load manifest
     audio_paths = load_manifest(manifest_dir, args.split)
+
+    # Run smoke test if requested (recommended for first run)
+    if args.smoke_test:
+        if not audio_paths:
+            logger.error("No audio files found for smoke test")
+            sys.exit(1)
+        smoke_ok = run_smoke_test(
+            audio_path=audio_paths[0],
+            output_dir=args.output_dir,
+            codecs=supported_codecs,
+            sample_rate=args.sample_rate,
+            output_format=args.output_format,
+        )
+        if not smoke_ok:
+            sys.exit(1)
+        logger.info("")
 
     # Apply limit if specified
     if args.limit:
