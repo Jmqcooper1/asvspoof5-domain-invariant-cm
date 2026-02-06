@@ -1,11 +1,13 @@
 #!/bin/bash
-#SBATCH --partition=gpu_a100
+#SBATCH --partition=gpu_mig
 #SBATCH --gpus=1
 #SBATCH --job-name=Evaluate
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=9
-#SBATCH --time=04:00:00
+#SBATCH --cpus-per-task=4
+#SBATCH --time=02:00:00
 #SBATCH --output=./scripts/jobs/out/%x_%A.out
+
+# NOTE: Using gpu_mig - evaluation has low GPU memory requirements
 
 # =============================================================================
 # Evaluate All Trained Models

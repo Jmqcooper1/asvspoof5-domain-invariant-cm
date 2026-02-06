@@ -1,11 +1,14 @@
 #!/bin/bash
-#SBATCH --partition=gpu_a100
+#SBATCH --partition=gpu_mig
 #SBATCH --gpus=1
 #SBATCH --job-name=HeldOut
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=9
-#SBATCH --time=48:00:00
+#SBATCH --cpus-per-task=4
+#SBATCH --time=24:00:00
 #SBATCH --output=./scripts/jobs/out/%x_%A.out
+
+# NOTE: Using gpu_mig - held-out experiment has low GPU memory requirements
+# Time reduced from 48h to 24h with batch_size=128
 
 # =============================================================================
 # Run Held-Out Codec Domain Generalization Experiment
