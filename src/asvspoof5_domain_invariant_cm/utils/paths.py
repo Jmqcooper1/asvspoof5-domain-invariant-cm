@@ -62,12 +62,45 @@ def get_manifests_dir() -> Path:
 def get_runs_dir() -> Path:
     """Get runs directory for experiment outputs.
 
+    Uses RUNS_DIR environment variable if set, otherwise defaults to project_root/runs.
+    
+    Set RUNS_DIR for persistent storage on HPC systems, e.g.:
+        export RUNS_DIR=/projects/prjs1904/runs
+
     Returns:
         Path to runs directory (created if needed).
     """
-    runs_dir = get_project_root() / "runs"
+    env_path = os.environ.get("RUNS_DIR")
+    if env_path:
+        runs_dir = Path(env_path)
+    else:
+        runs_dir = get_project_root() / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
     return runs_dir
+
+
+def get_aug_cache_dir() -> Path | None:
+    """Get augmentation cache directory.
+
+    Uses AUGMENTATION_CACHE_DIR environment variable if set.
+    
+    Set for pre-computed codec augmentations on HPC systems, e.g.:
+        export AUGMENTATION_CACHE_DIR=/projects/prjs1904/data/asvspoof5_augmented_cache
+
+    Returns:
+        Path to cache directory, or None if not configured.
+    """
+    env_path = os.environ.get("AUGMENTATION_CACHE_DIR")
+    if env_path:
+        cache_dir = Path(env_path)
+        if cache_dir.exists():
+            return cache_dir
+        else:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"AUGMENTATION_CACHE_DIR set but path does not exist: {cache_dir}"
+            )
+    return None
 
 
 def get_run_dir(name: str = None) -> Path:
