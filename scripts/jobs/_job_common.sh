@@ -68,6 +68,7 @@ print_env_diagnostics() {
   echo "=== Environment diagnostics ==="
   echo "PWD: $(pwd)"
   echo "ASVSPOOF5_ROOT: ${ASVSPOOF5_ROOT}"
+  echo "AUGMENTATION_CACHE_DIR: ${AUGMENTATION_CACHE_DIR:-<not set, will use on-the-fly>}"
   echo "HF_HOME: ${HF_HOME:-}"
   echo "WANDB_PROJECT: ${WANDB_PROJECT:-}"
   echo "WANDB_MODE: ${WANDB_MODE:-}"
