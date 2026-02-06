@@ -1,11 +1,16 @@
 #!/bin/bash
-#SBATCH --partition=gpu_a100
+#SBATCH --partition=gpu_mig
 #SBATCH --gpus=1
 #SBATCH --job-name=WavLM_DANN
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=9
-#SBATCH --time=24:00:00
+#SBATCH --cpus-per-task=4
+#SBATCH --time=12:00:00
 #SBATCH --output=./scripts/jobs/out/%x_%A.out
+
+# NOTE: Using gpu_mig partition instead of gpu_a100
+# GPU memory usage is <1GB, so MIG slice is sufficient
+# Batch size increased to 128 for better throughput
+# DANN takes longer due to augmentation overhead
 
 # =============================================================================
 # Train WavLM + DANN Model
