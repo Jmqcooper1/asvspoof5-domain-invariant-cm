@@ -146,6 +146,11 @@ def parse_args():
         help="Use automatic mixed precision",
     )
     parser.add_argument(
+        "--compile",
+        action="store_true",
+        help="Use torch.compile for model optimization (PyTorch 2.0+)",
+    )
+    parser.add_argument(
         "--wandb",
         action="store_true",
         help="Enable Wandb logging",
@@ -340,6 +345,15 @@ def main():
     device = get_device(args.device)
     logger.info(f"Using device: {device}")
 
+    # Performance optimizations for CUDA
+    if device.type == "cuda":
+        # Enable TF32 for matmul (8x faster on A100, slight precision loss)
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        # Auto-tune convolution algorithms for fixed input sizes
+        torch.backends.cudnn.benchmark = True
+        logger.info("CUDA optimizations: TF32=True, cudnn.benchmark=True")
+
     # Setup run directory
     if args.name:
         run_name = args.name
@@ -528,6 +542,12 @@ def main():
 
     model = build_model(config, num_codecs, num_codec_qs)
     model = model.to(device)
+
+    # Optional: torch.compile for PyTorch 2.0+ speedup
+    if args.compile:
+        logger.info("Compiling model with torch.compile (this may take a few minutes)...")
+        model = torch.compile(model)
+        logger.info("Model compiled successfully")
 
     # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
