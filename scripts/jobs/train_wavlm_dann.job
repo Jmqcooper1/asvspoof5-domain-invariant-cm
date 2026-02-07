@@ -1,15 +1,15 @@
 #!/bin/bash
-#SBATCH --partition=gpu_mig
+#SBATCH --partition=gpu_a100
 #SBATCH --gpus=1
 #SBATCH --job-name=WavLM_DANN
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
-#SBATCH --time=12:00:00
+#SBATCH --cpus-per-task=18
+#SBATCH --time=6:00:00
 #SBATCH --output=./scripts/jobs/out/%x_%A.out
 
-# NOTE: Using gpu_mig partition instead of gpu_a100
-# GPU memory usage is <1GB, so MIG slice is sufficient
-# Batch size increased to 128 for better throughput
+# NOTE: Using full A100 for better throughput
+# batch_size=256, num_workers=8, ~15-20GB VRAM usage
+# Reduced time estimate due to larger batches
 # DANN takes longer due to augmentation overhead
 
 # =============================================================================
@@ -53,6 +53,9 @@ load_and_require_asvspoof5_root
 # Optional defaults (safe): caching dirs
 export WANDB_PROJECT=${WANDB_PROJECT:-asvspoof5-dann}
 export HF_HOME=${HF_HOME:-/scratch-shared/$USER/.cache/huggingface}
+
+# PyTorch memory optimization (reduces fragmentation)
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 echo "=== Training WavLM + DANN ==="
 

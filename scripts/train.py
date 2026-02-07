@@ -146,6 +146,11 @@ def parse_args():
         help="Use automatic mixed precision",
     )
     parser.add_argument(
+        "--compile",
+        action="store_true",
+        help="Use torch.compile for model optimization (PyTorch 2.0+)",
+    )
+    parser.add_argument(
         "--wandb",
         action="store_true",
         help="Enable Wandb logging",
@@ -340,6 +345,15 @@ def main():
     device = get_device(args.device)
     logger.info(f"Using device: {device}")
 
+    # Performance optimizations for CUDA
+    if device.type == "cuda":
+        # Enable TF32 for matmul (8x faster on A100, slight precision loss)
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        # Auto-tune convolution algorithms for fixed input sizes
+        torch.backends.cudnn.benchmark = True
+        logger.info("CUDA optimizations: TF32=True, cudnn.benchmark=True")
+
     # Setup run directory
     if args.name:
         run_name = args.name
@@ -459,6 +473,10 @@ def main():
     train_collator = AudioCollator(fixed_length=fixed_length, mode="train")
     val_collator = AudioCollator(fixed_length=fixed_length, mode="eval")
 
+    # DataLoader performance settings
+    prefetch_factor = dataloader_cfg.get("prefetch_factor", 2)
+    persistent_workers = dataloader_cfg.get("persistent_workers", False) and num_workers > 0
+
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -468,6 +486,8 @@ def main():
         drop_last=True,
         pin_memory=True,
         worker_init_fn=_worker_init_fn,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
+        persistent_workers=persistent_workers,
     )
 
     val_loader = torch.utils.data.DataLoader(
@@ -478,6 +498,8 @@ def main():
         collate_fn=val_collator,
         drop_last=False,
         pin_memory=True,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
+        persistent_workers=persistent_workers,
     )
 
     # Build model vocab sizes and save vocabs.
@@ -520,6 +542,12 @@ def main():
 
     model = build_model(config, num_codecs, num_codec_qs)
     model = model.to(device)
+
+    # Optional: torch.compile for PyTorch 2.0+ speedup
+    if args.compile:
+        logger.info("Compiling model with torch.compile (this may take a few minutes)...")
+        model = torch.compile(model)
+        logger.info("Model compiled successfully")
 
     # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
