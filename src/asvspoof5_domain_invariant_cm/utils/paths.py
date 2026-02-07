@@ -73,6 +73,10 @@ def get_runs_dir() -> Path:
     env_path = os.environ.get("RUNS_DIR")
     if env_path:
         runs_dir = Path(env_path)
+        if not runs_dir.parent.exists():
+            raise EnvironmentError(
+                f"RUNS_DIR parent directory does not exist: {runs_dir.parent}"
+            )
     else:
         runs_dir = get_project_root() / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
