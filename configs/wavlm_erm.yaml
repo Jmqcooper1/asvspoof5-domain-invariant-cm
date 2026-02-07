@@ -73,13 +73,15 @@ audio:
   max_duration_sec: 6.0
 
 # Dataloader
-# NOTE: batch_size increased from 32 to 128 for better GPU utilization
-# GPU memory usage was <1% with batch_size=32; 128 uses ~2-3GB (still fits MIG slice)
+# NOTE: batch_size 256 optimal for A100 40GB (~15-20GB VRAM usage)
+# Increase num_workers to saturate GPU, persistent_workers avoids respawn overhead
 dataloader:
-  batch_size: 128
-  num_workers: 4
+  batch_size: 256
+  num_workers: 8
   pin_memory: true
   drop_last: true
+  prefetch_factor: 4
+  persistent_workers: true
 
 # Logging
 logging:

@@ -459,6 +459,10 @@ def main():
     train_collator = AudioCollator(fixed_length=fixed_length, mode="train")
     val_collator = AudioCollator(fixed_length=fixed_length, mode="eval")
 
+    # DataLoader performance settings
+    prefetch_factor = dataloader_cfg.get("prefetch_factor", 2)
+    persistent_workers = dataloader_cfg.get("persistent_workers", False) and num_workers > 0
+
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -468,6 +472,8 @@ def main():
         drop_last=True,
         pin_memory=True,
         worker_init_fn=_worker_init_fn,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
+        persistent_workers=persistent_workers,
     )
 
     val_loader = torch.utils.data.DataLoader(
@@ -478,6 +484,8 @@ def main():
         collate_fn=val_collator,
         drop_last=False,
         pin_memory=True,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
+        persistent_workers=persistent_workers,
     )
 
     # Build model vocab sizes and save vocabs.
