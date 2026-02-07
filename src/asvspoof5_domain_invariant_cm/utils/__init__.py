@@ -10,6 +10,7 @@ TensorFlow-only venv) don't pull in torch.
 from .paths import (
     build_audio_path,
     get_asvspoof5_root,
+    get_aug_cache_dir,
     get_features_dir,
     get_manifest_path,
     get_manifests_dir,
@@ -69,6 +70,7 @@ __all__ = [
     # Paths (eager)
     "get_project_root",
     "get_asvspoof5_root",
+    "get_aug_cache_dir",
     "get_manifests_dir",
     "get_runs_dir",
     "get_run_dir",

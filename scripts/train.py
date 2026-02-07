@@ -55,6 +55,7 @@ from asvspoof5_domain_invariant_cm.training import (
     build_optimizer,
 )
 from asvspoof5_domain_invariant_cm.utils import (
+    get_aug_cache_dir,
     get_device,
     get_experiment_context,
     get_manifest_path,
@@ -391,11 +392,12 @@ def main():
     #   B) ERM (codec aug)
     #   C) DANN (codec aug, adversarial λ>0)
     if aug_cfg.get("enabled", False):
-        # Allow env var override for cache_dir (reproducibility: keep paths in .env, not config)
-        env_cache_dir = os.environ.get("AUGMENTATION_CACHE_DIR")
-        if env_cache_dir and not aug_cfg.get("cache_dir"):
-            logger.info(f"Using AUGMENTATION_CACHE_DIR from environment: {env_cache_dir}")
-            aug_cfg["cache_dir"] = env_cache_dir
+        # Resolve cache_dir: config > env var > None (on-the-fly)
+        if not aug_cfg.get("cache_dir"):
+            env_cache_dir = get_aug_cache_dir()
+            if env_cache_dir:
+                logger.info(f"Using AUGMENTATION_CACHE_DIR from environment: {env_cache_dir}")
+                aug_cfg["cache_dir"] = str(env_cache_dir)
         
         # Inject sample_rate into augmentation config
         aug_cfg_with_sr = {**aug_cfg, "sample_rate": sample_rate}

@@ -98,7 +98,7 @@ wandb:
   project: asvspoof5-dann
   entity: null
   tags: ["wav2vec2", "erm", "track1"]
-  log_model: false  # Save model as artifact
+  log_model: true  # Save model as artifact
   log_code: true  # Log code snapshot
 
 # Reproducibility
