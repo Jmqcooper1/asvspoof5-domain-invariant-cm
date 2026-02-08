@@ -8,7 +8,7 @@
 #SBATCH --output=./scripts/jobs/out/%x_%A.out
 
 # NOTE: Using full A100 for better throughput
-# batch_size=256, num_workers=8, ~15-20GB VRAM usage
+# batch_size=512, num_workers=8, ~1-2GB VRAM usage
 # Reduced time estimate due to larger batches
 # DANN takes longer due to augmentation overhead
 
