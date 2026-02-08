@@ -4,7 +4,7 @@
 #SBATCH --job-name=W2V2_DANN
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
-#SBATCH --time=6:00:00
+#SBATCH --time=48:00:00
 #SBATCH --output=./scripts/jobs/out/%x_%A.out
 
 # NOTE: Using full A100 for better throughput

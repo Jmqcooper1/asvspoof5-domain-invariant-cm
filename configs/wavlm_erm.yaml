@@ -76,7 +76,7 @@ audio:
 # NOTE: batch_size 256 optimal for A100 40GB (~15-20GB VRAM usage)
 # Increase num_workers to saturate GPU, persistent_workers avoids respawn overhead
 dataloader:
-  batch_size: 256
+  batch_size: 512
   num_workers: 8
   pin_memory: true
   drop_last: true
