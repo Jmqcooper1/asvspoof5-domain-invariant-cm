@@ -111,10 +111,9 @@ audio:
   max_duration_sec: 6.0
 
 # Dataloader
-# NOTE: batch_size increased from 32 to 128 for better GPU utilization
-# GPU memory usage was <1% with batch_size=32; 128 uses ~2-3GB (still fits MIG slice)
+# NOTE: batch_size=512 for A100 (~1-2GB VRAM observed)
 dataloader:
-  batch_size: 256
+  batch_size: 512
   num_workers: 8
   pin_memory: true
   drop_last: true
