@@ -1,0 +1,67 @@
+#!/bin/bash
+#SBATCH --partition=gpu_a100
+#SBATCH --gpus=1
+#SBATCH --job-name=W2V2_ERM_Aug
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=18
+#SBATCH --time=6:00:00
+#SBATCH --output=./scripts/jobs/out/%x_%A.out
+
+# NOTE: Using full A100 for better throughput
+# ERM + codec augmentation (control experiment for DANN)
+# Longer time due to augmentation overhead
+
+# =============================================================================
+# Train Wav2Vec2 + ERM + Codec Augmentation Model
+# =============================================================================
+
+module purge
+module load 2025
+
+# Navigate to repo root (avoid Slurm spool dir)
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  cd "$SLURM_SUBMIT_DIR"
+fi
+if [[ ! -f "pyproject.toml" ]]; then
+  echo "ERROR: pyproject.toml not found in $(pwd). Set SLURM_SUBMIT_DIR or run from repo root." >&2
+  exit 1
+fi
+echo "Repo root: $(pwd)"
+echo "SLURM_SUBMIT_DIR: ${SLURM_SUBMIT_DIR:-}"
+
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+uv sync --locked
+
+# Verify CUDA availability
+uv run python - <<'EOF'
+import torch
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"GPU device count: {torch.cuda.device_count()}")
+    print(f"Active GPU: {torch.cuda.get_device_name(0)}")
+EOF
+echo ""
+
+# Load env + require ASVSPOOF5_ROOT
+# shellcheck disable=SC1091
+source scripts/jobs/_job_common.sh
+load_and_require_asvspoof5_root
+
+# Optional defaults (safe): caching dirs
+export WANDB_PROJECT=${WANDB_PROJECT:-asvspoof5-dann}
+export HF_HOME=${HF_HOME:-/scratch-shared/$USER/.cache/huggingface}
+
+# PyTorch memory optimization (reduces fragmentation)
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+echo "=== Training Wav2Vec2 + ERM + Augmentation ==="
+
+srun uv run python scripts/train.py \
+    --config configs/w2v2_erm_aug.yaml \
+    --name w2v2_erm_aug \
+    --wandb \
+    --amp
+
+echo "Training complete!"
