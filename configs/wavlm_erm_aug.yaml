@@ -82,6 +82,7 @@ audio:
   max_duration_sec: 6.0
 
 # Dataloader
+# NOTE: batch_size=512 for A100 (~1-2GB VRAM observed)
 dataloader:
   batch_size: 512
   num_workers: 8
