@@ -113,8 +113,10 @@ STAGE_SCRIPT="scripts/jobs/stage_dataset.job"
 SETUP_SCRIPT="scripts/jobs/setup_environment.job"
 TRAIN_SCRIPTS=(
     "scripts/jobs/train_wavlm_erm.job"
+    "scripts/jobs/train_wavlm_erm_aug.job"
     "scripts/jobs/train_wavlm_dann.job"
     "scripts/jobs/train_w2v2_erm.job"
+    "scripts/jobs/train_w2v2_erm_aug.job"
     "scripts/jobs/train_w2v2_dann.job"
 )
 EVAL_SCRIPT="scripts/jobs/evaluate_models.job"
