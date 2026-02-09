@@ -18,7 +18,6 @@ The script will look for protocol files in:
 
 import argparse
 import os
-import sys
 from collections import Counter
 from pathlib import Path
 
