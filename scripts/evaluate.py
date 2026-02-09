@@ -163,9 +163,15 @@ def parse_args():
 
 
 def load_model_from_checkpoint(checkpoint_path: Path, device: torch.device):
-    """Load model from checkpoint (uses run_dir vocabs for head sizes)."""
+    """Load model from checkpoint (uses run_dir vocabs for head sizes).
+    
+    Auto-detects discriminator input dimension from checkpoint weights for
+    backwards compatibility with both old (post-projection, 256-dim) and 
+    new (pre-projection, 1536-dim) checkpoints.
+    """
     checkpoint = torch.load(checkpoint_path, map_location=device)
     config = checkpoint.get("config", {})
+    state_dict = checkpoint.get("model_state_dict", {})
 
     # Get vocab sizes from checkpoint or load from run dir
     run_dir = checkpoint_path.parent.parent
@@ -224,8 +230,19 @@ def load_model_from_checkpoint(checkpoint_path: Path, device: torch.device):
         dann_cfg = config.get("dann", {})
         disc_cfg = dann_cfg.get("discriminator", {})
 
-        # Discriminator taps pre-projection pooled features (e.g. 1536-dim stats pooling)
-        disc_input_dim = disc_cfg.get("input_dim", proj_input_dim)
+        # Auto-detect discriminator input dimension from checkpoint weights
+        # This provides backwards compatibility with old checkpoints trained
+        # with post-projection discriminator input (256-dim) vs new architecture
+        # that uses pre-projection input (1536-dim from stats pooling)
+        disc_weight_key = "domain_discriminator.shared.0.weight"
+        if disc_weight_key in state_dict:
+            disc_input_dim = state_dict[disc_weight_key].shape[1]
+            logger.info(f"Auto-detected discriminator input dim from checkpoint: {disc_input_dim}")
+        else:
+            # Fallback to config or default to pre-projection dim
+            disc_input_dim = disc_cfg.get("input_dim", proj_input_dim)
+            logger.info(f"Using config discriminator input dim: {disc_input_dim}")
+
         domain_discriminator = MultiHeadDomainDiscriminator(
             input_dim=disc_input_dim,
             num_codecs=num_codecs,
