@@ -797,49 +797,18 @@
             <section>
                 <h2>Domain Probe Findings: Backbone Comparison</h2>
                 <p>Linear probe accuracy predicting codec from frozen SSL features (3-class: MP3/AAC/OPUS):</p>
-                <div class="two-col" style="margin-top: 0.5em;">
+                <div class="two-col" style="margin-top: 0.3em;">
                     <div class="col">
-                        <table class="data" style="font-size: 0.75em;">
-                            <tr>
-                                <th>Metric</th>
-                                <th>WavLM</th>
-                                <th>Wav2Vec2</th>
-                            </tr>
-                            <tr>
-                                <td><strong>Mean accuracy</strong></td>
-                                <td>79.8% ± 6.9%</td>
-                                <td>63.0% ± 10.0%</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Peak layer</strong></td>
-                                <td>L0 (93.6%)</td>
-                                <td>L1 (78.2%)</td>
-                            </tr>
-                            <tr>
-                                <td>Early (L0–3)</td>
-                                <td>88.4%</td>
-                                <td>75.0%</td>
-                            </tr>
-                            <tr>
-                                <td>Mid (L4–7)</td>
-                                <td>77.7%</td>
-                                <td>62.0%</td>
-                            </tr>
-                            <tr>
-                                <td>Late (L8–11)</td>
-                                <td>73.3%</td>
-                                <td>52.0%</td>
-                            </tr>
-                        </table>
-                        <p class="small" style="margin-top: 0.3em;">Chance = 33.3% (3-class). Wav2Vec2 late layers approach chance.</p>
+                        <img src="codec_encoding_heatmap.jpg" alt="Codec Encoding Heatmap" style="width: 100%; border-radius: 6px; border: 1px solid var(--border);">
+                        <p class="small" style="margin-top: 0.3em; text-align: center;">Chance = 33.3% (3-class). Wav2Vec2 late layers approach chance.</p>
                     </div>
                     <div class="col">
                         <h3>Key Insights</h3>
                         <ul style="font-size: 0.85em;">
                             <li><strong>WavLM encodes MORE codec info</strong> — but DANN still works better with it</li>
-                            <li>WavLM has <strong>uniform distribution</strong> across layers → easier for layer weighting</li>
-                            <li>Wav2Vec2 has <strong>peaked distribution</strong> → codec info concentrated in early layers</li>
-                            <li>WavLM's Gated Relative Position Bias may help separate content from artifacts</li>
+                            <li>WavLM has <strong>uniform distribution</strong> across layers (94% → 72%)</li>
+                            <li>Wav2Vec2 <strong>drops sharply</strong> (77% → 51%, near chance)</li>
+                            <li>Gap between backbones <em>increases</em> in late layers</li>
                         </ul>
                         <div class="card card-accent" style="margin-top: 0.5em; font-size: 0.85em;">
                             <strong>Hypothesis:</strong> WavLM's uniform codec encoding makes it easier for DANN to find layer combinations that preserve task signal while suppressing domain info.
