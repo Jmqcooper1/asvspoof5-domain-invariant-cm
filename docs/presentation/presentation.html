@@ -349,11 +349,11 @@
             <!-- 5b. Synthetic Augmentation Coverage Analysis -->
             <section>
                 <h2>Synthetic Augmentation Coverage</h2>
-                <p>We analyzed the ASVspoof5 protocol files to understand what our synthetic augmentation can and cannot cover:</p>
-                <div class="two-col" style="margin-top: 0.5em;">
+                <p style="font-size: 0.85em; margin-bottom: 0.3em;">We analyzed the ASVspoof5 protocol files to understand what our synthetic augmentation can and cannot cover:</p>
+                <div class="two-col" style="margin-top: 0.3em;">
                     <div class="col">
-                        <h3>Dataset Composition</h3>
-                        <table class="data">
+                        <h3 style="margin-bottom: 0.3em;">Dataset Composition</h3>
+                        <table class="data" style="font-size: 0.75em;">
                             <tr>
                                 <th>Split</th>
                                 <th>Samples</th>
@@ -375,15 +375,16 @@
                                 <td><strong>12 conditions</strong></td>
                             </tr>
                         </table>
-                        <div class="card card-accent" style="margin-top: 0.5em; font-size: 0.85em;">
+                        <div class="card card-accent" style="margin-top: 0.4em; font-size: 0.8em; padding: 0.4em 0.8em;">
                             <strong>79.2%</strong> of eval covered by synthetic augmentation<br>
                             <strong>20.8%</strong> uncovered (C04, C07, C11)
                         </div>
+                        <p class="small" style="margin-top: 0.4em;"><strong>Uncovered:</strong> C04 (neural), C07 (cascade), C11 (device)</p>
                     </div>
                     <div class="col">
-                        <h3>Eval Set Codec Distribution</h3>
-                        <table class="data" style="font-size: 0.75em;">
-                            <tr><th>Codec</th><th>%</th><th>Synthetic</th></tr>
+                        <h3 style="margin-bottom: 0.3em;">Eval Set Codec Distribution</h3>
+                        <table class="data" style="font-size: 0.65em;">
+                            <tr><th>Codec</th><th>%</th><th>Synth</th></tr>
                             <tr><td>NONE</td><td>25.2%</td><td>✓</td></tr>
                             <tr><td>C01 (OPUS)</td><td>6.9%</td><td>✓</td></tr>
                             <tr><td>C02 (AMR)</td><td>7.0%</td><td>✓</td></tr>
@@ -399,7 +400,6 @@
                         </table>
                     </div>
                 </div>
-                <p class="small" style="margin-top: 0.3em;"><strong>Uncovered codecs:</strong> C04 (neural codec), C07 (MP3+Encodec cascade), C11 (real device/telephony effects) — these remain inherently challenging.</p>
             </section>
             
             <!-- 6. Multi-Task Domain Adaptation: CODEC & CODEC_Q -->
@@ -436,6 +436,7 @@
                 <div class="card card-accent" style="margin-top: 0.6em;">
                     <strong>Key insight:</strong> CODEC and CODEC_Q are <strong>independent</strong> — any codec can have any quality level. By adapting to both jointly, the model becomes robust across the full space of real-world transmission conditions.
                 </div>
+                <p class="small" style="margin-top: 0.4em;"><strong>Note:</strong> C11 (device/playback effects) cannot be simulated via codec augmentation — requires physical re-recording.</p>
             </section>
             
             <!-- 7. Method Overview -->
@@ -534,7 +535,7 @@
                 </div>
                 <ul style="margin-top: 1em;">
                     <li><strong>Two domain tasks:</strong> predict codec type and codec quality separately</li>
-                    <li><strong>Synthetic augmentation:</strong> apply MP3/AAC/OPUS compression during training</li>
+                    <li><strong>Synthetic augmentation:</strong> use pre-computed MP3/AAC augmentations</li>
                     <li>Encourages invariance to both codec family and quality level</li>
                 </ul>
             </section>
@@ -567,7 +568,7 @@
                 <ul>
                     <li><strong>ERM:</strong> Same architecture without domain adversary (per backbone)</li>
                     <li><strong>TRILLsson:</strong> Paralinguistic embeddings + classifier (non-semantic)</li>
-                    <li><strong>LFCC-GMM:</strong> Classical acoustic features + Gaussian Mixture Model</li>
+                    <li><strong>LFCC-GMM / MFCC-GMM:</strong> Classical acoustic features + Gaussian Mixture Model</li>
                     <li><strong>AASIST / RawNet:</strong> Official ASVspoof baselines (reference)</li>
                 </ul>
             </section>
@@ -616,15 +617,15 @@
                             <li>Optimizer: AdamW, lr = 1e-4</li>
                             <li>Batch size: 128</li>
                             <li>Max epochs: 50 (early stopping)</li>
-                            <li>λ schedule: exponential warmup</li>
+                            <li>λ schedule: linear 0.1→0.75</li>
                         </ul>
                     </div>
                     <div class="col">
                         <h3>Infrastructure</h3>
                         <ul>
                             <li>Snellius HPC (SURF)</li>
-                            <li>GPU: MIG slice (was A100)</li>
-                            <li>~24h per run</li>
+                            <li>GPU: A100 (48GB)</li>
+                            <li>~24–48h per DANN run</li>
                             <li>W&B tracking</li>
                         </ul>
                     </div>
@@ -638,46 +639,73 @@
                 </ul>
             </section>
             
+            <!-- 13b. Lambda Instability & Tuning -->
+            <section>
+                <h2>Lambda Instability & Tuning</h2>
+                <p>DANN training is inherently unstable — the adversarial game can destabilize if λ grows too fast or too high.</p>
+                <div class="two-col" style="margin-top: 0.5em;">
+                    <div class="col">
+                        <h3>Problem Discovered</h3>
+                        <div class="card" style="background: #fef2f2; border-left: 3px solid #ef4444;">
+                            <strong>λ &gt; 0.75 → gradient explosion</strong>
+                            <ul style="font-size: 0.8em; margin-top: 0.3em;">
+                                <li>Task loss spikes suddenly</li>
+                                <li>Discriminator wins too decisively</li>
+                                <li>Backbone features collapse</li>
+                            </ul>
+                        </div>
+                        <p class="small" style="margin-top: 0.4em;">Observed in WavLM DANN runs when using exponential λ warmup to 1.0</p>
+                    </div>
+                    <div class="col">
+                        <h3>Solution (PR #62)</h3>
+                        <div class="card" style="background: #f0fdf4; border-left: 3px solid #22c55e;">
+                            <strong>Stabilized λ schedule:</strong>
+                            <ul style="font-size: 0.8em; margin-top: 0.3em;">
+                                <li><strong>Linear</strong> warmup (not exponential)</li>
+                                <li>λ: 0.1 → 0.75 (capped)</li>
+                                <li>3 warmup epochs before λ starts</li>
+                                <li>Gradient clipping: max_norm = 0.5</li>
+                            </ul>
+                        </div>
+                        <p class="small" style="margin-top: 0.4em;">Result: Stable training for 20+ epochs, best checkpoints at epoch 6 (WavLM) and 14 (Wav2Vec2)</p>
+                    </div>
+                </div>
+                <div class="card card-accent" style="margin-top: 0.6em;">
+                    <strong>Takeaway:</strong> DANN hyperparameter tuning is critical. The adversarial strength (λ) must be carefully balanced — too low and domain info leaks through, too high and the model collapses.
+                </div>
+            </section>
+            
             <!-- 14. Evaluation Metrics -->
             <section>
                 <h2>Evaluation Metrics</h2>
-                <p>We evaluate using three complementary metrics from speaker verification and anti-spoofing:</p>
-                <div class="two-col" style="margin-top: 0.5em;">
+                <p style="font-size: 0.8em; margin-bottom: 0.2em;"><strong>Task:</strong> Binary classification (bonafide vs spoof). We use threshold-independent metrics standard in speaker verification:</p>
+                <div class="two-col" style="margin-top: 0.2em;">
                     <div class="col">
-                        <div class="card" style="border-left: 3px solid #3b82f6;">
-                            <h3 style="margin-top: 0;">EER <span class="tag tag-blue">Primary</span></h3>
-                            <p style="font-size: 0.85em;"><strong>Equal Error Rate</strong></p>
-                            <ul style="font-size: 0.8em;">
-                                <li>Point where FAR = FRR</li>
-                                <li>Threshold-independent single value</li>
-                                <li>Standard metric in speaker verification</li>
-                            </ul>
-                            <p class="small" style="margin-top: 0.4em;"><strong>Why:</strong> Easy to interpret, widely reported, enables fair comparison across systems</p>
+                        <div class="card" style="border-left: 3px solid #3b82f6; padding: 0.5em 0.8em; margin-bottom: 0.3em;">
+                            <h3 style="margin-top: 0; margin-bottom: 0.15em;">EER <span class="tag tag-blue">Primary</span></h3>
+                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>What:</strong> Point where FAR = FRR</p>
+                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>Why:</strong> Threshold-independent; standard in speaker verification</p>
                         </div>
-                        <div class="card" style="border-left: 3px solid #22c55e; margin-top: 0.6em;">
-                            <h3 style="margin-top: 0;">minDCF <span class="tag tag-green">Application</span></h3>
-                            <p style="font-size: 0.85em;"><strong>Minimum Detection Cost Function</strong></p>
-                            <ul style="font-size: 0.8em;">
-                                <li>Weighs misses vs false alarms</li>
-                                <li>Reflects real deployment costs</li>
-                                <li>Prior-weighted: P<sub>target</sub> = 0.05</li>
-                            </ul>
-                            <p class="small" style="margin-top: 0.4em;"><strong>Why:</strong> More realistic for practical systems where error costs differ</p>
+                        <div class="card" style="border-left: 3px solid #22c55e; padding: 0.5em 0.8em; margin-bottom: 0.3em;">
+                            <h3 style="margin-top: 0; margin-bottom: 0.15em;">minDCF <span class="tag tag-green">Application</span></h3>
+                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>What:</strong> Weighted cost of misses vs false alarms</p>
+                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>Why:</strong> Reflects deployment costs (P<sub>target</sub> = 0.05)</p>
+                        </div>
+                        <div class="card" style="border-left: 3px solid #a855f7; padding: 0.5em 0.8em;">
+                            <h3 style="margin-top: 0; margin-bottom: 0.15em;">t-DCF <span class="tag tag-amber">Tandem</span></h3>
+                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>What:</strong> CM + ASV as tandem system</p>
+                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>Why:</strong> Captures full pipeline security impact</p>
                         </div>
                     </div>
                     <div class="col">
-                        <div class="card" style="border-left: 3px solid #a855f7;">
-                            <h3 style="margin-top: 0;">t-DCF <span class="tag tag-amber">Tandem</span></h3>
-                            <p style="font-size: 0.85em;"><strong>Tandem Detection Cost Function</strong></p>
-                            <ul style="font-size: 0.8em;">
-                                <li>ASVspoof-specific metric</li>
-                                <li>Considers CM + ASV as a tandem system</li>
-                                <li>Captures spoofs that would fool the full pipeline</li>
-                            </ul>
-                            <p class="small" style="margin-top: 0.4em;"><strong>Why:</strong> Measures real-world impact — a spoof only matters if it fools both the countermeasure AND the speaker verifier</p>
+                        <div class="card card-accent" style="padding: 0.5em 0.8em; font-size: 0.75em;">
+                            <strong>Why not F1?</strong> F1 requires a fixed threshold. EER/DCF are threshold-independent, allowing fair comparison across systems without tuning.
                         </div>
-                        <div class="card card-accent" style="margin-top: 0.6em;">
-                            <strong>Key insight:</strong> EER tells us detection quality, minDCF adds deployment context, t-DCF reveals actual security impact on speaker verification.
+                        <div class="card" style="padding: 0.5em 0.8em; font-size: 0.75em; margin-top: 0.3em;">
+                            <strong>Summary:</strong><br>
+                            • EER → detection quality<br>
+                            • minDCF → deployment context<br>
+                            • t-DCF → ASV security impact
                         </div>
                     </div>
                 </div>
@@ -686,9 +714,10 @@
             <!-- 15. Results -->
             <section>
                 <h2>Results</h2>
-                <div class="status-pending">
-                    <strong>Awaiting DANN Run</strong><br>
-                    <span class="small">Pre-computed augmentations finished. Training run pending.</span>
+                <div class="card" style="background: #fefce8; border: 1px solid #facc15;">
+                    <strong>Training Status:</strong> DANN runs completed with stabilized λ schedule*<br>
+                    <span class="small">Best checkpoints: WavLM DANN (epoch 6), Wav2Vec2 DANN (epoch 14)</span>
+                    <p class="small" style="margin-top: 0.3em; font-style: italic;">*Based on DANN literature recommendations</p>
                 </div>
                 <h3 style="margin-top: 0.8em;">Evaluation Plan</h3>
                 <table class="data">
@@ -702,9 +731,9 @@
                     <tr>
                         <td>EER (overall)</td>
                         <td>~4%*</td>
-                        <td>TBD</td>
+                        <td>Pending eval</td>
                         <td>~4%*</td>
-                        <td>TBD</td>
+                        <td>Pending eval</td>
                     </tr>
                     <tr>
                         <td>minDCF</td>
@@ -718,54 +747,28 @@
                         <td colspan="4" class="muted"><em>Key test for H1 — improvement on worst codecs</em></td>
                     </tr>
                 </table>
-                <p class="small">*Preliminary ERM results from Wave 5; models overfit from epoch 1.</p>
+                <p class="small">*Preliminary ERM results from Wave 5; models overfit from epoch 1. Full eval on 680k samples pending.</p>
             </section>
             
-            <!-- 16. Domain Probe Findings -->
+            <!-- 16. Domain Probe Findings: WavLM vs Wav2Vec2 -->
             <section>
-                <h2>Domain Probe Findings</h2>
-                <p>Linear probe accuracy predicting codec from frozen WavLM features:</p>
-                <div class="two-col" style="margin-top: 0.5em;">
+                <h2>Domain Probe Findings: Backbone Comparison</h2>
+                <p>Linear probe accuracy predicting codec from frozen SSL features (3-class: MP3/AAC/OPUS):</p>
+                <div class="two-col" style="margin-top: 0.3em;">
                     <div class="col">
-                        <table class="data">
-                            <tr>
-                                <th>Layer</th>
-                                <th>Accuracy</th>
-                                <th>Signal</th>
-                            </tr>
-                            <tr>
-                                <td>0–2</td>
-                                <td>85–87%</td>
-                                <td><span class="tag tag-amber">Strong</span></td>
-                            </tr>
-                            <tr>
-                                <td>3–4</td>
-                                <td>72–80%</td>
-                                <td><span class="tag tag-amber">Moderate</span></td>
-                            </tr>
-                            <tr>
-                                <td>5–6</td>
-                                <td>63–67%</td>
-                                <td><span class="tag tag-blue">Weakening</span></td>
-                            </tr>
-                            <tr>
-                                <td>7–11</td>
-                                <td>~60%</td>
-                                <td><span class="tag tag-green">Near-chance</span></td>
-                            </tr>
-                        </table>
-                        <p class="small" style="margin-top: 0.3em;">Chance = 50% (binary codec classification)</p>
+                        <img src="./codec_encoding_heatmap.jpg" alt="Codec Encoding Heatmap" style="width: 100%; border-radius: 6px; border: 1px solid var(--border);">
+                        <p class="small" style="margin-top: 0.3em; text-align: center;">Chance = 33.3% (3-class). Wav2Vec2 late layers approach chance.</p>
                     </div>
                     <div class="col">
                         <h3>Key Insights</h3>
                         <ul style="font-size: 0.85em;">
-                            <li>Codec signal IS present — augmentation works</li>
-                            <li>WavLM progressively removes it (87% → 60%)</li>
-                            <li>~10pp above chance remains at L11</li>
-                            <li>DANN should remove this residual signal</li>
+                            <li><strong>WavLM encodes MORE codec info</strong> — but DANN still works better with it</li>
+                            <li>WavLM has <strong>uniform distribution</strong> across layers (94% → 72%)</li>
+                            <li>Wav2Vec2 <strong>drops sharply</strong> (77% → 51%, near chance)</li>
+                            <li>Gap between backbones <em>increases</em> in late layers</li>
                         </ul>
-                        <div class="card card-accent" style="margin-top: 0.6em; font-size: 0.85em;">
-                            <strong>Implication:</strong> SSL backbones achieve partial domain invariance through pretraining. DANN completes what the backbone started.
+                        <div class="card card-accent" style="margin-top: 0.5em; font-size: 0.85em;">
+                            <strong>Hypothesis:</strong> WavLM's uniform codec encoding makes it easier for DANN to find layer combinations that preserve task signal while suppressing domain info.
                         </div>
                     </div>
                 </div>
@@ -801,31 +804,70 @@
                         <ul class="checklist">
                             <li class="done">Full ERM + DANN codebase</li>
                             <li class="done">Multi-head domain discriminator</li>
-                            <li class="done">Pre-compute augmentation pipeline</li>
-                            <li class="done">Domain probe diagnostic</li>
-                            <li class="done">W&B integration</li>
-                            <li class="done">Snellius job scripts</li>
-                            <li class="done">60+ unit tests</li>
+                            <li class="done">Pre-compute augmentation (1.6M files)</li>
+                            <li class="done">Lambda stability fix (PR #62)</li>
+                            <li class="done">WavLM vs Wav2Vec2 probe analysis</li>
+                            <li class="done">Codec coverage analysis (79.2%)</li>
+                            <li class="done">DANN training runs (both backbones)</li>
+                            <li class="done">60+ unit tests, W&B, Snellius jobs</li>
                         </ul>
                     </div>
                     <div class="col">
                         <h3>In Progress</h3>
                         <ul class="checklist">
-                            <li class="pending">Augmentation pre-compute (running)</li>
-                            <li class="pending">Optimized DANN training run</li>
+                            <li class="pending">Full eval set evaluation (680k samples)</li>
+                            <li class="pending">Per-codec EER breakdown</li>
                         </ul>
                         <h3 style="margin-top: 0.6em;">Upcoming</h3>
                         <ul class="checklist">
-                            <li class="future">Full eval set evaluation</li>
-                            <li class="future">Per-codec breakdown</li>
-                            <li class="future">Interpretability experiments</li>
+                            <li class="future">ERM vs DANN comparison analysis</li>
+                            <li class="future">CKA representation similarity</li>
+                            <li class="future">Activation patching experiments</li>
                             <li class="future">Thesis writing</li>
                         </ul>
                     </div>
                 </div>
             </section>
             
-            <!-- 19. Questions -->
+            <!-- APPENDIX -->
+            
+            <!-- A1. Challenges & Solutions -->
+            <section>
+                <h2>Appendix: Challenges & Solutions</h2>
+                <p>Key engineering contributions during implementation:</p>
+                <table class="data" style="margin-top: 0.5em;">
+                    <tr>
+                        <th>Challenge</th>
+                        <th>Impact</th>
+                        <th>Solution</th>
+                    </tr>
+                    <tr>
+                        <td><strong>5× training slowdown</strong></td>
+                        <td>On-the-fly FFmpeg codec conversion bottlenecked I/O</td>
+                        <td>Pre-cached augmentation: 820k AAC + 820k MP3 files (PR #42, #46)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Double-λ bug</strong></td>
+                        <td>GRL applied λ twice — once in GRL, once in loss weighting</td>
+                        <td>Fixed GRL to use λ=1, apply scaling only in loss (PR #44)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>λ instability</strong></td>
+                        <td>Gradient explosion when λ &gt; 0.75</td>
+                        <td>Linear schedule, capped λ, gradient clipping (PR #62)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Discriminator tap point</strong></td>
+                        <td>Post-projection features lost domain signal</td>
+                        <td>Moved discriminator tap to pre-projection (PR #44)</td>
+                    </tr>
+                </table>
+                <div class="card card-accent" style="margin-top: 0.6em;">
+                    <strong>Lesson:</strong> Domain-adversarial training requires careful engineering. The original DANN paper glosses over many practical details that matter significantly at scale.
+                </div>
+            </section>
+            
+            <!-- Questions -->
             <section class="center" style="display: flex; flex-direction: column; justify-content: center;">
                 <h2>Questions?</h2>
                 <p style="margin-top: 2em; color: var(--text-secondary); font-size: 0.9em;">
