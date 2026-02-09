@@ -573,7 +573,52 @@
                 </ul>
             </section>
             
-            <!-- 14. Results -->
+            <!-- 14. Evaluation Metrics -->
+            <section>
+                <h2>Evaluation Metrics</h2>
+                <p>We evaluate using three complementary metrics from speaker verification and anti-spoofing:</p>
+                <div class="two-col" style="margin-top: 0.5em;">
+                    <div class="col">
+                        <div class="card" style="border-left: 3px solid #3b82f6;">
+                            <h3 style="margin-top: 0;">EER <span class="tag tag-blue">Primary</span></h3>
+                            <p style="font-size: 0.85em;"><strong>Equal Error Rate</strong></p>
+                            <ul style="font-size: 0.8em;">
+                                <li>Point where FAR = FRR</li>
+                                <li>Threshold-independent single value</li>
+                                <li>Standard metric in speaker verification</li>
+                            </ul>
+                            <p class="small" style="margin-top: 0.4em;"><strong>Why:</strong> Easy to interpret, widely reported, enables fair comparison across systems</p>
+                        </div>
+                        <div class="card" style="border-left: 3px solid #22c55e; margin-top: 0.6em;">
+                            <h3 style="margin-top: 0;">minDCF <span class="tag tag-green">Application</span></h3>
+                            <p style="font-size: 0.85em;"><strong>Minimum Detection Cost Function</strong></p>
+                            <ul style="font-size: 0.8em;">
+                                <li>Weighs misses vs false alarms</li>
+                                <li>Reflects real deployment costs</li>
+                                <li>Prior-weighted: P<sub>target</sub> = 0.05</li>
+                            </ul>
+                            <p class="small" style="margin-top: 0.4em;"><strong>Why:</strong> More realistic for practical systems where error costs differ</p>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="card" style="border-left: 3px solid #a855f7;">
+                            <h3 style="margin-top: 0;">t-DCF <span class="tag tag-amber">Tandem</span></h3>
+                            <p style="font-size: 0.85em;"><strong>Tandem Detection Cost Function</strong></p>
+                            <ul style="font-size: 0.8em;">
+                                <li>ASVspoof-specific metric</li>
+                                <li>Considers CM + ASV as a tandem system</li>
+                                <li>Captures spoofs that would fool the full pipeline</li>
+                            </ul>
+                            <p class="small" style="margin-top: 0.4em;"><strong>Why:</strong> Measures real-world impact — a spoof only matters if it fools both the countermeasure AND the speaker verifier</p>
+                        </div>
+                        <div class="card card-accent" style="margin-top: 0.6em;">
+                            <strong>Key insight:</strong> EER tells us detection quality, minDCF adds deployment context, t-DCF reveals actual security impact on speaker verification.
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 15. Results -->
             <section>
                 <h2>Results</h2>
                 <div class="status-pending">
@@ -611,7 +656,7 @@
                 <p class="small">*Preliminary ERM results from Wave 5; models overfit from epoch 1.</p>
             </section>
             
-            <!-- 15. Domain Probe Findings -->
+            <!-- 16. Domain Probe Findings -->
             <section>
                 <h2>Domain Probe Findings</h2>
                 <p>Linear probe accuracy predicting codec from frozen WavLM features:</p>
@@ -661,7 +706,7 @@
                 </div>
             </section>
             
-            <!-- 16. Interpretability Analysis -->
+            <!-- 17. Interpretability Analysis -->
             <section>
                 <h2>Interpretability Analysis</h2>
                 <h3>Layer-wise Domain Probing</h3>
@@ -682,7 +727,7 @@
                 </ul>
             </section>
             
-            <!-- 17. Status -->
+            <!-- 18. Status -->
             <section>
                 <h2>Status & Next Steps</h2>
                 <div class="two-col">
@@ -715,7 +760,7 @@
                 </div>
             </section>
             
-            <!-- 18. Questions -->
+            <!-- 19. Questions -->
             <section class="center" style="display: flex; flex-direction: column; justify-content: center;">
                 <h2>Questions?</h2>
                 <p style="margin-top: 2em; color: var(--text-secondary); font-size: 0.9em;">
