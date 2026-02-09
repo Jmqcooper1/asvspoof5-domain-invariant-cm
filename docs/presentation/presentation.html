@@ -349,11 +349,11 @@
             <!-- 5b. Synthetic Augmentation Coverage Analysis -->
             <section>
                 <h2>Synthetic Augmentation Coverage</h2>
-                <p>We analyzed the ASVspoof5 protocol files to understand what our synthetic augmentation can and cannot cover:</p>
-                <div class="two-col" style="margin-top: 0.5em;">
+                <p style="font-size: 0.85em; margin-bottom: 0.3em;">We analyzed the ASVspoof5 protocol files to understand what our synthetic augmentation can and cannot cover:</p>
+                <div class="two-col" style="margin-top: 0.3em;">
                     <div class="col">
-                        <h3>Dataset Composition</h3>
-                        <table class="data">
+                        <h3 style="margin-bottom: 0.3em;">Dataset Composition</h3>
+                        <table class="data" style="font-size: 0.75em;">
                             <tr>
                                 <th>Split</th>
                                 <th>Samples</th>
@@ -375,15 +375,16 @@
                                 <td><strong>12 conditions</strong></td>
                             </tr>
                         </table>
-                        <div class="card card-accent" style="margin-top: 0.5em; font-size: 0.85em;">
+                        <div class="card card-accent" style="margin-top: 0.4em; font-size: 0.8em; padding: 0.4em 0.8em;">
                             <strong>79.2%</strong> of eval covered by synthetic augmentation<br>
                             <strong>20.8%</strong> uncovered (C04, C07, C11)
                         </div>
+                        <p class="small" style="margin-top: 0.4em;"><strong>Uncovered:</strong> C04 (neural), C07 (cascade), C11 (device)</p>
                     </div>
                     <div class="col">
-                        <h3>Eval Set Codec Distribution</h3>
-                        <table class="data" style="font-size: 0.75em;">
-                            <tr><th>Codec</th><th>%</th><th>Synthetic</th></tr>
+                        <h3 style="margin-bottom: 0.3em;">Eval Set Codec Distribution</h3>
+                        <table class="data" style="font-size: 0.65em;">
+                            <tr><th>Codec</th><th>%</th><th>Synth</th></tr>
                             <tr><td>NONE</td><td>25.2%</td><td>✓</td></tr>
                             <tr><td>C01 (OPUS)</td><td>6.9%</td><td>✓</td></tr>
                             <tr><td>C02 (AMR)</td><td>7.0%</td><td>✓</td></tr>
@@ -399,7 +400,6 @@
                         </table>
                     </div>
                 </div>
-                <p class="small" style="margin-top: 0.3em;"><strong>Uncovered codecs:</strong> C04 (neural codec), C07 (MP3+Encodec cascade), C11 (real device/telephony effects) — these remain inherently challenging.</p>
             </section>
             
             <!-- 6. Multi-Task Domain Adaptation: CODEC & CODEC_Q -->
@@ -713,43 +713,37 @@
             <!-- 14. Evaluation Metrics -->
             <section>
                 <h2>Evaluation Metrics</h2>
-                <p>We evaluate using three complementary metrics from speaker verification and anti-spoofing:</p>
-                <div class="two-col" style="margin-top: 0.5em;">
+                <p style="font-size: 0.85em; margin-bottom: 0.3em;">We evaluate using three complementary metrics from speaker verification and anti-spoofing:</p>
+                <div class="two-col" style="margin-top: 0.3em;">
                     <div class="col">
-                        <div class="card" style="border-left: 3px solid #3b82f6;">
-                            <h3 style="margin-top: 0;">EER <span class="tag tag-blue">Primary</span></h3>
-                            <p style="font-size: 0.85em;"><strong>Equal Error Rate</strong></p>
-                            <ul style="font-size: 0.8em;">
+                        <div class="card" style="border-left: 3px solid #3b82f6; padding: 0.4em 0.8em; margin-bottom: 0.4em;">
+                            <h3 style="margin-top: 0; margin-bottom: 0.2em;">EER <span class="tag tag-blue">Primary</span></h3>
+                            <ul style="font-size: 0.75em; margin: 0.2em 0 0.2em 1em;">
                                 <li>Point where FAR = FRR</li>
-                                <li>Threshold-independent single value</li>
-                                <li>Standard metric in speaker verification</li>
+                                <li>Threshold-independent</li>
+                                <li>Standard in speaker verification</li>
                             </ul>
-                            <p class="small" style="margin-top: 0.4em;"><strong>Why:</strong> Easy to interpret, widely reported, enables fair comparison across systems</p>
                         </div>
-                        <div class="card" style="border-left: 3px solid #22c55e; margin-top: 0.6em;">
-                            <h3 style="margin-top: 0;">minDCF <span class="tag tag-green">Application</span></h3>
-                            <p style="font-size: 0.85em;"><strong>Minimum Detection Cost Function</strong></p>
-                            <ul style="font-size: 0.8em;">
+                        <div class="card" style="border-left: 3px solid #22c55e; padding: 0.4em 0.8em;">
+                            <h3 style="margin-top: 0; margin-bottom: 0.2em;">minDCF <span class="tag tag-green">Application</span></h3>
+                            <ul style="font-size: 0.75em; margin: 0.2em 0 0.2em 1em;">
                                 <li>Weighs misses vs false alarms</li>
-                                <li>Reflects real deployment costs</li>
-                                <li>Prior-weighted: P<sub>target</sub> = 0.05</li>
+                                <li>Reflects deployment costs</li>
+                                <li>Prior: P<sub>target</sub> = 0.05</li>
                             </ul>
-                            <p class="small" style="margin-top: 0.4em;"><strong>Why:</strong> More realistic for practical systems where error costs differ</p>
                         </div>
                     </div>
                     <div class="col">
-                        <div class="card" style="border-left: 3px solid #a855f7;">
-                            <h3 style="margin-top: 0;">t-DCF <span class="tag tag-amber">Tandem</span></h3>
-                            <p style="font-size: 0.85em;"><strong>Tandem Detection Cost Function</strong></p>
-                            <ul style="font-size: 0.8em;">
+                        <div class="card" style="border-left: 3px solid #a855f7; padding: 0.4em 0.8em; margin-bottom: 0.4em;">
+                            <h3 style="margin-top: 0; margin-bottom: 0.2em;">t-DCF <span class="tag tag-amber">Tandem</span></h3>
+                            <ul style="font-size: 0.75em; margin: 0.2em 0 0.2em 1em;">
                                 <li>ASVspoof-specific metric</li>
-                                <li>Considers CM + ASV as a tandem system</li>
-                                <li>Captures spoofs that would fool the full pipeline</li>
+                                <li>CM + ASV as tandem system</li>
+                                <li>Captures full pipeline failures</li>
                             </ul>
-                            <p class="small" style="margin-top: 0.4em;"><strong>Why:</strong> Measures real-world impact — a spoof only matters if it fools both the countermeasure AND the speaker verifier</p>
                         </div>
-                        <div class="card card-accent" style="margin-top: 0.6em;">
-                            <strong>Key insight:</strong> EER tells us detection quality, minDCF adds deployment context, t-DCF reveals actual security impact on speaker verification.
+                        <div class="card card-accent" style="padding: 0.5em 0.8em; font-size: 0.8em;">
+                            <strong>Key insight:</strong> EER = detection quality, minDCF = deployment context, t-DCF = actual security impact on speaker verification.
                         </div>
                     </div>
                 </div>
