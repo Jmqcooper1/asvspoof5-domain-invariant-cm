@@ -623,8 +623,8 @@
                         <h3>Infrastructure</h3>
                         <ul>
                             <li>Snellius HPC (SURF)</li>
-                            <li>GPU: MIG slice (was A100)</li>
-                            <li>~24h per run</li>
+                            <li>GPU: A100 (48GB)</li>
+                            <li>~24–48h per DANN run</li>
                             <li>W&B tracking</li>
                         </ul>
                     </div>
@@ -636,6 +636,78 @@
                     <li class="done">Exponential λ schedule + pre-projection tap (PR #44)</li>
                     <li class="done">Domain probe diagnostic script (PR #41)</li>
                 </ul>
+            </section>
+            
+            <!-- 13b. Lambda Instability & Tuning -->
+            <section>
+                <h2>Lambda Instability & Tuning</h2>
+                <p>DANN training is inherently unstable — the adversarial game can destabilize if λ grows too fast or too high.</p>
+                <div class="two-col" style="margin-top: 0.5em;">
+                    <div class="col">
+                        <h3>Problem Discovered</h3>
+                        <div class="card" style="background: #fef2f2; border-left: 3px solid #ef4444;">
+                            <strong>λ &gt; 0.75 → gradient explosion</strong>
+                            <ul style="font-size: 0.8em; margin-top: 0.3em;">
+                                <li>Task loss spikes suddenly</li>
+                                <li>Discriminator wins too decisively</li>
+                                <li>Backbone features collapse</li>
+                            </ul>
+                        </div>
+                        <p class="small" style="margin-top: 0.4em;">Observed in WavLM DANN runs when using exponential λ warmup to 1.0</p>
+                    </div>
+                    <div class="col">
+                        <h3>Solution (PR #62)</h3>
+                        <div class="card" style="background: #f0fdf4; border-left: 3px solid #22c55e;">
+                            <strong>Stabilized λ schedule:</strong>
+                            <ul style="font-size: 0.8em; margin-top: 0.3em;">
+                                <li><strong>Linear</strong> warmup (not exponential)</li>
+                                <li>λ: 0.1 → 0.75 (capped)</li>
+                                <li>3 warmup epochs before λ starts</li>
+                                <li>Gradient clipping: max_norm = 0.5</li>
+                            </ul>
+                        </div>
+                        <p class="small" style="margin-top: 0.4em;">Result: Stable training for 20+ epochs, best checkpoints at epoch 6 (WavLM) and 14 (Wav2Vec2)</p>
+                    </div>
+                </div>
+                <div class="card card-accent" style="margin-top: 0.6em;">
+                    <strong>Takeaway:</strong> DANN hyperparameter tuning is critical. The adversarial strength (λ) must be carefully balanced — too low and domain info leaks through, too high and the model collapses.
+                </div>
+            </section>
+            
+            <!-- 13c. Challenges & Solutions -->
+            <section>
+                <h2>Challenges & Solutions</h2>
+                <p>Key engineering contributions during implementation:</p>
+                <table class="data" style="margin-top: 0.5em;">
+                    <tr>
+                        <th>Challenge</th>
+                        <th>Impact</th>
+                        <th>Solution</th>
+                    </tr>
+                    <tr>
+                        <td><strong>5× training slowdown</strong></td>
+                        <td>On-the-fly FFmpeg codec conversion bottlenecked I/O</td>
+                        <td>Pre-cached augmentation: 820k AAC + 820k MP3 files (PR #42, #46)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Double-λ bug</strong></td>
+                        <td>GRL applied λ twice — once in GRL, once in loss weighting</td>
+                        <td>Fixed GRL to use λ=1, apply scaling only in loss (PR #44)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>λ instability</strong></td>
+                        <td>Gradient explosion when λ &gt; 0.75</td>
+                        <td>Linear schedule, capped λ, gradient clipping (PR #62)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Discriminator tap point</strong></td>
+                        <td>Post-projection features lost domain signal</td>
+                        <td>Moved discriminator tap to pre-projection (PR #44)</td>
+                    </tr>
+                </table>
+                <div class="card card-accent" style="margin-top: 0.6em;">
+                    <strong>Lesson:</strong> Domain-adversarial training requires careful engineering. The original DANN paper glosses over many practical details that matter significantly at scale.
+                </div>
             </section>
             
             <!-- 14. Evaluation Metrics -->
@@ -686,9 +758,9 @@
             <!-- 15. Results -->
             <section>
                 <h2>Results</h2>
-                <div class="status-pending">
-                    <strong>Awaiting DANN Run</strong><br>
-                    <span class="small">Pre-computed augmentations finished. Training run pending.</span>
+                <div class="card" style="background: #fefce8; border: 1px solid #facc15;">
+                    <strong>Training Status:</strong> DANN runs completed with stabilized λ schedule<br>
+                    <span class="small">Best checkpoints: WavLM DANN (epoch 6), Wav2Vec2 DANN (epoch 14)</span>
                 </div>
                 <h3 style="margin-top: 0.8em;">Evaluation Plan</h3>
                 <table class="data">
@@ -702,9 +774,9 @@
                     <tr>
                         <td>EER (overall)</td>
                         <td>~4%*</td>
-                        <td>TBD</td>
+                        <td>Pending eval</td>
                         <td>~4%*</td>
-                        <td>TBD</td>
+                        <td>Pending eval</td>
                     </tr>
                     <tr>
                         <td>minDCF</td>
@@ -718,54 +790,59 @@
                         <td colspan="4" class="muted"><em>Key test for H1 — improvement on worst codecs</em></td>
                     </tr>
                 </table>
-                <p class="small">*Preliminary ERM results from Wave 5; models overfit from epoch 1.</p>
+                <p class="small">*Preliminary ERM results from Wave 5; models overfit from epoch 1. Full eval on 680k samples pending.</p>
             </section>
             
-            <!-- 16. Domain Probe Findings -->
+            <!-- 16. Domain Probe Findings: WavLM vs Wav2Vec2 -->
             <section>
-                <h2>Domain Probe Findings</h2>
-                <p>Linear probe accuracy predicting codec from frozen WavLM features:</p>
+                <h2>Domain Probe Findings: Backbone Comparison</h2>
+                <p>Linear probe accuracy predicting codec from frozen SSL features (3-class: MP3/AAC/OPUS):</p>
                 <div class="two-col" style="margin-top: 0.5em;">
                     <div class="col">
-                        <table class="data">
+                        <table class="data" style="font-size: 0.75em;">
                             <tr>
-                                <th>Layer</th>
-                                <th>Accuracy</th>
-                                <th>Signal</th>
+                                <th>Metric</th>
+                                <th>WavLM</th>
+                                <th>Wav2Vec2</th>
                             </tr>
                             <tr>
-                                <td>0–2</td>
-                                <td>85–87%</td>
-                                <td><span class="tag tag-amber">Strong</span></td>
+                                <td><strong>Mean accuracy</strong></td>
+                                <td>79.8% ± 6.9%</td>
+                                <td>63.0% ± 10.0%</td>
                             </tr>
                             <tr>
-                                <td>3–4</td>
-                                <td>72–80%</td>
-                                <td><span class="tag tag-amber">Moderate</span></td>
+                                <td><strong>Peak layer</strong></td>
+                                <td>L0 (93.6%)</td>
+                                <td>L1 (78.2%)</td>
                             </tr>
                             <tr>
-                                <td>5–6</td>
-                                <td>63–67%</td>
-                                <td><span class="tag tag-blue">Weakening</span></td>
+                                <td>Early (L0–3)</td>
+                                <td>88.4%</td>
+                                <td>75.0%</td>
                             </tr>
                             <tr>
-                                <td>7–11</td>
-                                <td>~60%</td>
-                                <td><span class="tag tag-green">Near-chance</span></td>
+                                <td>Mid (L4–7)</td>
+                                <td>77.7%</td>
+                                <td>62.0%</td>
+                            </tr>
+                            <tr>
+                                <td>Late (L8–11)</td>
+                                <td>73.3%</td>
+                                <td>52.0%</td>
                             </tr>
                         </table>
-                        <p class="small" style="margin-top: 0.3em;">Chance = 50% (binary codec classification)</p>
+                        <p class="small" style="margin-top: 0.3em;">Chance = 33.3% (3-class). Wav2Vec2 late layers approach chance.</p>
                     </div>
                     <div class="col">
                         <h3>Key Insights</h3>
                         <ul style="font-size: 0.85em;">
-                            <li>Codec signal IS present — augmentation works</li>
-                            <li>WavLM progressively removes it (87% → 60%)</li>
-                            <li>~10pp above chance remains at L11</li>
-                            <li>DANN should remove this residual signal</li>
+                            <li><strong>WavLM encodes MORE codec info</strong> — but DANN still works better with it</li>
+                            <li>WavLM has <strong>uniform distribution</strong> across layers → easier for layer weighting</li>
+                            <li>Wav2Vec2 has <strong>peaked distribution</strong> → codec info concentrated in early layers</li>
+                            <li>WavLM's Gated Relative Position Bias may help separate content from artifacts</li>
                         </ul>
-                        <div class="card card-accent" style="margin-top: 0.6em; font-size: 0.85em;">
-                            <strong>Implication:</strong> SSL backbones achieve partial domain invariance through pretraining. DANN completes what the backbone started.
+                        <div class="card card-accent" style="margin-top: 0.5em; font-size: 0.85em;">
+                            <strong>Hypothesis:</strong> WavLM's uniform codec encoding makes it easier for DANN to find layer combinations that preserve task signal while suppressing domain info.
                         </div>
                     </div>
                 </div>
@@ -801,24 +878,25 @@
                         <ul class="checklist">
                             <li class="done">Full ERM + DANN codebase</li>
                             <li class="done">Multi-head domain discriminator</li>
-                            <li class="done">Pre-compute augmentation pipeline</li>
-                            <li class="done">Domain probe diagnostic</li>
-                            <li class="done">W&B integration</li>
-                            <li class="done">Snellius job scripts</li>
-                            <li class="done">60+ unit tests</li>
+                            <li class="done">Pre-compute augmentation (1.6M files)</li>
+                            <li class="done">Lambda stability fix (PR #62)</li>
+                            <li class="done">WavLM vs Wav2Vec2 probe analysis</li>
+                            <li class="done">Codec coverage analysis (79.2%)</li>
+                            <li class="done">DANN training runs (both backbones)</li>
+                            <li class="done">60+ unit tests, W&B, Snellius jobs</li>
                         </ul>
                     </div>
                     <div class="col">
                         <h3>In Progress</h3>
                         <ul class="checklist">
-                            <li class="pending">Augmentation pre-compute (running)</li>
-                            <li class="pending">Optimized DANN training run</li>
+                            <li class="pending">Full eval set evaluation (680k samples)</li>
+                            <li class="pending">Per-codec EER breakdown</li>
                         </ul>
                         <h3 style="margin-top: 0.6em;">Upcoming</h3>
                         <ul class="checklist">
-                            <li class="future">Full eval set evaluation</li>
-                            <li class="future">Per-codec breakdown</li>
-                            <li class="future">Interpretability experiments</li>
+                            <li class="future">ERM vs DANN comparison analysis</li>
+                            <li class="future">CKA representation similarity</li>
+                            <li class="future">Activation patching experiments</li>
                             <li class="future">Thesis writing</li>
                         </ul>
                     </div>
