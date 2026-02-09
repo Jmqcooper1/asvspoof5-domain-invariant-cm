@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Domain-Invariant Speech Deepfake Detection</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/theme/white.css">
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&family=Source+Sans+3:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --heading-font: 'Source Serif 4', Georgia, serif;
+            --body-font: 'Source Sans 3', -apple-system, sans-serif;
+            --mono-font: 'JetBrains Mono', monospace;
+            --accent: #1e40af;
+            --accent-light: #dbeafe;
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --border: #e2e8f0;
+            --surface: #f8fafc;
+        }
+        
+        .reveal {
+            font-family: var(--body-font);
+            font-size: 24px;
+            color: var(--text-primary);
+        }
+        
+        .reveal h1, .reveal h2, .reveal h3 {
+            font-family: var(--heading-font);
+            font-weight: 600;
+            color: var(--text-primary);
+            text-transform: none;
+            letter-spacing: -0.01em;
+            line-height: 1.2;
+        }
+        
+        .reveal h1 { font-size: 2em; margin-bottom: 0.3em; }
+        .reveal h2 { font-size: 1.5em; margin-bottom: 0.5em; }
+        .reveal h3 { font-size: 1.1em; margin-bottom: 0.4em; color: var(--text-secondary); }
+        
+        .reveal section {
+            text-align: left;
+            height: 100%;
+            padding: 1em 2em;
+            box-sizing: border-box;
+        }
+        
+        .reveal .center { text-align: center; }
+        
+        .reveal ul, .reveal ol {
+            margin: 0.5em 0 0.5em 1.2em;
+            line-height: 1.5;
+        }
+        
+        .reveal li {
+            margin: 0.25em 0;
+            font-size: 0.9em;
+        }
+        
+        .reveal li li { font-size: 0.95em; }
+        
+        .accent { color: var(--accent); }
+        .muted { color: var(--text-secondary); }
+        .small { font-size: 0.75em; color: var(--text-secondary); }
+        
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2em;
+            align-items: start;
+        }
+        
+        .col { min-height: 0; }
+        
+        table.data {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8em;
+            margin: 0.5em 0;
+        }
+        
+        table.data th, table.data td {
+            border: 1px solid var(--border);
+            padding: 0.4em 0.6em;
+            text-align: left;
+        }
+        
+        table.data th {
+            background: var(--surface);
+            font-weight: 600;
+        }
+        
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.6em 1em;
+            margin: 0.4em 0;
+        }
+        
+        .card-accent {
+            background: var(--accent-light);
+            border-left: 3px solid var(--accent);
+        }
+        
+        .formula {
+            font-family: var(--mono-font);
+            font-size: 0.85em;
+            background: var(--surface);
+            padding: 0.3em 0.6em;
+            border-radius: 4px;
+            display: inline-block;
+        }
+        
+        .tag {
+            display: inline-block;
+            font-size: 0.7em;
+            font-weight: 600;
+            padding: 0.15em 0.5em;
+            border-radius: 3px;
+            vertical-align: middle;
+        }
+        
+        .tag-green { background: #dcfce7; color: #166534; }
+        .tag-amber { background: #fef3c7; color: #92400e; }
+        .tag-blue { background: #dbeafe; color: #1e40af; }
+        
+        .status-pending {
+            background: #fffbeb;
+            border: 1px dashed #f59e0b;
+            border-radius: 6px;
+            padding: 1em;
+            text-align: center;
+            color: #92400e;
+        }
+        
+        .checklist {
+            list-style: none;
+            margin-left: 0;
+            padding-left: 0;
+        }
+        
+        .checklist li {
+            padding-left: 1.5em;
+            position: relative;
+        }
+        
+        .checklist li::before {
+            position: absolute;
+            left: 0;
+            font-weight: 600;
+        }
+        
+        .checklist li.done::before { content: "✓"; color: #16a34a; }
+        .checklist li.pending::before { content: "○"; color: #f59e0b; }
+        .checklist li.future::before { content: "·"; color: #94a3b8; }
+        
+        .reveal .slides section { overflow: hidden; }
+
+        .flow-diagram {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3em;
+            margin: 0.5em auto;
+        }
+        
+        .flow-box {
+            padding: 0.4em 1em;
+            border-radius: 6px;
+            font-size: 0.75em;
+            font-weight: 500;
+            text-align: center;
+            min-width: 180px;
+        }
+        
+        .flow-box.blue { background: #dbeafe; border: 2px solid #3b82f6; }
+        .flow-box.green { background: #dcfce7; border: 2px solid #22c55e; }
+        .flow-box.orange { background: #fed7aa; border: 2px solid #f97316; }
+        .flow-box.purple { background: #e9d5ff; border: 2px solid #a855f7; }
+        .flow-box.gray { background: #f1f5f9; border: 2px solid #94a3b8; }
+        
+        .flow-arrow { color: #64748b; font-size: 1.2em; }
+        
+        .flow-split {
+            display: flex;
+            gap: 2em;
+            justify-content: center;
+        }
+        
+        .flow-branch {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3em;
+        }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+            
+            <!-- 1. Title -->
+            <section class="center" style="display: flex; flex-direction: column; justify-content: center;">
+                <h1 style="font-size: 2.2em;">Domain-Invariant Speech<br>Deepfake Detection</h1>
+                <h3 style="font-weight: 400; margin-top: 0.5em;">Domain-Adversarial Training on ASVspoof 5</h3>
+                <p style="margin-top: 2.5em; color: var(--text-secondary);">
+                    Mike Cooper<br>
+                    <span class="small">Supervisor Meeting · February 2026</span>
+                </p>
+            </section>
+            
+            <!-- 2. Problem Statement -->
+            <section>
+                <h2>The Problem: Domain Shift</h2>
+                <div class="two-col" style="margin-top: 0.5em;">
+                    <div class="col">
+                        <h3>Detectors Fail Under Real Conditions</h3>
+                        <ul>
+                            <li>Models trained on clean data <span class="accent">degrade</span> when audio is compressed, transmitted, or re-recorded</li>
+                            <li>Detectors learn <strong>shortcut cues</strong> tied to codec artifacts</li>
+                            <li>Attackers can exploit this mismatch</li>
+                        </ul>
+                    </div>
+                    <div class="col">
+                        <h3>Why It Matters</h3>
+                        <ul>
+                            <li>Real-world audio is never pristine</li>
+                            <li>Messaging apps, VoIP, and social media all apply compression</li>
+                        </ul>
+                        <div class="card card-accent" style="margin-top: 0.8em;">
+                            <strong>Goal:</strong> Build detectors robust to codec and channel shifts
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 3. ASVspoof 5 Dataset -->
+            <section>
+                <h2>ASVspoof 5: A Modern Benchmark</h2>
+                <ul style="margin-bottom: 0.5em;">
+                    <li><strong>Track 1:</strong> Stand-alone bonafide vs spoof classification</li>
+                    <li><strong>Crowdsourced audio</strong> with diverse recording conditions</li>
+                    <li><strong>11 codec configurations</strong> (C01–C11): OPUS, AMR, Speex, Encodec, MP3, AAC, device channels</li>
+                </ul>
+                <table class="data">
+                    <tr>
+                        <th>Split</th>
+                        <th>Samples</th>
+                        <th>Codec Diversity</th>
+                    </tr>
+                    <tr>
+                        <td>Train</td>
+                        <td>~180k</td>
+                        <td>Uncoded only</td>
+                    </tr>
+                    <tr>
+                        <td>Dev</td>
+                        <td>~140k</td>
+                        <td>Uncoded only</td>
+                    </tr>
+                    <tr>
+                        <td>Eval</td>
+                        <td>~700k</td>
+                        <td><strong>Full codec diversity</strong></td>
+                    </tr>
+                </table>
+                <p class="small" style="margin-top: 0.3em;">Train/Dev have no codec shift — the evaluation set is the true generalization test.</p>
+            </section>
+            
+            <!-- 4. Research Questions & Hypotheses -->
+            <section>
+                <h2>Research Questions & Hypotheses</h2>
+                <div class="two-col">
+                    <div class="col">
+                        <h3>Research Questions</h3>
+                        <ul style="font-size: 0.85em;">
+                            <li><strong>RQ1:</strong> Does DANN improve generalization under codec shift vs ERM?</li>
+                            <li><strong>RQ2:</strong> What is the trade-off between detection and domain invariance?</li>
+                            <li><strong>RQ3:</strong> Where is codec information encoded, and how does DANN change it?</li>
+                            <li><strong>RQ4:</strong> Can activation patching reduce domain leakage without retraining?</li>
+                        </ul>
+                    </div>
+                    <div class="col">
+                        <h3>Hypotheses</h3>
+                        <ul style="font-size: 0.85em;">
+                            <li><strong>H1:</strong> DANN reduces domain leakage and improves out-of-domain EER</li>
+                            <li><strong>H2:</strong> Domain information concentrates in specific layers; DANN suppresses it</li>
+                            <li><strong>H3:</strong> Effects are consistent across WavLM and Wav2Vec2, but layer-wise localization differs</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 5. ASVspoof5 Design: Addressing Shortcut Learning -->
+            <section>
+                <h2>ASVspoof5 Design: Addressing Shortcut Learning</h2>
+                <div class="card card-accent" style="margin: 0.5em 0; font-style: italic; font-size: 0.85em;">
+                    "We have been alerted to the presence of shortcut artefacts which plagues some earlier ASVspoof databases — namely artefacts which are semantically unrelated to the spoof/deepfake problem but which can nonetheless be utilised for detection."
+                    <p class="small" style="margin-top: 0.3em; font-style: normal;">— ASVspoof5 Paper</p>
+                </div>
+                <div class="two-col" style="margin-top: 0.6em;">
+                    <div class="col">
+                        <h3>The Deliberate Design Choice</h3>
+                        <table class="data">
+                            <tr>
+                                <th>Split</th>
+                                <th>Codec Diversity</th>
+                            </tr>
+                            <tr>
+                                <td>Train</td>
+                                <td>Clean only (no codecs)</td>
+                            </tr>
+                            <tr>
+                                <td>Dev</td>
+                                <td>Clean only (no codecs)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Eval</strong></td>
+                                <td><strong>C01–C11</strong> (full diversity)</td>
+                            </tr>
+                        </table>
+                        <p class="small" style="margin-top: 0.3em;">This forces models to generalize to unseen transmission conditions.</p>
+                    </div>
+                    <div class="col">
+                        <h3>Our Solution: DANN + Synthetic Augmentation</h3>
+                        <ul style="font-size: 0.85em;">
+                            <li><strong>Problem:</strong> No codec labels in train/dev to learn from</li>
+                            <li><strong>Solution:</strong> Create synthetic codec domains via FFmpeg</li>
+                            <li><strong>Goal:</strong> Learn <span class="accent">domain-invariant features</span> that generalize to real eval codecs</li>
+                        </ul>
+                        <div class="card" style="margin-top: 0.6em; font-size: 0.85em;">
+                            <strong>This is exactly what the dataset designers hoped for</strong> — systems that detect deepfakes based on spoofing artifacts, not codec shortcuts.
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 6. Multi-Task Domain Adaptation: CODEC & CODEC_Q -->
+            <section>
+                <h2>Multi-Task Domain Adaptation: CODEC & CODEC_Q</h2>
+                <p>We define <strong>two independent domain discrimination tasks</strong> to cover the full space of transmission conditions:</p>
+                <div class="two-col" style="margin-top: 0.5em;">
+                    <div class="col">
+                        <div class="card" style="border-left: 3px solid #a855f7;">
+                            <h3 style="margin-top: 0;">CODEC <span class="tag tag-blue">Format Type</span></h3>
+                            <p style="font-size: 0.85em;">The compression format used:</p>
+                            <ul style="font-size: 0.8em;">
+                                <li>MP3, AAC (lossy audio)</li>
+                                <li>OPUS, Speex (VoIP)</li>
+                                <li>AMR (telephony)</li>
+                                <li>Encodec (neural codec)</li>
+                            </ul>
+                            <p class="small" style="margin-top: 0.4em;"><strong>Why it matters:</strong> Different codecs introduce <em>different types</em> of artifacts (psychoacoustic vs. neural vs. speech-specific)</p>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="card" style="border-left: 3px solid #f97316;">
+                            <h3 style="margin-top: 0;">CODEC_Q <span class="tag tag-amber">Quality Level</span></h3>
+                            <p style="font-size: 0.85em;">Bitrate/quality setting (1–5):</p>
+                            <ul style="font-size: 0.8em;">
+                                <li><strong>1:</strong> Heavy compression (low bitrate)</li>
+                                <li><strong>3:</strong> Medium quality</li>
+                                <li><strong>5:</strong> Light compression (high bitrate)</li>
+                            </ul>
+                            <p class="small" style="margin-top: 0.4em;"><strong>Why it matters:</strong> Different quality levels = different <em>severity</em> of artifacts</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="card card-accent" style="margin-top: 0.6em;">
+                    <strong>Key insight:</strong> CODEC and CODEC_Q are <strong>independent</strong> — any codec can have any quality level. By adapting to both jointly, the model becomes robust across the full space of real-world transmission conditions.
+                </div>
+            </section>
+            
+            <!-- 7. Method Overview -->
+            <section>
+                <h2>Method: ERM vs DANN</h2>
+                <div class="two-col">
+                    <div class="col">
+                        <h3>ERM <span class="tag tag-blue">Baseline</span></h3>
+                        <ul>
+                            <li>Standard supervised training</li>
+                            <li>Minimize task loss only</li>
+                            <li>No domain awareness</li>
+                        </ul>
+                        <p style="margin-top: 0.8em;"><span class="formula">L = L<sub>task</sub></span></p>
+                    </div>
+                    <div class="col">
+                        <h3>DANN <span class="tag tag-green">Proposed</span></h3>
+                        <ul>
+                            <li>Domain-Adversarial Neural Network</li>
+                            <li>Gradient Reversal Layer (GRL)</li>
+                            <li>Forces domain-invariant features</li>
+                        </ul>
+                        <p style="margin-top: 0.8em;"><span class="formula">L = L<sub>task</sub> + λ · (L<sub>codec</sub> + L<sub>codec_q</sub>)</span></p>
+                    </div>
+                </div>
+                <div class="card" style="margin-top: 0.8em;">
+                    <strong>Key insight:</strong> DANN learns representations that discriminate deepfakes while remaining invariant to codec domains.
+                </div>
+            </section>
+            
+            <!-- 8. Architecture Diagram -->
+            <section>
+                <h2>Model Architecture</h2>
+                <div class="flow-diagram">
+                    <div class="flow-box gray">Audio Waveform</div>
+                    <div class="flow-arrow">↓</div>
+                    <div class="flow-box blue">SSL Backbone (WavLM / Wav2Vec2)<br><span class="small" style="color: #1e40af;">FROZEN</span></div>
+                    <div class="flow-arrow">↓</div>
+                    <div class="flow-box green">Layer Mixing + Projection Head</div>
+                    <div class="flow-arrow">↓</div>
+                    <div class="flow-split">
+                        <div class="flow-branch">
+                            <div class="flow-box orange">Task Classifier</div>
+                            <div class="flow-arrow">↓</div>
+                            <div class="small"><strong>bonafide / spoof</strong></div>
+                        </div>
+                        <div class="flow-branch">
+                            <div class="flow-box purple">GRL (λ)</div>
+                            <div class="flow-arrow">↓</div>
+                            <div class="flow-box purple">Domain Discriminator</div>
+                            <div class="flow-arrow">↓</div>
+                            <div class="small"><strong>CODEC / CODEC_Q</strong></div>
+                        </div>
+                    </div>
+                </div>
+                <p class="small center" style="margin-top: 0.3em;">GRL = Gradient Reversal Layer: identity on forward pass, negates gradients on backward pass</p>
+            </section>
+            
+            <!-- 9. Gradient Reversal -->
+            <section>
+                <h2>Gradient Reversal Layer</h2>
+                <div class="two-col">
+                    <div class="col">
+                        <h3>Forward Pass</h3>
+                        <div class="formula">GRL(x) = x</div>
+                        <p class="small" style="margin-top: 0.3em;">Identity — discriminator sees normal features</p>
+                    </div>
+                    <div class="col">
+                        <h3>Backward Pass</h3>
+                        <div class="formula">∂GRL/∂x = −λ · grad</div>
+                        <p class="small" style="margin-top: 0.3em;">Reversed gradients push backbone to confuse discriminator</p>
+                    </div>
+                </div>
+                <div class="card card-accent" style="margin-top: 1em;">
+                    <strong>Effect:</strong> The backbone learns to produce representations where codec information is suppressed, while task-relevant signal is preserved.
+                </div>
+                <h3 style="margin-top: 0.8em;">Lambda Schedule</h3>
+                <ul>
+                    <li>Exponential warmup: λ starts small, grows during training</li>
+                    <li>Prevents early destabilization of the adversarial game</li>
+                </ul>
+            </section>
+            
+            <!-- 10. Multi-Head Discriminator -->
+            <section>
+                <h2>Multi-Head Domain Discriminator</h2>
+                <div class="flow-diagram" style="margin-top: 1em;">
+                    <div class="flow-box green">Shared Features (256-dim)</div>
+                    <div class="flow-arrow">↓</div>
+                    <div class="flow-box gray">Shared MLP</div>
+                    <div class="flow-arrow">↓</div>
+                    <div class="flow-split">
+                        <div class="flow-box purple">CODEC Head<br><span class="small" style="color: #7c3aed;">N classes</span></div>
+                        <div class="flow-box purple">CODEC_Q Head<br><span class="small" style="color: #7c3aed;">M classes</span></div>
+                    </div>
+                </div>
+                <ul style="margin-top: 1em;">
+                    <li><strong>Two domain tasks:</strong> predict codec type and codec quality separately</li>
+                    <li><strong>Synthetic augmentation:</strong> apply MP3/AAC/OPUS compression during training</li>
+                    <li>Encourages invariance to both codec family and quality level</li>
+                </ul>
+            </section>
+            
+            <!-- 11. Backbones & Baselines -->
+            <section>
+                <h2>Backbones & Baselines</h2>
+                <h3>SSL Backbones (Frozen)</h3>
+                <table class="data">
+                    <tr>
+                        <th>Backbone</th>
+                        <th>Layers</th>
+                        <th>Hidden Dim</th>
+                        <th>Pre-training</th>
+                    </tr>
+                    <tr>
+                        <td><strong>WavLM Base+</strong></td>
+                        <td>12</td>
+                        <td>768</td>
+                        <td>94k hours (diverse)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Wav2Vec 2.0 Base</strong></td>
+                        <td>12</td>
+                        <td>768</td>
+                        <td>960h (LibriSpeech)</td>
+                    </tr>
+                </table>
+                <h3 style="margin-top: 0.6em;">Baselines</h3>
+                <ul>
+                    <li><strong>ERM:</strong> Same architecture without domain adversary (per backbone)</li>
+                    <li><strong>TRILLsson:</strong> Paralinguistic embeddings + classifier (non-semantic)</li>
+                    <li><strong>LFCC-GMM:</strong> Classical acoustic features + Gaussian Mixture Model</li>
+                    <li><strong>AASIST / RawNet:</strong> Official ASVspoof baselines (reference)</li>
+                </ul>
+            </section>
+            
+            <!-- 12. Codec Augmentation -->
+            <section>
+                <h2>Synthetic Codec Augmentation</h2>
+                <p>Train/Dev have no codec diversity — we create it synthetically via FFmpeg:</p>
+                <table class="data" style="margin-top: 0.4em;">
+                    <tr>
+                        <th>Synthetic</th>
+                        <th>ASVspoof 5 Codecs</th>
+                        <th>Status</th>
+                    </tr>
+                    <tr>
+                        <td>NONE</td>
+                        <td>"−" (original)</td>
+                        <td><span class="tag tag-green">Simulated</span></td>
+                    </tr>
+                    <tr>
+                        <td>MP3, AAC</td>
+                        <td>C05, C06</td>
+                        <td><span class="tag tag-green">Simulated</span></td>
+                    </tr>
+                    <tr>
+                        <td>OPUS, SPEEX, AMR</td>
+                        <td>C01, C02, C03, C08, C09, C10</td>
+                        <td><span class="tag tag-green">Simulated</span></td>
+                    </tr>
+                    <tr>
+                        <td>—</td>
+                        <td>C04 (Encodec), C07 (cascade), C11 (device)</td>
+                        <td><span class="tag tag-amber">Not simulated</span></td>
+                    </tr>
+                </table>
+                <p class="small" style="margin-top: 0.4em;">Augmentations are pre-computed offline for ~5× training speedup vs on-the-fly FFmpeg.</p>
+            </section>
+            
+            <!-- 13. Training Setup -->
+            <section>
+                <h2>Training Setup</h2>
+                <div class="two-col">
+                    <div class="col">
+                        <h3>Hyperparameters</h3>
+                        <ul>
+                            <li>Optimizer: AdamW, lr = 1e-4</li>
+                            <li>Batch size: 128</li>
+                            <li>Max epochs: 50 (early stopping)</li>
+                            <li>λ schedule: exponential warmup</li>
+                        </ul>
+                    </div>
+                    <div class="col">
+                        <h3>Infrastructure</h3>
+                        <ul>
+                            <li>Snellius HPC (SURF)</li>
+                            <li>GPU: MIG slice (was A100)</li>
+                            <li>~24h per run</li>
+                            <li>W&B tracking</li>
+                        </ul>
+                    </div>
+                </div>
+                <h3 style="margin-top: 0.6em;">Recent Fixes</h3>
+                <ul class="checklist">
+                    <li class="done">Pre-compute codec augmentations offline (PR #42, #46, #47)</li>
+                    <li class="done">Fix discriminator double-λ bug (PR #44)</li>
+                    <li class="done">Exponential λ schedule + pre-projection tap (PR #44)</li>
+                    <li class="done">Domain probe diagnostic script (PR #41)</li>
+                </ul>
+            </section>
+            
+            <!-- 14. Results -->
+            <section>
+                <h2>Results</h2>
+                <div class="status-pending">
+                    <strong>Awaiting DANN Run</strong><br>
+                    <span class="small">Pre-computed augmentations finished. Training run pending.</span>
+                </div>
+                <h3 style="margin-top: 0.8em;">Evaluation Plan</h3>
+                <table class="data">
+                    <tr>
+                        <th>Metric</th>
+                        <th>WavLM ERM</th>
+                        <th>WavLM DANN</th>
+                        <th>W2V2 ERM</th>
+                        <th>W2V2 DANN</th>
+                    </tr>
+                    <tr>
+                        <td>EER (overall)</td>
+                        <td>~4%*</td>
+                        <td>TBD</td>
+                        <td>~4%*</td>
+                        <td>TBD</td>
+                    </tr>
+                    <tr>
+                        <td>minDCF</td>
+                        <td>TBD</td>
+                        <td>TBD</td>
+                        <td>TBD</td>
+                        <td>TBD</td>
+                    </tr>
+                    <tr>
+                        <td>Per-codec EER</td>
+                        <td colspan="4" class="muted"><em>Key test for H1 — improvement on worst codecs</em></td>
+                    </tr>
+                </table>
+                <p class="small">*Preliminary ERM results from Wave 5; models overfit from epoch 1.</p>
+            </section>
+            
+            <!-- 15. Domain Probe Findings -->
+            <section>
+                <h2>Domain Probe Findings</h2>
+                <p>Linear probe accuracy predicting codec from frozen WavLM features:</p>
+                <div class="two-col" style="margin-top: 0.5em;">
+                    <div class="col">
+                        <table class="data">
+                            <tr>
+                                <th>Layer</th>
+                                <th>Accuracy</th>
+                                <th>Signal</th>
+                            </tr>
+                            <tr>
+                                <td>0–2</td>
+                                <td>85–87%</td>
+                                <td><span class="tag tag-amber">Strong</span></td>
+                            </tr>
+                            <tr>
+                                <td>3–4</td>
+                                <td>72–80%</td>
+                                <td><span class="tag tag-amber">Moderate</span></td>
+                            </tr>
+                            <tr>
+                                <td>5–6</td>
+                                <td>63–67%</td>
+                                <td><span class="tag tag-blue">Weakening</span></td>
+                            </tr>
+                            <tr>
+                                <td>7–11</td>
+                                <td>~60%</td>
+                                <td><span class="tag tag-green">Near-chance</span></td>
+                            </tr>
+                        </table>
+                        <p class="small" style="margin-top: 0.3em;">Chance = 50% (binary codec classification)</p>
+                    </div>
+                    <div class="col">
+                        <h3>Key Insights</h3>
+                        <ul style="font-size: 0.85em;">
+                            <li>Codec signal IS present — augmentation works</li>
+                            <li>WavLM progressively removes it (87% → 60%)</li>
+                            <li>~10pp above chance remains at L11</li>
+                            <li>DANN should remove this residual signal</li>
+                        </ul>
+                        <div class="card card-accent" style="margin-top: 0.6em; font-size: 0.85em;">
+                            <strong>Implication:</strong> SSL backbones achieve partial domain invariance through pretraining. DANN completes what the backbone started.
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 16. Interpretability Analysis -->
+            <section>
+                <h2>Interpretability Analysis</h2>
+                <h3>Layer-wise Domain Probing</h3>
+                <ul>
+                    <li>Train linear probe at each layer to predict CODEC/CODEC_Q</li>
+                    <li>Compare accuracy: ERM vs DANN</li>
+                    <li>Lower probe accuracy in DANN = less domain leakage</li>
+                </ul>
+                <h3 style="margin-top: 0.6em;">Representation Similarity (CKA)</h3>
+                <ul>
+                    <li>Compare layer representations between ERM and DANN</li>
+                    <li>Identify where DANN diverges most from baseline</li>
+                </ul>
+                <h3 style="margin-top: 0.6em;">Activation Patching (RQ4)</h3>
+                <ul>
+                    <li>Swap activations from DANN into ERM at identified layers</li>
+                    <li>Test if this reduces domain leakage without full retraining</li>
+                </ul>
+            </section>
+            
+            <!-- 17. Status -->
+            <section>
+                <h2>Status & Next Steps</h2>
+                <div class="two-col">
+                    <div class="col">
+                        <h3>Completed</h3>
+                        <ul class="checklist">
+                            <li class="done">Full ERM + DANN codebase</li>
+                            <li class="done">Multi-head domain discriminator</li>
+                            <li class="done">Pre-compute augmentation pipeline</li>
+                            <li class="done">Domain probe diagnostic</li>
+                            <li class="done">W&B integration</li>
+                            <li class="done">Snellius job scripts</li>
+                            <li class="done">60+ unit tests</li>
+                        </ul>
+                    </div>
+                    <div class="col">
+                        <h3>In Progress</h3>
+                        <ul class="checklist">
+                            <li class="pending">Augmentation pre-compute (running)</li>
+                            <li class="pending">Optimized DANN training run</li>
+                        </ul>
+                        <h3 style="margin-top: 0.6em;">Upcoming</h3>
+                        <ul class="checklist">
+                            <li class="future">Full eval set evaluation</li>
+                            <li class="future">Per-codec breakdown</li>
+                            <li class="future">Interpretability experiments</li>
+                            <li class="future">Thesis writing</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 18. Questions -->
+            <section class="center" style="display: flex; flex-direction: column; justify-content: center;">
+                <h2>Questions?</h2>
+                <p style="margin-top: 2em; color: var(--text-secondary); font-size: 0.9em;">
+                    <strong>Repository:</strong> github.com/Jmqcooper1/asvspoof5-domain-invariant-cm<br>
+                    <strong>W&B:</strong> mike-cooper-uva/asvspoof5-dann
+                </p>
+            </section>
+            
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.js"></script>
+    <script>
+        Reveal.initialize({
+            hash: true,
+            slideNumber: 'c/t',
+            transition: 'none',
+            width: 1100,
+            height: 680,
+            margin: 0.08,
+            center: false
+        });
+    </script>
+</body>
+</html>
