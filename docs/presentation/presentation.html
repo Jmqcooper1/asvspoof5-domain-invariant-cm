@@ -436,6 +436,7 @@
                 <div class="card card-accent" style="margin-top: 0.6em;">
                     <strong>Key insight:</strong> CODEC and CODEC_Q are <strong>independent</strong> — any codec can have any quality level. By adapting to both jointly, the model becomes robust across the full space of real-world transmission conditions.
                 </div>
+                <p class="small" style="margin-top: 0.4em;"><strong>Note:</strong> C11 (device/playback effects) cannot be simulated via codec augmentation — requires physical re-recording.</p>
             </section>
             
             <!-- 7. Method Overview -->
@@ -534,7 +535,7 @@
                 </div>
                 <ul style="margin-top: 1em;">
                     <li><strong>Two domain tasks:</strong> predict codec type and codec quality separately</li>
-                    <li><strong>Synthetic augmentation:</strong> apply MP3/AAC/OPUS compression during training</li>
+                    <li><strong>Synthetic augmentation:</strong> use pre-computed MP3/AAC augmentations</li>
                     <li>Encourages invariance to both codec family and quality level</li>
                 </ul>
             </section>
@@ -567,7 +568,7 @@
                 <ul>
                     <li><strong>ERM:</strong> Same architecture without domain adversary (per backbone)</li>
                     <li><strong>TRILLsson:</strong> Paralinguistic embeddings + classifier (non-semantic)</li>
-                    <li><strong>LFCC-GMM:</strong> Classical acoustic features + Gaussian Mixture Model</li>
+                    <li><strong>LFCC-GMM / MFCC-GMM:</strong> Classical acoustic features + Gaussian Mixture Model</li>
                     <li><strong>AASIST / RawNet:</strong> Official ASVspoof baselines (reference)</li>
                 </ul>
             </section>
@@ -674,76 +675,37 @@
                 </div>
             </section>
             
-            <!-- 13c. Challenges & Solutions -->
-            <section>
-                <h2>Challenges & Solutions</h2>
-                <p>Key engineering contributions during implementation:</p>
-                <table class="data" style="margin-top: 0.5em;">
-                    <tr>
-                        <th>Challenge</th>
-                        <th>Impact</th>
-                        <th>Solution</th>
-                    </tr>
-                    <tr>
-                        <td><strong>5× training slowdown</strong></td>
-                        <td>On-the-fly FFmpeg codec conversion bottlenecked I/O</td>
-                        <td>Pre-cached augmentation: 820k AAC + 820k MP3 files (PR #42, #46)</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Double-λ bug</strong></td>
-                        <td>GRL applied λ twice — once in GRL, once in loss weighting</td>
-                        <td>Fixed GRL to use λ=1, apply scaling only in loss (PR #44)</td>
-                    </tr>
-                    <tr>
-                        <td><strong>λ instability</strong></td>
-                        <td>Gradient explosion when λ &gt; 0.75</td>
-                        <td>Linear schedule, capped λ, gradient clipping (PR #62)</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Discriminator tap point</strong></td>
-                        <td>Post-projection features lost domain signal</td>
-                        <td>Moved discriminator tap to pre-projection (PR #44)</td>
-                    </tr>
-                </table>
-                <div class="card card-accent" style="margin-top: 0.6em;">
-                    <strong>Lesson:</strong> Domain-adversarial training requires careful engineering. The original DANN paper glosses over many practical details that matter significantly at scale.
-                </div>
-            </section>
-            
             <!-- 14. Evaluation Metrics -->
             <section>
                 <h2>Evaluation Metrics</h2>
-                <p style="font-size: 0.85em; margin-bottom: 0.3em;">We evaluate using three complementary metrics from speaker verification and anti-spoofing:</p>
-                <div class="two-col" style="margin-top: 0.3em;">
+                <p style="font-size: 0.8em; margin-bottom: 0.2em;"><strong>Task:</strong> Binary classification (bonafide vs spoof). We use threshold-independent metrics standard in speaker verification:</p>
+                <div class="two-col" style="margin-top: 0.2em;">
                     <div class="col">
-                        <div class="card" style="border-left: 3px solid #3b82f6; padding: 0.4em 0.8em; margin-bottom: 0.4em;">
-                            <h3 style="margin-top: 0; margin-bottom: 0.2em;">EER <span class="tag tag-blue">Primary</span></h3>
-                            <ul style="font-size: 0.75em; margin: 0.2em 0 0.2em 1em;">
-                                <li>Point where FAR = FRR</li>
-                                <li>Threshold-independent</li>
-                                <li>Standard in speaker verification</li>
-                            </ul>
+                        <div class="card" style="border-left: 3px solid #3b82f6; padding: 0.5em 0.8em; margin-bottom: 0.3em;">
+                            <h3 style="margin-top: 0; margin-bottom: 0.15em;">EER <span class="tag tag-blue">Primary</span></h3>
+                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>What:</strong> Point where FAR = FRR</p>
+                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>Why:</strong> Threshold-independent; standard in speaker verification</p>
                         </div>
-                        <div class="card" style="border-left: 3px solid #22c55e; padding: 0.4em 0.8em;">
-                            <h3 style="margin-top: 0; margin-bottom: 0.2em;">minDCF <span class="tag tag-green">Application</span></h3>
-                            <ul style="font-size: 0.75em; margin: 0.2em 0 0.2em 1em;">
-                                <li>Weighs misses vs false alarms</li>
-                                <li>Reflects deployment costs</li>
-                                <li>Prior: P<sub>target</sub> = 0.05</li>
-                            </ul>
+                        <div class="card" style="border-left: 3px solid #22c55e; padding: 0.5em 0.8em; margin-bottom: 0.3em;">
+                            <h3 style="margin-top: 0; margin-bottom: 0.15em;">minDCF <span class="tag tag-green">Application</span></h3>
+                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>What:</strong> Weighted cost of misses vs false alarms</p>
+                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>Why:</strong> Reflects deployment costs (P<sub>target</sub> = 0.05)</p>
+                        </div>
+                        <div class="card" style="border-left: 3px solid #a855f7; padding: 0.5em 0.8em;">
+                            <h3 style="margin-top: 0; margin-bottom: 0.15em;">t-DCF <span class="tag tag-amber">Tandem</span></h3>
+                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>What:</strong> CM + ASV as tandem system</p>
+                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>Why:</strong> Captures full pipeline security impact</p>
                         </div>
                     </div>
                     <div class="col">
-                        <div class="card" style="border-left: 3px solid #a855f7; padding: 0.4em 0.8em; margin-bottom: 0.4em;">
-                            <h3 style="margin-top: 0; margin-bottom: 0.2em;">t-DCF <span class="tag tag-amber">Tandem</span></h3>
-                            <ul style="font-size: 0.75em; margin: 0.2em 0 0.2em 1em;">
-                                <li>ASVspoof-specific metric</li>
-                                <li>CM + ASV as tandem system</li>
-                                <li>Captures full pipeline failures</li>
-                            </ul>
+                        <div class="card card-accent" style="padding: 0.5em 0.8em; font-size: 0.75em;">
+                            <strong>Why not F1?</strong> F1 requires a fixed threshold. EER/DCF are threshold-independent, allowing fair comparison across systems without tuning.
                         </div>
-                        <div class="card card-accent" style="padding: 0.5em 0.8em; font-size: 0.8em;">
-                            <strong>Key insight:</strong> EER = detection quality, minDCF = deployment context, t-DCF = actual security impact on speaker verification.
+                        <div class="card" style="padding: 0.5em 0.8em; font-size: 0.75em; margin-top: 0.3em;">
+                            <strong>Summary:</strong><br>
+                            • EER → detection quality<br>
+                            • minDCF → deployment context<br>
+                            • t-DCF → ASV security impact
                         </div>
                     </div>
                 </div>
@@ -753,8 +715,9 @@
             <section>
                 <h2>Results</h2>
                 <div class="card" style="background: #fefce8; border: 1px solid #facc15;">
-                    <strong>Training Status:</strong> DANN runs completed with stabilized λ schedule<br>
+                    <strong>Training Status:</strong> DANN runs completed with stabilized λ schedule*<br>
                     <span class="small">Best checkpoints: WavLM DANN (epoch 6), Wav2Vec2 DANN (epoch 14)</span>
+                    <p class="small" style="margin-top: 0.3em; font-style: italic;">*Based on DANN literature recommendations</p>
                 </div>
                 <h3 style="margin-top: 0.8em;">Evaluation Plan</h3>
                 <table class="data">
@@ -793,7 +756,7 @@
                 <p>Linear probe accuracy predicting codec from frozen SSL features (3-class: MP3/AAC/OPUS):</p>
                 <div class="two-col" style="margin-top: 0.3em;">
                     <div class="col">
-                        <img src="codec_encoding_heatmap.jpg" alt="Codec Encoding Heatmap" style="width: 100%; border-radius: 6px; border: 1px solid var(--border);">
+                        <img src="./codec_encoding_heatmap.jpg" alt="Codec Encoding Heatmap" style="width: 100%; border-radius: 6px; border: 1px solid var(--border);">
                         <p class="small" style="margin-top: 0.3em; text-align: center;">Chance = 33.3% (3-class). Wav2Vec2 late layers approach chance.</p>
                     </div>
                     <div class="col">
@@ -866,7 +829,45 @@
                 </div>
             </section>
             
-            <!-- 19. Questions -->
+            <!-- APPENDIX -->
+            
+            <!-- A1. Challenges & Solutions -->
+            <section>
+                <h2>Appendix: Challenges & Solutions</h2>
+                <p>Key engineering contributions during implementation:</p>
+                <table class="data" style="margin-top: 0.5em;">
+                    <tr>
+                        <th>Challenge</th>
+                        <th>Impact</th>
+                        <th>Solution</th>
+                    </tr>
+                    <tr>
+                        <td><strong>5× training slowdown</strong></td>
+                        <td>On-the-fly FFmpeg codec conversion bottlenecked I/O</td>
+                        <td>Pre-cached augmentation: 820k AAC + 820k MP3 files (PR #42, #46)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Double-λ bug</strong></td>
+                        <td>GRL applied λ twice — once in GRL, once in loss weighting</td>
+                        <td>Fixed GRL to use λ=1, apply scaling only in loss (PR #44)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>λ instability</strong></td>
+                        <td>Gradient explosion when λ &gt; 0.75</td>
+                        <td>Linear schedule, capped λ, gradient clipping (PR #62)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Discriminator tap point</strong></td>
+                        <td>Post-projection features lost domain signal</td>
+                        <td>Moved discriminator tap to pre-projection (PR #44)</td>
+                    </tr>
+                </table>
+                <div class="card card-accent" style="margin-top: 0.6em;">
+                    <strong>Lesson:</strong> Domain-adversarial training requires careful engineering. The original DANN paper glosses over many practical details that matter significantly at scale.
+                </div>
+            </section>
+            
+            <!-- Questions -->
             <section class="center" style="display: flex; flex-direction: column; justify-content: center;">
                 <h2>Questions?</h2>
                 <p style="margin-top: 2em; color: var(--text-secondary); font-size: 0.9em;">
