@@ -165,15 +165,14 @@ dataloader:
   persistent_workers: true
 
 # Logging
+# Note: layer_weights and domain accuracy are logged unconditionally by the training loop
 logging:
   log_every_n_steps: 50
   val_every_n_epochs: 1
-  log_domain_accuracy: true
   log_domain_breakdown_every: 5
   json_logs: true
   log_batch_samples: 0.02
   track_gradients: true
-  track_layer_weights: true
 
 # Wandb
 wandb:
