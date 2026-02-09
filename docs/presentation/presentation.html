@@ -346,6 +346,62 @@
                 </div>
             </section>
             
+            <!-- 5b. Synthetic Augmentation Coverage Analysis -->
+            <section>
+                <h2>Synthetic Augmentation Coverage</h2>
+                <p>We analyzed the ASVspoof5 protocol files to understand what our synthetic augmentation can and cannot cover:</p>
+                <div class="two-col" style="margin-top: 0.5em;">
+                    <div class="col">
+                        <h3>Dataset Composition</h3>
+                        <table class="data">
+                            <tr>
+                                <th>Split</th>
+                                <th>Samples</th>
+                                <th>Codec Diversity</th>
+                            </tr>
+                            <tr>
+                                <td>Train</td>
+                                <td>182,357</td>
+                                <td>100% NONE</td>
+                            </tr>
+                            <tr>
+                                <td>Dev</td>
+                                <td>140,950</td>
+                                <td>100% NONE</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Eval</strong></td>
+                                <td><strong>680,774</strong></td>
+                                <td><strong>12 conditions</strong></td>
+                            </tr>
+                        </table>
+                        <div class="card card-accent" style="margin-top: 0.5em; font-size: 0.85em;">
+                            <strong>79.2%</strong> of eval covered by synthetic augmentation<br>
+                            <strong>20.8%</strong> uncovered (C04, C07, C11)
+                        </div>
+                    </div>
+                    <div class="col">
+                        <h3>Eval Set Codec Distribution</h3>
+                        <table class="data" style="font-size: 0.75em;">
+                            <tr><th>Codec</th><th>%</th><th>Synthetic</th></tr>
+                            <tr><td>NONE</td><td>25.2%</td><td>✓</td></tr>
+                            <tr><td>C01 (OPUS)</td><td>6.9%</td><td>✓</td></tr>
+                            <tr><td>C02 (AMR)</td><td>7.0%</td><td>✓</td></tr>
+                            <tr><td>C03 (SPEEX)</td><td>7.0%</td><td>✓</td></tr>
+                            <tr style="background: #fef2f2;"><td>C04 (Encodec)</td><td>7.0%</td><td>❌</td></tr>
+                            <tr><td>C05 (MP3)</td><td>7.0%</td><td>✓</td></tr>
+                            <tr><td>C06 (AAC)</td><td>6.1%</td><td>✓</td></tr>
+                            <tr style="background: #fef2f2;"><td>C07 (Cascade)</td><td>7.0%</td><td>❌</td></tr>
+                            <tr><td>C08 (OPUS-NB)</td><td>6.9%</td><td>✓</td></tr>
+                            <tr><td>C09 (AMR-NB)</td><td>6.1%</td><td>✓</td></tr>
+                            <tr><td>C10 (SPEEX-NB)</td><td>7.0%</td><td>✓</td></tr>
+                            <tr style="background: #fef2f2;"><td>C11 (Device)</td><td>6.8%</td><td>❌</td></tr>
+                        </table>
+                    </div>
+                </div>
+                <p class="small" style="margin-top: 0.3em;"><strong>Uncovered codecs:</strong> C04 (neural codec), C07 (MP3+Encodec cascade), C11 (real device/telephony effects) — these remain inherently challenging.</p>
+            </section>
+            
             <!-- 6. Multi-Task Domain Adaptation: CODEC & CODEC_Q -->
             <section>
                 <h2>Multi-Task Domain Adaptation: CODEC & CODEC_Q</h2>
