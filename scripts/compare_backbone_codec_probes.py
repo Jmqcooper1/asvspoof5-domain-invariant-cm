@@ -389,11 +389,25 @@ def load_backbone(name: str) -> tuple[torch.nn.Module, dict]:
 def extract_all_layer_features(
     model: torch.nn.Module,
     waveforms: list[np.ndarray],
+    original_lengths: list[int],
     batch_size: int = 8,
 ) -> dict[int, np.ndarray]:
-    """Extract mean-pooled features from every transformer layer."""
+    """Extract mean-pooled features from every transformer layer.
+    
+    Args:
+        model: HuggingFace WavLM or Wav2Vec2 model
+        waveforms: List of padded waveform arrays
+        original_lengths: Original sample lengths before padding (for attention mask)
+        batch_size: Batch size for inference
+    
+    Returns:
+        Dictionary mapping layer index to pooled features
+    """
     num_layers = model.config.num_hidden_layers
     layer_features: dict[int, list] = {i: [] for i in range(num_layers)}
+    
+    # Get model device
+    device = next(model.parameters()).device
 
     n_batches = (len(waveforms) + batch_size - 1) // batch_size
 
@@ -401,14 +415,27 @@ def extract_all_layer_features(
         start = batch_idx * batch_size
         end = min(start + batch_size, len(waveforms))
         batch_np = waveforms[start:end]
+        batch_lengths = original_lengths[start:end]
 
-        batch_tensor = torch.tensor(np.stack(batch_np), dtype=torch.float32)
-        outputs = model(batch_tensor)
+        # Move tensor to model device
+        batch_tensor = torch.tensor(np.stack(batch_np), dtype=torch.float32).to(device)
+        
+        # Create attention mask based on original lengths (before padding)
+        max_len = batch_tensor.shape[1]
+        attention_mask = torch.zeros(len(batch_np), max_len, device=device)
+        for i, length in enumerate(batch_lengths):
+            attention_mask[i, :length] = 1.0
+        
+        outputs = model(batch_tensor, attention_mask=attention_mask)
         hidden_states = outputs.hidden_states
 
         for layer_idx in range(num_layers):
-            hs = hidden_states[layer_idx + 1]  # Skip CNN output
-            pooled = hs.mean(dim=1).numpy()
+            hs = hidden_states[layer_idx + 1]  # Skip CNN output (layer 0 is CNN)
+            # Masked mean pooling: only average over non-padded positions
+            # hs shape: (B, T, D), attention_mask shape: (B, T)
+            mask = attention_mask.unsqueeze(-1)  # (B, T, 1)
+            masked_hs = hs * mask
+            pooled = (masked_hs.sum(dim=1) / mask.sum(dim=1)).cpu().numpy()
             layer_features[layer_idx].append(pooled)
 
     return {k: np.concatenate(v, axis=0) for k, v in layer_features.items()}
@@ -715,6 +742,9 @@ def generate_hypothesis_report(analysis: dict) -> str:
     report.append("RECOMMENDATIONS FOR IMPROVING wav2vec2 DANN")
     report.append("-" * 40)
 
+    # layers_where_wavlm_higher = layers where WavLM has higher probe accuracy
+    # Higher probe accuracy = more codec info encoded (easier to classify codec)
+    # So these are layers where wav2vec2 encodes LESS codec info than WavLM
     w2v2_low_codec_layers = analysis['comparison']['layers_where_wavlm_higher']
     if w2v2_low_codec_layers:
         report.append(f"1. Focus on layers {w2v2_low_codec_layers} where wav2vec2 encodes less codec info")
@@ -784,17 +814,21 @@ def main() -> int:
 
     # Step 3: Extract features from both backbones
     logger.info("\n--- Step 3: Extracting features ---")
+    
+    # All waveforms are padded to MAX_SAMPLES, so lengths are uniform
+    # (load_real_audio and generate_synthetic_audio both pad to MAX_SAMPLES)
+    original_lengths = [MAX_SAMPLES] * len(all_waveforms)
 
     # WavLM
     logger.info("Processing WavLM...")
     wavlm_model, wavlm_cfg = load_backbone("wavlm")
-    wavlm_features = extract_all_layer_features(wavlm_model, all_waveforms, args.batch_size)
+    wavlm_features = extract_all_layer_features(wavlm_model, all_waveforms, original_lengths, args.batch_size)
     del wavlm_model
 
     # Wav2Vec2
     logger.info("Processing wav2vec2...")
     w2v2_model, w2v2_cfg = load_backbone("w2v2")
-    w2v2_features = extract_all_layer_features(w2v2_model, all_waveforms, args.batch_size)
+    w2v2_features = extract_all_layer_features(w2v2_model, all_waveforms, original_lengths, args.batch_size)
     del w2v2_model
 
     if torch.cuda.is_available():
