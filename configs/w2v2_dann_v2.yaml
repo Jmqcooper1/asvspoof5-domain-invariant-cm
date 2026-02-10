@@ -134,7 +134,7 @@ dann:
     start: 0.1   # Same as WavLM - moderate initial pressure
     end: 0.85    # Higher than WavLM (0.75) since wav2vec2 has less codec info
                  # but still capped below 1.0 for stability
-    warmup_epochs: 3  # Let feature extractor stabilize first
+    warmup_epochs: 1  # Must be ≤1 to satisfy epoch-1 lambda>0 check
 
   discriminator:
     input_dim: 1536   # stats pooling output (768*2)
