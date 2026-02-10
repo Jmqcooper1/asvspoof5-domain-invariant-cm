@@ -713,41 +713,60 @@
             
             <!-- 15. Results -->
             <section>
-                <h2>Results</h2>
-                <div class="card" style="background: #fefce8; border: 1px solid #facc15;">
-                    <strong>Training Status:</strong> DANN runs completed with stabilized λ schedule*<br>
-                    <span class="small">Best checkpoints: WavLM DANN (epoch 6), Wav2Vec2 DANN (epoch 14)</span>
-                    <p class="small" style="margin-top: 0.3em; font-style: italic;">*Based on DANN literature recommendations</p>
+                <h2>Results: Eval Set Performance</h2>
+                <div class="two-col" style="margin-top: 0.3em;">
+                    <div class="col">
+                        <table class="data" style="font-size: 0.85em;">
+                            <tr>
+                                <th>Model</th>
+                                <th>EER ↓</th>
+                                <th>minDCF ↓</th>
+                                <th>Δ EER</th>
+                            </tr>
+                            <tr>
+                                <td>WavLM ERM</td>
+                                <td>8.48%</td>
+                                <td>0.636</td>
+                                <td class="muted">baseline</td>
+                            </tr>
+                            <tr style="background: #dcfce7; font-weight: 600;">
+                                <td>WavLM DANN</td>
+                                <td style="color: #166534;">7.19%</td>
+                                <td style="color: #166534;">0.563</td>
+                                <td style="color: #166534;">−15.2%</td>
+                            </tr>
+                            <tr>
+                                <td>W2V2 ERM</td>
+                                <td>15.15%</td>
+                                <td>0.999</td>
+                                <td class="muted">baseline</td>
+                            </tr>
+                            <tr style="background: #f0fdf4;">
+                                <td>W2V2 DANN</td>
+                                <td>14.37%</td>
+                                <td>0.995</td>
+                                <td>−5.1%</td>
+                            </tr>
+                        </table>
+                        <p class="small" style="margin-top: 0.4em;">Evaluated on 680k eval samples with full codec diversity (C01–C11). Train/dev had no codecs.</p>
+                    </div>
+                    <div class="col">
+                        <div class="card" style="background: #dcfce7; border: 2px solid #22c55e; padding: 0.6em 0.8em;">
+                            <h3 style="margin: 0 0 0.3em 0; color: #166534;">🎯 Key Finding</h3>
+                            <p style="font-size: 0.9em; margin: 0;"><strong>WavLM DANN: 7.19% EER</strong><br>
+                            vs 8.48% ERM (−1.29% absolute)</p>
+                            <p style="font-size: 1.1em; font-weight: 700; color: #166534; margin: 0.3em 0 0 0;">15.2% relative improvement</p>
+                        </div>
+                        <div class="card card-accent" style="margin-top: 0.5em; font-size: 0.85em; padding: 0.5em 0.8em;">
+                            <strong>Confirms H1:</strong> Domain-adversarial training improves generalization to unseen codec conditions.
+                        </div>
+                        <ul style="font-size: 0.8em; margin-top: 0.5em;">
+                            <li>Both backbones improve with DANN</li>
+                            <li>WavLM benefits more than Wav2Vec2</li>
+                            <li>Consistent with probe analysis (WavLM encodes more codec info → more to suppress)</li>
+                        </ul>
+                    </div>
                 </div>
-                <h3 style="margin-top: 0.8em;">Evaluation Plan</h3>
-                <table class="data">
-                    <tr>
-                        <th>Metric</th>
-                        <th>WavLM ERM</th>
-                        <th>WavLM DANN</th>
-                        <th>W2V2 ERM</th>
-                        <th>W2V2 DANN</th>
-                    </tr>
-                    <tr>
-                        <td>EER (overall)</td>
-                        <td>~4%*</td>
-                        <td>Pending eval</td>
-                        <td>~4%*</td>
-                        <td>Pending eval</td>
-                    </tr>
-                    <tr>
-                        <td>minDCF</td>
-                        <td>TBD</td>
-                        <td>TBD</td>
-                        <td>TBD</td>
-                        <td>TBD</td>
-                    </tr>
-                    <tr>
-                        <td>Per-codec EER</td>
-                        <td colspan="4" class="muted"><em>Key test for H1 — improvement on worst codecs</em></td>
-                    </tr>
-                </table>
-                <p class="small">*Preliminary ERM results from Wave 5; models overfit from epoch 1. Full eval on 680k samples pending.</p>
             </section>
             
             <!-- 16. Domain Probe Findings: WavLM vs Wav2Vec2 -->
