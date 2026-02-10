@@ -991,13 +991,16 @@ class Trainer:
                     )
 
             # Fail-fast correctness assertions for DANN.
-            # Requirement: λ_grl must be > 0 by epoch 1.
-            if self.method == "dann" and epoch >= 1 and hasattr(self.model, "get_lambda"):
+            # Requirement: λ_grl must be > 0 after warmup period ends.
+            # Respects warmup_epochs from lambda scheduler (default: check at epoch 1).
+            warmup_epochs = getattr(self.lambda_scheduler, "warmup_epochs", 0) if self.lambda_scheduler else 0
+            check_epoch = max(1, warmup_epochs)  # Check after warmup, but at least epoch 1
+            if self.method == "dann" and epoch >= check_epoch and hasattr(self.model, "get_lambda"):
                 lambda_grl_epoch = float(self.model.get_lambda())
                 if lambda_grl_epoch <= 0.0:
                     raise RuntimeError(
-                        f"DANN requires lambda_grl > 0 by epoch 1, but got lambda_grl={lambda_grl_epoch}. "
-                        "Fix: reduce/disable warmup_epochs and ensure training isn't cut off early."
+                        f"DANN requires lambda_grl > 0 by epoch {check_epoch}, but got lambda_grl={lambda_grl_epoch}. "
+                        "Fix: check lambda_schedule config or ensure training isn't cut off early."
                     )
 
             # Train
