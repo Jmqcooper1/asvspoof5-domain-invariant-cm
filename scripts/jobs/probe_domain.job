@@ -69,6 +69,8 @@ echo "=== WavLM: ERM vs DANN Domain Probing ==="
 srun uv run python scripts/probe_domain.py \
     --erm-checkpoint "${RUNS_DIR}/wavlm_erm/checkpoints/best.pt" \
     --dann-checkpoint "${RUNS_DIR}/wavlm_dann/checkpoints/best.pt" \
+    --domain-source protocol \
+    --split eval \
     --wandb
 
 # -----------------------------------------------------------------------------
@@ -79,6 +81,8 @@ echo "=== Wav2Vec2: ERM vs DANN Domain Probing ==="
 srun uv run python scripts/probe_domain.py \
     --erm-checkpoint "${RUNS_DIR}/w2v2_erm/checkpoints/best.pt" \
     --dann-checkpoint "${RUNS_DIR}/w2v2_dann/checkpoints/best.pt" \
+    --domain-source protocol \
+    --split eval \
     --wandb
 
 echo ""
