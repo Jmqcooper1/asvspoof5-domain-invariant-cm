@@ -357,8 +357,12 @@ def main():
 
     # Setup run directory with git commit hash for traceability
     # Format: {name}_{commit_hash} e.g., wavlm_dann_cd52b83
+    # Falls back to timestamp if git unavailable to prevent overwrites
     git_info = get_git_info()
-    git_hash = git_info.get("commit", "")[:7] if git_info.get("commit") else "unknown"
+    if git_info.get("commit"):
+        run_suffix = git_info["commit"][:7]
+    else:
+        run_suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     if args.name:
         base_name = args.name
@@ -368,7 +372,7 @@ def main():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = f"{backbone_name}_{method}_{timestamp}"
     
-    run_name = f"{base_name}_{git_hash}"
+    run_name = f"{base_name}_{run_suffix}"
     run_dir = get_run_dir(run_name)
 
     # Reconfigure logging with JSON output to run directory
