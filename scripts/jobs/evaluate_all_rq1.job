@@ -40,6 +40,9 @@
 
 set -euo pipefail
 
+# Create Slurm output directory if it doesn't exist
+mkdir -p ./scripts/jobs/out
+
 module purge
 module load 2025
 
@@ -54,9 +57,14 @@ fi
 echo "Repo root: $(pwd)"
 echo "SLURM_SUBMIT_DIR: ${SLURM_SUBMIT_DIR:-}"
 
-# Install uv if not already installed
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# Install uv if not already installed (fallback for HPC where curl may be restricted)
 export PATH="$HOME/.local/bin:$PATH"
+if ! command -v uv &> /dev/null; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh || {
+        echo "ERROR: uv not found and installation failed. Please install uv manually." >&2
+        exit 1
+    }
+fi
 uv sync --locked
 
 # Verify CUDA availability
@@ -128,8 +136,8 @@ if [[ -f "${WAVLM_ERM_CKPT}" ]]; then
     # Extract EER from metrics.json
     WAVLM_ERM_METRICS="${RUNS_DIR}/wavlm_erm/eval_eval/metrics.json"
     if [[ -f "${WAVLM_ERM_METRICS}" ]]; then
-        WAVLM_ERM_EER=$(python -c "import json; m=json.load(open('${WAVLM_ERM_METRICS}')); print(f\"{m['eer']:.4f}\")")
-        WAVLM_ERM_MINDCF=$(python -c "import json; m=json.load(open('${WAVLM_ERM_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
+        WAVLM_ERM_EER=$(uv run python -c "import json; m=json.load(open('${WAVLM_ERM_METRICS}')); print(f\"{m['eer']:.4f}\")")
+        WAVLM_ERM_MINDCF=$(uv run python -c "import json; m=json.load(open('${WAVLM_ERM_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
         log_result "wavlm_erm" "$WAVLM_ERM_EER" "$WAVLM_ERM_MINDCF"
     fi
 else
@@ -149,8 +157,8 @@ if [[ -f "${WAVLM_DANN_CKPT}" ]]; then
         --wandb
     WAVLM_DANN_METRICS="${RUNS_DIR}/wavlm_dann/eval_eval_epoch5/metrics.json"
     if [[ -f "${WAVLM_DANN_METRICS}" ]]; then
-        WAVLM_DANN_EER=$(python -c "import json; m=json.load(open('${WAVLM_DANN_METRICS}')); print(f\"{m['eer']:.4f}\")")
-        WAVLM_DANN_MINDCF=$(python -c "import json; m=json.load(open('${WAVLM_DANN_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
+        WAVLM_DANN_EER=$(uv run python -c "import json; m=json.load(open('${WAVLM_DANN_METRICS}')); print(f\"{m['eer']:.4f}\")")
+        WAVLM_DANN_MINDCF=$(uv run python -c "import json; m=json.load(open('${WAVLM_DANN_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
         log_result "wavlm_dann" "$WAVLM_DANN_EER" "$WAVLM_DANN_MINDCF"
     fi
 else
@@ -169,8 +177,8 @@ if [[ -f "${W2V2_ERM_CKPT}" ]]; then
         --wandb
     W2V2_ERM_METRICS="${RUNS_DIR}/w2v2_erm/eval_eval/metrics.json"
     if [[ -f "${W2V2_ERM_METRICS}" ]]; then
-        W2V2_ERM_EER=$(python -c "import json; m=json.load(open('${W2V2_ERM_METRICS}')); print(f\"{m['eer']:.4f}\")")
-        W2V2_ERM_MINDCF=$(python -c "import json; m=json.load(open('${W2V2_ERM_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
+        W2V2_ERM_EER=$(uv run python -c "import json; m=json.load(open('${W2V2_ERM_METRICS}')); print(f\"{m['eer']:.4f}\")")
+        W2V2_ERM_MINDCF=$(uv run python -c "import json; m=json.load(open('${W2V2_ERM_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
         log_result "w2v2_erm" "$W2V2_ERM_EER" "$W2V2_ERM_MINDCF"
     fi
 else
@@ -189,8 +197,8 @@ if [[ -f "${W2V2_DANN_CKPT}" ]]; then
         --wandb
     W2V2_DANN_METRICS="${RUNS_DIR}/w2v2_dann/eval_eval/metrics.json"
     if [[ -f "${W2V2_DANN_METRICS}" ]]; then
-        W2V2_DANN_EER=$(python -c "import json; m=json.load(open('${W2V2_DANN_METRICS}')); print(f\"{m['eer']:.4f}\")")
-        W2V2_DANN_MINDCF=$(python -c "import json; m=json.load(open('${W2V2_DANN_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
+        W2V2_DANN_EER=$(uv run python -c "import json; m=json.load(open('${W2V2_DANN_METRICS}')); print(f\"{m['eer']:.4f}\")")
+        W2V2_DANN_MINDCF=$(uv run python -c "import json; m=json.load(open('${W2V2_DANN_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
         log_result "w2v2_dann" "$W2V2_DANN_EER" "$W2V2_DANN_MINDCF"
     fi
 else
@@ -276,8 +284,8 @@ if [[ -f "${TRILLSSON_LOG_MODEL}" ]] && [[ -f "${TRILLSSON_EVAL_NPY}" ]]; then
         --run-name "trillsson_logistic"
     TRILL_LOG_METRICS="${RUNS_DIR}/trillsson_logistic/eval_eval/metrics.json"
     if [[ -f "${TRILL_LOG_METRICS}" ]]; then
-        TRILL_LOG_EER=$(python -c "import json; m=json.load(open('${TRILL_LOG_METRICS}')); print(f\"{m['eer']:.4f}\")")
-        TRILL_LOG_MINDCF=$(python -c "import json; m=json.load(open('${TRILL_LOG_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
+        TRILL_LOG_EER=$(uv run python -c "import json; m=json.load(open('${TRILL_LOG_METRICS}')); print(f\"{m['eer']:.4f}\")")
+        TRILL_LOG_MINDCF=$(uv run python -c "import json; m=json.load(open('${TRILL_LOG_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
         log_result "trillsson_logistic" "$TRILL_LOG_EER" "$TRILL_LOG_MINDCF"
     fi
 else
@@ -301,8 +309,8 @@ if [[ -f "${TRILLSSON_MLP_MODEL}" ]] && [[ -f "${TRILLSSON_EVAL_NPY}" ]]; then
         --run-name "trillsson_mlp"
     TRILL_MLP_METRICS="${RUNS_DIR}/trillsson_mlp/eval_eval/metrics.json"
     if [[ -f "${TRILL_MLP_METRICS}" ]]; then
-        TRILL_MLP_EER=$(python -c "import json; m=json.load(open('${TRILL_MLP_METRICS}')); print(f\"{m['eer']:.4f}\")")
-        TRILL_MLP_MINDCF=$(python -c "import json; m=json.load(open('${TRILL_MLP_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
+        TRILL_MLP_EER=$(uv run python -c "import json; m=json.load(open('${TRILL_MLP_METRICS}')); print(f\"{m['eer']:.4f}\")")
+        TRILL_MLP_MINDCF=$(uv run python -c "import json; m=json.load(open('${TRILL_MLP_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
         log_result "trillsson_mlp" "$TRILL_MLP_EER" "$TRILL_MLP_MINDCF"
     fi
 else
@@ -324,8 +332,8 @@ if [[ -f "${LFCC_GMM_MODEL}" ]] && [[ -f "${LFCC_EVAL_NPY}" ]]; then
         --run-name "lfcc_gmm_32"
     LFCC_GMM_METRICS="${RUNS_DIR}/lfcc_gmm_32/eval_eval/metrics.json"
     if [[ -f "${LFCC_GMM_METRICS}" ]]; then
-        LFCC_GMM_EER=$(python -c "import json; m=json.load(open('${LFCC_GMM_METRICS}')); print(f\"{m['eer']:.4f}\")")
-        LFCC_GMM_MINDCF=$(python -c "import json; m=json.load(open('${LFCC_GMM_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
+        LFCC_GMM_EER=$(uv run python -c "import json; m=json.load(open('${LFCC_GMM_METRICS}')); print(f\"{m['eer']:.4f}\")")
+        LFCC_GMM_MINDCF=$(uv run python -c "import json; m=json.load(open('${LFCC_GMM_METRICS}')); print(f\"{m['min_dcf']:.4f}\")")
         log_result "lfcc_gmm" "$LFCC_GMM_EER" "$LFCC_GMM_MINDCF"
     fi
 else
@@ -370,7 +378,6 @@ results = {
 
 for display_name, run_name, eval_dir in models:
     metrics_path = Path(RUNS_DIR) / run_name / eval_dir / "metrics.json"
-    dev_metrics_path = Path(RUNS_DIR) / run_name / "metrics.json"
 
     entry = {
         "name": display_name,
@@ -388,12 +395,13 @@ for display_name, run_name, eval_dir in models:
             entry["eval_eer"] = m.get("eer")
             entry["eval_mindcf"] = m.get("min_dcf")
 
-    # Load dev metrics (if exists)
+    # Load dev metrics (if exists) - evaluate.py writes to eval_dev/metrics.json
+    dev_metrics_path = Path(RUNS_DIR) / run_name / "eval_dev" / "metrics.json"
     if dev_metrics_path.exists():
         with open(dev_metrics_path) as f:
             m = json.load(f)
-            # Try different key names
-            entry["dev_eer"] = m.get("val_eer") or m.get("dev_eer") or m.get("eer")
+            # Try different key names (use 'is not None' to allow 0.0)
+            entry["dev_eer"] = m.get("val_eer") if m.get("val_eer") is not None else m.get("dev_eer") if m.get("dev_eer") is not None else m.get("eer")
 
     # Calculate OOD gap
     if entry["dev_eer"] is not None and entry["eval_eer"] is not None:
@@ -420,10 +428,10 @@ Split: eval
 """
 
 for m in results["models"]:
-    dev_eer = f"{m['dev_eer']*100:.2f}" if m['dev_eer'] else "N/A"
-    eval_eer = f"{m['eval_eer']*100:.2f}" if m['eval_eer'] else "N/A"
-    mindcf = f"{m['eval_mindcf']:.4f}" if m['eval_mindcf'] else "N/A"
-    ood_gap = f"{m['ood_gap']*100:+.2f}" if m['ood_gap'] else "N/A"
+    dev_eer = f"{m['dev_eer']*100:.2f}" if m['dev_eer'] is not None else "N/A"
+    eval_eer = f"{m['eval_eer']*100:.2f}" if m['eval_eer'] is not None else "N/A"
+    mindcf = f"{m['eval_mindcf']:.4f}" if m['eval_mindcf'] is not None else "N/A"
+    ood_gap = f"{m['ood_gap']*100:+.2f}" if m['ood_gap'] is not None else "N/A"
     md += f"| {m['name']} | {dev_eer} | {eval_eer} | {mindcf} | {ood_gap} |\n"
 
 md += """
@@ -445,14 +453,14 @@ Individual per-domain results are saved in each model's eval directory:
 """
 
 # Find best models
-eval_eers = [(m['name'], m['eval_eer']) for m in results['models'] if m['eval_eer']]
+eval_eers = [(m['name'], m['eval_eer']) for m in results['models'] if m['eval_eer'] is not None]
 if eval_eers:
     best = min(eval_eers, key=lambda x: x[1])
     md = md.replace("{best_model}", f"{best[0]} ({best[1]*100:.2f}%)")
 else:
     md = md.replace("{best_model}", "N/A")
 
-ood_gaps = [(m['name'], abs(m['ood_gap'])) for m in results['models'] if m['ood_gap']]
+ood_gaps = [(m['name'], abs(m['ood_gap'])) for m in results['models'] if m['ood_gap'] is not None]
 if ood_gaps:
     smallest = min(ood_gaps, key=lambda x: x[1])
     md = md.replace("{smallest_gap_model}", f"{smallest[0]} ({smallest[1]*100:.2f}%)")
@@ -475,10 +483,10 @@ print()
 print("| Model | Dev EER | Eval EER | minDCF | OOD Gap |")
 print("|-------|---------|----------|--------|---------|")
 for m in results["models"]:
-    dev_eer = f"{m['dev_eer']*100:.2f}%" if m['dev_eer'] else "N/A"
-    eval_eer = f"{m['eval_eer']*100:.2f}%" if m['eval_eer'] else "N/A"
-    mindcf = f"{m['eval_mindcf']:.4f}" if m['eval_mindcf'] else "N/A"
-    ood_gap = f"{m['ood_gap']*100:+.2f}%" if m['ood_gap'] else "N/A"
+    dev_eer = f"{m['dev_eer']*100:.2f}%" if m['dev_eer'] is not None else "N/A"
+    eval_eer = f"{m['eval_eer']*100:.2f}%" if m['eval_eer'] is not None else "N/A"
+    mindcf = f"{m['eval_mindcf']:.4f}" if m['eval_mindcf'] is not None else "N/A"
+    ood_gap = f"{m['ood_gap']*100:+.2f}%" if m['ood_gap'] is not None else "N/A"
     print(f"| {m['name']:<19} | {dev_eer:>7} | {eval_eer:>8} | {mindcf:>6} | {ood_gap:>7} |")
 PYSCRIPT
 
