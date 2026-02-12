@@ -11,7 +11,7 @@ import torchaudio
 def load_waveform(
     path: Union[str, Path],
     target_sr: int = 16000,
-) -> tuple[torch.Tensor, int]:
+) -> Tuple[torch.Tensor, int]:
     """Load audio waveform using soundfile.
 
     Args:
