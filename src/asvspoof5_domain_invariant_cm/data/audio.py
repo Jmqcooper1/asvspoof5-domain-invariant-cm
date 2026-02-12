@@ -1,7 +1,7 @@
 """Audio loading, cropping, padding, and batching utilities."""
 
 from pathlib import Path
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, Tuple, Union
 
 import soundfile as sf
 import torch
