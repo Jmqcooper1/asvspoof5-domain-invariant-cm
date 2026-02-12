@@ -50,6 +50,8 @@ dependencies = [
     "einops>=0.8",
     "rich>=13.9",
     "wandb>=0.18",
+    "notebook>=7.5.3",
+    "jupyterlab>=4.5.4",
 ]
 
 [project.optional-dependencies]
