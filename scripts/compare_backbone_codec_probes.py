@@ -420,22 +420,27 @@ def extract_all_layer_features(
         # Move tensor to model device
         batch_tensor = torch.tensor(np.stack(batch_np), dtype=torch.float32).to(device)
         
-        # Create attention mask based on original lengths (before padding)
+        # Create sample-level attention mask based on original lengths
         max_len = batch_tensor.shape[1]
-        attention_mask = torch.zeros(len(batch_np), max_len, device=device)
+        attention_mask = torch.zeros(len(batch_np), max_len, dtype=torch.long, device=device)
         for i, length in enumerate(batch_lengths):
-            attention_mask[i, :length] = 1.0
+            attention_mask[i, :length] = 1
         
         outputs = model(batch_tensor, attention_mask=attention_mask)
         hidden_states = outputs.hidden_states
+        frame_length = hidden_states[1].shape[1]
+        frame_attention_mask = model._get_feature_vector_attention_mask(
+            frame_length,
+            attention_mask,
+        )
+        frame_mask = frame_attention_mask.unsqueeze(-1).to(hidden_states[1].dtype)
 
         for layer_idx in range(num_layers):
             hs = hidden_states[layer_idx + 1]  # Skip CNN output (layer 0 is CNN)
-            # Masked mean pooling: only average over non-padded positions
-            # hs shape: (B, T, D), attention_mask shape: (B, T)
-            mask = attention_mask.unsqueeze(-1)  # (B, T, 1)
-            masked_hs = hs * mask
-            pooled = (masked_hs.sum(dim=1) / mask.sum(dim=1)).cpu().numpy()
+            # Masked mean pooling at encoder-frame resolution.
+            masked_hs = hs * frame_mask
+            valid_frame_count = frame_mask.sum(dim=1).clamp(min=1.0)
+            pooled = (masked_hs.sum(dim=1) / valid_frame_count).cpu().numpy()
             layer_features[layer_idx].append(pooled)
 
     return {k: np.concatenate(v, axis=0) for k, v in layer_features.items()}

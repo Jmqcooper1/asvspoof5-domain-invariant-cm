@@ -255,6 +255,10 @@ dev = [
     { name = "ruff" },
 ]
 trillsson = [
+    { name = "pyarrow" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "soundfile" },
     { name = "tensorflow" },
     { name = "tensorflow-hub" },
 ]
@@ -274,6 +278,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.0" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "pyarrow", marker = "extra == 'trillsson'", specifier = ">=14.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -281,8 +286,10 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
     { name = "scikit-learn", specifier = ">=1.5" },
     { name = "scipy", specifier = ">=1.14" },
+    { name = "scipy", marker = "extra == 'trillsson'", specifier = ">=1.11" },
     { name = "seaborn", specifier = ">=0.13" },
     { name = "soundfile", specifier = ">=0.12" },
+    { name = "soundfile", marker = "extra == 'trillsson'", specifier = ">=0.12" },
     { name = "tensorflow", marker = "extra == 'trillsson'" },
     { name = "tensorflow-hub", marker = "extra == 'trillsson'" },
     { name = "torch", specifier = ">=2.5" },
