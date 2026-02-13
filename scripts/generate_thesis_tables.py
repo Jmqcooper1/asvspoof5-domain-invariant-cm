@@ -33,6 +33,7 @@ import argparse
 import csv
 import json
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -44,8 +45,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-MODEL_RUN_DIR = {
+MODEL_RUN_DIRS = {
     "wavlm_erm": "wavlm_erm",
     "wavlm_dann": "wavlm_dann",
     "w2v2_erm": "w2v2_erm",
@@ -56,31 +56,15 @@ MODEL_RUN_DIR = {
     "trillsson_mlp": "trillsson_mlp",
 }
 
-# Matches notebook naming for shared models.
 MODEL_LABELS = {
     "wavlm_erm": "WavLM ERM",
     "wavlm_dann": "WavLM DANN",
-    "w2v2_erm": "Wav2Vec2 ERM",
-    "w2v2_dann": "Wav2Vec2 DANN v1",
-    "w2v2_dann_v2": "Wav2Vec2 DANN v2",
+    "w2v2_erm": "W2V2 ERM",
+    "w2v2_dann": "W2V2 DANN v1",
+    "w2v2_dann_v2": "W2V2 DANN v2",
     "lfcc_gmm": "LFCC-GMM",
     "trillsson_logistic": "TRILLsson Logistic",
     "trillsson_mlp": "TRILLsson MLP",
-}
-
-MODEL_ORDER = list(MODEL_RUN_DIR.keys())
-PRIMARY_MODEL_KEYS = ["wavlm_erm", "wavlm_dann", "w2v2_erm", "w2v2_dann"]
-CODEC_ORDER = ["C01", "C02", "C03", "C04", "C05", "C06", "C07", "C08", "C09", "C10", "C11", "NONE"]
-GAP_BASELINE_MODEL = {"wavlm_dann": "wavlm_erm", "w2v2_dann": "w2v2_erm", "w2v2_dann_v2": "w2v2_erm"}
-MODEL_METADATA = {
-    "wavlm_erm": ("ERM", "WavLM"),
-    "wavlm_dann": ("DANN", "WavLM"),
-    "w2v2_erm": ("ERM", "Wav2Vec2"),
-    "w2v2_dann": ("DANN v1", "Wav2Vec2"),
-    "w2v2_dann_v2": ("DANN v2", "Wav2Vec2"),
-    "lfcc_gmm": ("GMM", "LFCC"),
-    "trillsson_logistic": ("Logistic", "TRILLsson"),
-    "trillsson_mlp": ("MLP", "TRILLsson"),
 }
 
 
@@ -108,150 +92,146 @@ def safe_get(data: Optional[Dict], *keys, default=None):
     return data
 
 
-def get_nested_float(data: Dict[str, Any], *keys: str) -> Optional[float]:
-    value = safe_get(data, *keys, default=None)
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
+def get_best_dev_eer(logs_path: Path) -> Optional[float]:
+    """Extract best validation EER from logs.jsonl."""
+    if not logs_path.exists():
         return None
 
+    latest_best_event_eer: Optional[float] = None
+    latest_message_best_eer: Optional[float] = None
+    latest_epoch_val_eer: Optional[float] = None
 
-def get_first_numeric_value(data: Dict[str, Any], keys: List[str]) -> Optional[float]:
-    for key in keys:
-        if key in data and data[key] is not None:
+    with logs_path.open("r", encoding="utf-8") as logs_file:
+        for raw_line in logs_file:
+            line = raw_line.strip()
+            if not line:
+                continue
             try:
-                return float(data[key])
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            if entry.get("event_type") == "epoch_complete":
+                event_data = entry.get("data", {})
+                if event_data.get("is_best"):
+                    candidate_eer = safe_get(event_data, "val", "eer", default=None)
+                    try:
+                        if candidate_eer is not None:
+                            latest_best_event_eer = float(candidate_eer)
+                    except (TypeError, ValueError):
+                        pass
+
+            message = str(entry.get("message", ""))
+            new_best_match = re.search(r"New best eer:\s*([0-9]*\.?[0-9]+)", message)
+            if new_best_match:
+                try:
+                    latest_message_best_eer = float(new_best_match.group(1))
+                except ValueError:
+                    pass
+
+            epoch_val_match = re.search(r"Epoch\s+\d+\s+val:.*eer=([0-9]*\.?[0-9]+)", message)
+            if epoch_val_match:
+                try:
+                    latest_epoch_val_eer = float(epoch_val_match.group(1))
+                except ValueError:
+                    pass
+
+    if latest_best_event_eer is not None:
+        return latest_best_event_eer
+    if latest_message_best_eer is not None:
+        return latest_message_best_eer
+    return latest_epoch_val_eer
+
+
+def extract_dev_eer_from_metrics_payload(payload: Dict[str, Any]) -> Optional[float]:
+    for key in ["val_eer", "dev_eer", "eer"]:
+        value = payload.get(key)
+        if value is not None:
+            try:
+                return float(value)
             except (TypeError, ValueError):
                 continue
+
+    final_val_eer = safe_get(payload, "final_val", "eer", default=None)
+    if final_val_eer is not None:
+        try:
+            return float(final_val_eer)
+        except (TypeError, ValueError):
+            pass
+
+    best_eer = payload.get("best_eer")
+    if best_eer is not None:
+        try:
+            return float(best_eer)
+        except (TypeError, ValueError):
+            pass
+
     return None
 
 
-def extract_dev_eer_from_payload(payload: Dict[str, Any]) -> Optional[float]:
-    direct_value = get_first_numeric_value(payload, ["val_eer", "dev_eer", "eer"])
-    if direct_value is not None:
-        return direct_value
-    final_val_eer = get_nested_float(payload, "final_val", "eer")
-    if final_val_eer is not None:
-        return final_val_eer
-    return get_first_numeric_value(payload, ["best_eer"])
+def load_main_results_from_runs(results_dir: Path) -> Dict[str, Dict[str, Optional[float]]]:
+    """Load eval metrics and dev EER from runs directory structure."""
+    results: Dict[str, Dict[str, Optional[float]]] = {}
 
+    for model_key, run_dir_name in MODEL_RUN_DIRS.items():
+        model_dir = results_dir / run_dir_name
+        eval_metrics_path = model_dir / "eval_eval" / "metrics.json"
+        if not eval_metrics_path.exists():
+            continue
 
-def load_eval_results_from_runs(results_dir: Path) -> Dict[str, Dict[str, Any]]:
-    """Load eval metrics from results/runs/*/eval_eval/metrics.json."""
-    results: Dict[str, Dict[str, Any]] = {}
-    for model_key in MODEL_ORDER:
-        run_dir = MODEL_RUN_DIR[model_key]
-        metrics_path = results_dir / run_dir / "eval_eval" / "metrics.json"
-        if not metrics_path.exists():
+        eval_payload = load_json(eval_metrics_path)
+        if eval_payload is None:
             continue
-        payload = load_json(metrics_path)
-        if payload is None:
-            continue
-        results[model_key] = {
-            "eval_eer": get_first_numeric_value(payload, ["eer", "eval_eer"]),
-            "eval_mindcf": get_first_numeric_value(payload, ["min_dcf", "eval_mindcf"]),
+
+        eval_eer = eval_payload.get("eer")
+        eval_mindcf = eval_payload.get("min_dcf")
+        model_result: Dict[str, Optional[float]] = {
+            "eval_eer": float(eval_eer) if isinstance(eval_eer, (int, float)) else None,
+            "eval_mindcf": float(eval_mindcf) if isinstance(eval_mindcf, (int, float)) else None,
+            "dev_eer": None,
         }
+
+        dev_eer = get_best_dev_eer(model_dir / "logs.jsonl")
+        if dev_eer is None:
+            for fallback_path in [
+                model_dir / "eval_dev" / "metrics.json",
+                model_dir / "metrics.json",
+                model_dir / "metrics_train.json",
+            ]:
+                if not fallback_path.exists():
+                    continue
+                fallback_payload = load_json(fallback_path)
+                if fallback_payload is None:
+                    continue
+                dev_eer = extract_dev_eer_from_metrics_payload(fallback_payload)
+                if dev_eer is not None:
+                    break
+
+        model_result["dev_eer"] = dev_eer
+        results[model_key] = model_result
+
     return results
 
 
-def load_dev_eer_from_runs(results_dir: Path) -> Dict[str, float]:
-    """Load dev EER with fallback chain.
-
-    1) eval_dev/metrics.json
-    2) metrics.json
-    3) metrics_train.json
-    """
-    dev_values: Dict[str, float] = {}
-    for model_key in MODEL_ORDER:
-        run_dir = MODEL_RUN_DIR[model_key]
-        candidate_paths = [
-            results_dir / run_dir / "eval_dev" / "metrics.json",
-            results_dir / run_dir / "metrics.json",
-            results_dir / run_dir / "metrics_train.json",
-        ]
-        for path in candidate_paths:
-            if not path.exists():
-                continue
-            payload = load_json(path)
-            if payload is None:
-                continue
-            dev_eer = extract_dev_eer_from_payload(payload)
-            if dev_eer is not None:
-                dev_values[model_key] = dev_eer
-                break
-    return dev_values
-
-
 def load_per_codec_from_runs(results_dir: Path) -> Dict[str, Dict[str, float]]:
-    """Load codec-wise EER values from metrics_by_codec.csv for all models."""
+    """Load per-codec EER from eval tables under results/runs."""
     per_codec: Dict[str, Dict[str, float]] = {}
-    for model_key in MODEL_ORDER:
-        run_dir = MODEL_RUN_DIR[model_key]
-        csv_path = results_dir / run_dir / "eval_eval" / "tables" / "metrics_by_codec.csv"
+    for model_key, run_dir_name in MODEL_RUN_DIRS.items():
+        csv_path = results_dir / run_dir_name / "eval_eval" / "tables" / "metrics_by_codec.csv"
         if not csv_path.exists():
             continue
-        with csv_path.open(newline="") as f:
-            reader = csv.DictReader(f)
+        with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
+            reader = csv.DictReader(csv_file)
             for row in reader:
                 codec = row.get("domain")
                 eer_raw = row.get("eer")
                 if not codec or eer_raw is None:
                     continue
                 try:
-                    eer = float(eer_raw)
+                    per_codec.setdefault(codec, {})[model_key] = float(eer_raw)
                 except (TypeError, ValueError):
                     continue
-                per_codec.setdefault(codec, {})[model_key] = eer
     return per_codec
-
-
-def merge_main_results_from_runs(results_dir: Path) -> Optional[Dict[str, Dict[str, Any]]]:
-    eval_results = load_eval_results_from_runs(results_dir)
-    dev_values = load_dev_eer_from_runs(results_dir)
-    if not eval_results and not dev_values:
-        return None
-    merged: Dict[str, Dict[str, Any]] = {}
-    for model_key in MODEL_ORDER:
-        if model_key not in eval_results and model_key not in dev_values:
-            continue
-        merged[model_key] = {}
-        if model_key in eval_results:
-            merged[model_key].update(eval_results[model_key])
-        if model_key in dev_values:
-            merged[model_key]["dev_eer"] = dev_values[model_key]
-    return merged
-
-
-def format_optional_percent(value: Optional[Any]) -> str:
-    if value is None:
-        return "-"
-    try:
-        return f"{float(value) * 100:.2f}"
-    except (TypeError, ValueError):
-        return "-"
-
-
-def format_optional_decimal(value: Optional[Any], precision: int = 4) -> str:
-    if value is None:
-        return "-"
-    try:
-        return f"{float(value):.{precision}f}"
-    except (TypeError, ValueError):
-        return "-"
-
-
-def get_ordered_available_models(
-    data: Optional[Dict[str, Any]],
-    default_models: Optional[List[str]] = None,
-) -> List[str]:
-    if default_models is None:
-        default_models = PRIMARY_MODEL_KEYS
-    if data is None:
-        return default_models
-    available = [model for model in MODEL_ORDER if model in data]
-    return available or default_models
 
 
 # ---------------------------------------------------------------------------
@@ -333,26 +313,37 @@ def generate_t1_main_results(
     
     headers = ["Model", "Backbone", "Dev EER (%)", "Eval EER (%)", "Eval minDCF"]
     
+    # Default/placeholder data if no results file
     if main_results is None:
         rows = [
-            ["ERM", "WavLM", "-", "-", "-"],
-            ["DANN", "WavLM", "-", "-", "-"],
-            ["ERM", "Wav2Vec2", "-", "-", "-"],
-            ["DANN", "Wav2Vec2", "-", "-", "-"],
+            ["ERM", "WavLM", "—", "—", "—"],
+            ["DANN", "WavLM", "—", "—", "—"],
+            ["ERM", "W2V2", "—", "—", "—"],
+            ["DANN", "W2V2", "—", "—", "—"],
         ]
-        logger.warning("Using placeholder data for T1 (no loaded main results)")
+        logger.warning("Using placeholder data for T1 (no main_results.json)")
     else:
         rows = []
-        for model_key in get_ordered_available_models(main_results):
+        model_order = ["wavlm_erm", "wavlm_dann", "w2v2_erm", "w2v2_dann", "w2v2_dann_v2"]
+        for model_key in model_order:
+            if model_key not in main_results:
+                continue
             model_data = main_results.get(model_key, {})
-            method, backbone = MODEL_METADATA.get(
-                model_key,
-                (MODEL_LABELS.get(model_key, model_key), "Unknown"),
-            )
-            dev_eer = format_optional_percent(model_data.get("dev_eer"))
-            eval_eer = format_optional_percent(model_data.get("eval_eer"))
-            eval_mindcf = format_optional_decimal(model_data.get("eval_mindcf"), precision=4)
-            rows.append([method, backbone, dev_eer, eval_eer, eval_mindcf])
+            backbone = "WavLM" if "wavlm" in model_key else "W2V2"
+            method = "DANN v2" if model_key == "w2v2_dann_v2" else ("DANN" if "dann" in model_key else "ERM")
+            
+            dev_eer = model_data.get("dev_eer", "—")
+            eval_eer = model_data.get("eval_eer", "—")
+            eval_mindcf = model_data.get("eval_mindcf", "—")
+            
+            if isinstance(dev_eer, float):
+                dev_eer = f"{dev_eer * 100:.2f}"
+            if isinstance(eval_eer, float):
+                eval_eer = f"{eval_eer * 100:.2f}"
+            if isinstance(eval_mindcf, float):
+                eval_mindcf = f"{eval_mindcf:.4f}"
+            
+            rows.append([method, backbone, str(dev_eer), str(eval_eer), str(eval_mindcf)])
     
     save_table(
         output_dir, "T1_main_results", headers, rows,
@@ -372,32 +363,33 @@ def generate_t2_per_codec(
     """Generate T2: Per-codec EER comparison table."""
     logger.info("Generating T2: Per-Codec EER Comparison")
     
-    models = PRIMARY_MODEL_KEYS
+    model_order = list(MODEL_RUN_DIRS.keys())
     if per_codec:
-        discovered_models = {model for codec_values in per_codec.values() for model in codec_values}
-        models = [model for model in MODEL_ORDER if model in discovered_models]
-        if not models:
-            models = PRIMARY_MODEL_KEYS
-
-    headers = ["Codec"] + [MODEL_LABELS.get(model, model) for model in models]
-
-    codecs = [codec for codec in CODEC_ORDER if per_codec is None or codec in per_codec]
-    if per_codec:
-        extras = sorted(codec for codec in per_codec if codec not in CODEC_ORDER)
-        codecs.extend(extras)
-    if not codecs:
-        codecs = CODEC_ORDER
-
+        available_models = {
+            model_key
+            for codec_payload in per_codec.values()
+            for model_key in codec_payload.keys()
+        }
+        model_order = [key for key in model_order if key in available_models]
+    headers = ["Codec"] + [MODEL_LABELS.get(key, key) for key in model_order]
+    
+    # Default codec list
+    codecs = ["C01", "C02", "C03", "C04", "C05", "C06", 
+              "C07", "C08", "C09", "C10", "C11", "NONE"]
+    
     if per_codec is None:
-        rows = [[codec] + ["-"] * len(models) for codec in codecs]
-        logger.warning("Using placeholder data for T2 (no loaded per-codec data)")
+        rows = [[codec] + ["—"] * len(model_order) for codec in codecs]
+        logger.warning("Using placeholder data for T2 (no per_codec_eer.json)")
     else:
         rows = []
         for codec in codecs:
             codec_data = per_codec.get(codec, {})
             row = [codec]
-            for model in models:
-                row.append(format_optional_percent(codec_data.get(model)))
+            for model in model_order:
+                eer = codec_data.get(model, "—")
+                if isinstance(eer, float):
+                    eer = f"{eer * 100:.2f}"
+                row.append(str(eer))
             rows.append(row)
     
     save_table(
@@ -422,59 +414,52 @@ def generate_t3_ood_gap(
     
     if main_results is None:
         rows = [
-            ["ERM", "WavLM", "-", "-", "-", "-"],
-            ["DANN", "WavLM", "-", "-", "-", "-"],
-            ["ERM", "Wav2Vec2", "-", "-", "-", "-"],
-            ["DANN", "Wav2Vec2", "-", "-", "-", "-"],
+            ["ERM", "WavLM", "—", "—", "—", "—"],
+            ["DANN", "WavLM", "—", "—", "—", "—"],
+            ["ERM", "W2V2", "—", "—", "—", "—"],
+            ["DANN", "W2V2", "—", "—", "—", "—"],
         ]
-        logger.warning("Using placeholder data for T3 (no loaded main results)")
+        logger.warning("Using placeholder data for T3 (no main_results.json)")
     else:
         rows = []
-        available_models = get_ordered_available_models(main_results)
-        gap_by_model: Dict[str, Optional[float]] = {}
+        # Calculate baseline gaps for each backbone
+        for backbone in ["wavlm", "w2v2"]:
+            backbone_name = "WavLM" if backbone == "wavlm" else "W2V2"
+            method_pairs = [("ERM", f"{backbone}_erm"), ("DANN", f"{backbone}_dann")]
+            if backbone == "w2v2":
+                method_pairs.append(("DANN v2", "w2v2_dann_v2"))
 
-        for model_key in available_models:
-            model_data = main_results.get(model_key, {})
-            dev_eer = model_data.get("dev_eer")
-            eval_eer = model_data.get("eval_eer")
-            if dev_eer is None or eval_eer is None:
-                gap_by_model[model_key] = None
-                continue
-            try:
-                gap_by_model[model_key] = float(eval_eer) - float(dev_eer)
-            except (TypeError, ValueError):
-                gap_by_model[model_key] = None
-
-        for model_key in available_models:
-            model_data = main_results.get(model_key, {})
-            method, backbone = MODEL_METADATA.get(
-                model_key,
-                (MODEL_LABELS.get(model_key, model_key), "Unknown"),
+            baseline_data = main_results.get(f"{backbone}_erm", {})
+            baseline_dev = baseline_data.get("dev_eer", 0)
+            baseline_eval = baseline_data.get("eval_eer", 0)
+            baseline_gap = (
+                baseline_eval - baseline_dev
+                if isinstance(baseline_dev, float) and isinstance(baseline_eval, float)
+                else None
             )
-            gap_value = gap_by_model.get(model_key)
-            if model_key in GAP_BASELINE_MODEL:
-                baseline_key = GAP_BASELINE_MODEL[model_key]
-                baseline_gap = gap_by_model.get(baseline_key)
-                if baseline_gap is not None and gap_value is not None and baseline_gap > 0:
-                    reduction = (baseline_gap - gap_value) / baseline_gap * 100.0
+
+            for method_name, model_key in method_pairs:
+                model_data = main_results.get(model_key, {})
+                if not model_data:
+                    continue
+            
+                dev = model_data.get("dev_eer", 0)
+                eval_value = model_data.get("eval_eer", 0)
+                gap = (eval_value - dev) if isinstance(dev, float) and isinstance(eval_value, float) else None
+
+                dev_str = f"{dev * 100:.2f}" if isinstance(dev, float) else "—"
+                eval_str = f"{eval_value * 100:.2f}" if isinstance(eval_value, float) else "—"
+                gap_str = f"{gap * 100:.2f}" if gap is not None else "—"
+
+                if method_name == "ERM":
+                    reduction_str = "(baseline)"
+                elif baseline_gap is not None and gap is not None and baseline_gap > 0:
+                    reduction = ((baseline_gap - gap) / baseline_gap) * 100
                     reduction_str = f"{reduction:.1f}\\%"
                 else:
-                    reduction_str = "-"
-            elif model_key.endswith("_erm"):
-                reduction_str = "(baseline)"
-            else:
-                reduction_str = "-"
+                    reduction_str = "—"
 
-            rows.append(
-                [
-                    method,
-                    backbone,
-                    format_optional_percent(model_data.get("dev_eer")),
-                    format_optional_percent(model_data.get("eval_eer")),
-                    format_optional_percent(gap_value),
-                    reduction_str,
-                ]
-            )
+                rows.append([method_name, backbone_name, dev_str, eval_str, gap_str, reduction_str])
     
     save_table(
         output_dir, "T3_ood_gap", headers, rows,
@@ -500,7 +485,7 @@ def generate_t4_projection_probes(
     
     for backbone_name, proj_data in [("WavLM", projection_wavlm), ("W2V2", projection_w2v2)]:
         if proj_data is None:
-            rows.append([backbone_name, "-", "-", "-", "-"])
+            rows.append([backbone_name, "—", "—", "—", "—"])
             continue
         
         erm_acc = safe_get(proj_data, "results", "erm", "codec", "accuracy", default=None)
@@ -508,10 +493,10 @@ def generate_t4_projection_probes(
         reduction = safe_get(proj_data, "comparison", "codec", "reduction", default=None)
         rel_reduction = safe_get(proj_data, "comparison", "codec", "relative_reduction", default=None)
         
-        erm_str = f"{erm_acc:.3f}" if erm_acc is not None else "-"
-        dann_str = f"{dann_acc:.3f}" if dann_acc is not None else "-"
-        red_str = f"{reduction:.3f}" if reduction is not None else "-"
-        rel_str = f"{rel_reduction * 100:.1f}\\%" if rel_reduction is not None else "-"
+        erm_str = f"{erm_acc:.3f}" if erm_acc is not None else "—"
+        dann_str = f"{dann_acc:.3f}" if dann_acc is not None else "—"
+        red_str = f"{reduction:.3f}" if reduction is not None else "—"
+        rel_str = f"{rel_reduction * 100:.1f}\\%" if rel_reduction is not None else "—"
         
         rows.append([backbone_name, erm_str, dann_str, red_str, rel_str])
     
@@ -530,13 +515,14 @@ def generate_t5_dataset_stats(output_dir: Path) -> bool:
     """Generate T5: Dataset statistics table."""
     logger.info("Generating T5: Dataset Statistics")
     
-    headers = ["Split", "Bonafide", "Spoof", "Total", "Codecs", "Duration (h)"]
+    headers = ["Split", "Bonafide", "Spoof", "Total", "Codecs"]
     
-    # These are the official ASVspoof 5 Track 1 statistics
+    # Counts are aligned to project-observed protocol/eval outputs.
+    # Duration hours require audio-level metadata aggregation and are left as TBD.
     rows = [
-        ["Train", "18,797", "163,560", "182,357", "—", "~144"],
-        ["Dev", "31,336", "108,978", "140,314", "—", "~100"],
-        ["Eval", "133,320", "542,751", "676,071", "12", "~550"],
+        ["Train", "18,797", "163,560", "182,357", "—"],
+        ["Dev", "31,334", "109,616", "140,950", "—"],
+        ["Eval", "138,688", "542,086", "680,774", "12"],
     ]
     
     save_table(
@@ -554,13 +540,13 @@ def generate_t6_augmentation(output_dir: Path) -> bool:
     """Generate T6: Synthetic augmentation coverage table."""
     logger.info("Generating T6: Synthetic Augmentation Coverage")
     
-    headers = ["Codec", "Quality Levels", "Bitrates"]
-    
-    # Synthetic augmentation config
+    headers = ["Codec", "Quality Levels", "Bitrates", "Configured", "Observed in runs"]
+
+    # Matches config request (MP3/AAC/OPUS) and observed ffmpeg support in logs.
     rows = [
-        ["MP3 (libmp3lame)", "4", "64k, 96k, 128k, 192k"],
-        ["AAC (aac)", "4", "64k, 96k, 128k, 192k"],
-        ["Opus (libopus)", "4", "32k, 64k, 96k, 128k"],
+        ["MP3 (libmp3lame)", "5 (1-5)", "64k, 96k, 128k, 192k, 256k", "Yes", "Yes"],
+        ["AAC (aac)", "5 (1-5)", "32k, 64k, 96k, 128k, 192k", "Yes", "Yes"],
+        ["Opus (libopus)", "5 (1-5)", "12k, 24k, 48k, 64k, 96k", "Yes", "No (ffmpeg unsupported)"],
     ]
     
     save_table(
@@ -578,34 +564,40 @@ def generate_t7_hyperparameters(output_dir: Path) -> bool:
     """Generate T7: Hyperparameters table."""
     logger.info("Generating T7: Hyperparameters")
     
-    headers = ["Category", "Parameter", "Value"]
-    
+    headers = [
+        "Parameter",
+        "WavLM ERM",
+        "WavLM DANN",
+        "W2V2 ERM",
+        "W2V2 DANN",
+        "LFCC-GMM",
+        "TRILLsson Logistic",
+        "TRILLsson MLP",
+    ]
+
+    # Values taken from configs/*.yaml and results/runs/* metrics where applicable.
     rows = [
-        # Model architecture
-        ["Architecture", "Backbone", "WavLM Base+ / W2V2 Base"],
-        ["", "Backbone layers", "12 (frozen)"],
-        ["", "Projection dim", "256"],
-        ["", "Classifier hidden", "256"],
-        ["", "Domain head hidden", "256"],
-        # Training
-        ["Training", "Batch size", "32"],
-        ["", "Learning rate", "1e-4"],
-        ["", "Optimizer", "AdamW"],
-        ["", "Weight decay", "0.01"],
-        ["", "Epochs", "10"],
-        ["", "Early stopping", "Patience 3"],
-        # DANN-specific
-        ["DANN", r"$\\lambda$ schedule", "Linear ramp 0→1"],
-        ["", "GRL", "Gradient reversal layer"],
-        ["", "Domain targets", "CODEC + CODEC\\_Q"],
-        # Regularization
-        ["Regularization", "Dropout", "0.1"],
-        ["", "Label smoothing", "0.0"],
+        ["Model type", "SSL + linear head", "SSL + DANN", "SSL + linear head", "SSL + DANN", "GMM baseline", "Linear baseline", "MLP baseline"],
+        ["Backbone/features", "WavLM Base+", "WavLM Base+", "Wav2Vec2 Base", "Wav2Vec2 Base", "LFCC (120-dim)", "TRILLsson (1024-dim)", "TRILLsson (1024-dim)"],
+        ["Layer selection", "weighted (k=6)", "weighted (k=6)", "weighted (k=6)", "weighted (k=6)", "—", "—", "—"],
+        ["Backbone frozen", "true", "true", "true", "true", "—", "—", "—"],
+        ["Projection output dim", "256", "256", "256", "256", "—", "—", "—"],
+        ["Batch size", "256", "256", "256", "256", "—", "—", "—"],
+        ["Learning rate", "1e-4", "1e-4", "5e-5", "5e-5", "—", "—", "—"],
+        ["Optimizer", "AdamW", "AdamW", "AdamW", "AdamW", "—", "scikit-learn", "scikit-learn"],
+        ["Weight decay", "0.01", "0.01", "0.01", "0.01", "—", "—", "—"],
+        ["Max epochs", "50", "50", "50", "50", "—", "—", "—"],
+        ["Patience", "10", "10", "10", "10", "—", "—", "—"],
+        ["Gradient clip", "1.0", "0.5", "0.5", "0.5", "—", "—", "—"],
+        [r"$\\lambda$ schedule", "N/A (ERM)", "linear 0.1→0.75 (warmup 3)", "N/A (ERM)", "exponential 0.01→1.0", "N/A", "N/A", "N/A"],
+        ["Augmentation codecs", "N/A", "MP3, AAC, OPUS", "N/A", "MP3, AAC, OPUS", "N/A", "N/A", "N/A"],
+        ["Augmentation qualities", "N/A", "1-5", "N/A", "1-5", "N/A", "N/A", "N/A"],
+        ["Random seed", "42", "42", "42", "42", "42", "42", "42"],
     ]
     
     save_table(
         output_dir, "T7_hyperparameters", headers, rows,
-        caption="Training Hyperparameters",
+        caption="Key Hyperparameters by Model Family",
         label="tab:hyperparameters",
     )
     return True
@@ -621,24 +613,24 @@ def parse_args() -> argparse.Namespace:
         epilog=__doc__,
     )
     
-    # Input paths and optional JSON overrides
+    # Input files
     p.add_argument(
         "--results-dir",
         type=Path,
         default=Path("results/runs"),
-        help="Runs directory containing model subdirectories",
+        help="Path to runs directory for auto-loading metrics",
     )
     p.add_argument(
         "--main-results",
         type=Path,
         default=None,
-        help="Override path to aggregated main results JSON",
+        help="Path to main results JSON (override runs loading)",
     )
     p.add_argument(
         "--per-codec",
         type=Path,
         default=None,
-        help="Override path to aggregated per-codec EER JSON",
+        help="Path to per-codec EER JSON (override runs loading)",
     )
     p.add_argument(
         "--projection-wavlm",
@@ -686,21 +678,21 @@ def main() -> int:
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     
-    # Load available data (JSON overrides win; otherwise derive from results/runs)
-    if args.main_results:
+    # Load available data
+    if args.main_results is not None:
         main_results = load_json(args.main_results)
     else:
-        main_results = merge_main_results_from_runs(args.results_dir)
-        if main_results is None:
-            logger.warning(f"No run-derived main results found under: {args.results_dir}")
-
-    if args.per_codec:
+        main_results = load_main_results_from_runs(args.results_dir)
+        if not main_results:
+            main_results = None
+            logger.warning(f"No run metrics found in: {args.results_dir}")
+    if args.per_codec is not None:
         per_codec = load_json(args.per_codec)
     else:
-        run_per_codec = load_per_codec_from_runs(args.results_dir)
-        per_codec = run_per_codec if run_per_codec else None
-        if per_codec is None:
-            logger.warning(f"No run-derived per-codec CSVs found under: {args.results_dir}")
+        per_codec = load_per_codec_from_runs(args.results_dir)
+        if not per_codec:
+            per_codec = None
+            logger.warning(f"No per-codec CSV metrics found in: {args.results_dir}")
     projection_wavlm = load_json(args.projection_wavlm)
     projection_w2v2 = load_json(args.projection_w2v2)
     

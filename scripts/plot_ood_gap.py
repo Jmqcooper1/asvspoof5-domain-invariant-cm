@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -36,7 +37,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-MODEL_RUN_DIR = {
+MODEL_RUN_DIRS = {
     "wavlm_erm": "wavlm_erm",
     "wavlm_dann": "wavlm_dann",
     "w2v2_erm": "w2v2_erm",
@@ -46,19 +47,6 @@ MODEL_RUN_DIR = {
     "trillsson_logistic": "trillsson_logistic",
     "trillsson_mlp": "trillsson_mlp",
 }
-
-MODEL_LABELS = {
-    "wavlm_erm": "WavLM ERM",
-    "wavlm_dann": "WavLM DANN",
-    "w2v2_erm": "Wav2Vec2 ERM",
-    "w2v2_dann": "Wav2Vec2 DANN v1",
-    "w2v2_dann_v2": "Wav2Vec2 DANN v2",
-    "lfcc_gmm": "LFCC-GMM",
-    "trillsson_logistic": "TRILLsson Logistic",
-    "trillsson_mlp": "TRILLsson MLP",
-}
-
-MODEL_ORDER = list(MODEL_RUN_DIR.keys())
 
 
 # ---------------------------------------------------------------------------
@@ -114,62 +102,128 @@ def load_main_results(path: Path) -> Dict[str, Any]:
     return data
 
 
-def get_first_numeric_value(data: Dict[str, Any], keys: list[str]) -> Optional[float]:
+def safe_get(data: Optional[Dict[str, Any]], *keys: str, default=None):
+    current: Any = data
     for key in keys:
-        if key in data and data[key] is not None:
+        if isinstance(current, dict) and key in current:
+            current = current[key]
+        else:
+            return default
+    return current
+
+
+def get_best_dev_eer(logs_path: Path) -> Optional[float]:
+    """Extract best validation EER from logs.jsonl."""
+    if not logs_path.exists():
+        return None
+
+    latest_best_event_eer: Optional[float] = None
+    latest_message_best_eer: Optional[float] = None
+    latest_epoch_val_eer: Optional[float] = None
+
+    with logs_path.open("r", encoding="utf-8") as logs_file:
+        for raw_line in logs_file:
+            line = raw_line.strip()
+            if not line:
+                continue
             try:
-                return float(data[key])
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            if entry.get("event_type") == "epoch_complete":
+                event_data = entry.get("data", {})
+                if event_data.get("is_best"):
+                    candidate_eer = safe_get(event_data, "val", "eer", default=None)
+                    try:
+                        if candidate_eer is not None:
+                            latest_best_event_eer = float(candidate_eer)
+                    except (TypeError, ValueError):
+                        pass
+
+            message = str(entry.get("message", ""))
+            new_best_match = re.search(r"New best eer:\s*([0-9]*\.?[0-9]+)", message)
+            if new_best_match:
+                try:
+                    latest_message_best_eer = float(new_best_match.group(1))
+                except ValueError:
+                    pass
+
+            epoch_val_match = re.search(r"Epoch\s+\d+\s+val:.*eer=([0-9]*\.?[0-9]+)", message)
+            if epoch_val_match:
+                try:
+                    latest_epoch_val_eer = float(epoch_val_match.group(1))
+                except ValueError:
+                    pass
+
+    if latest_best_event_eer is not None:
+        return latest_best_event_eer
+    if latest_message_best_eer is not None:
+        return latest_message_best_eer
+    return latest_epoch_val_eer
+
+
+def extract_dev_eer_from_metrics_payload(payload: Dict[str, Any]) -> Optional[float]:
+    for key in ["val_eer", "dev_eer", "eer"]:
+        value = payload.get(key)
+        if value is not None:
+            try:
+                return float(value)
             except (TypeError, ValueError):
                 continue
+
+    final_val_eer = safe_get(payload, "final_val", "eer", default=None)
+    if final_val_eer is not None:
+        try:
+            return float(final_val_eer)
+        except (TypeError, ValueError):
+            pass
+
+    best_eer = payload.get("best_eer")
+    if best_eer is not None:
+        try:
+            return float(best_eer)
+        except (TypeError, ValueError):
+            pass
+
     return None
 
 
-def extract_dev_eer_from_payload(payload: Dict[str, Any]) -> Optional[float]:
-    direct_value = get_first_numeric_value(payload, ["val_eer", "dev_eer", "eer"])
-    if direct_value is not None:
-        return direct_value
-    final_val = payload.get("final_val")
-    if isinstance(final_val, dict) and final_val.get("eer") is not None:
-        try:
-            return float(final_val["eer"])
-        except (TypeError, ValueError):
-            pass
-    return get_first_numeric_value(payload, ["best_eer"])
+def load_main_results_from_runs(results_dir: Path) -> Dict[str, Dict[str, Optional[float]]]:
+    """Load eval metrics and dev EER from runs directory structure."""
+    results: Dict[str, Dict[str, Optional[float]]] = {}
 
-
-def load_main_results_from_runs(results_dir: Path) -> Dict[str, Dict[str, float]]:
-    """Load eval+dev metrics from results/runs model directories."""
-    results: Dict[str, Dict[str, float]] = {}
-    for model_key in MODEL_ORDER:
-        run_dir = MODEL_RUN_DIR[model_key]
-        eval_metrics_path = results_dir / run_dir / "eval_eval" / "metrics.json"
+    for model_key, run_dir_name in MODEL_RUN_DIRS.items():
+        model_dir = results_dir / run_dir_name
+        eval_metrics_path = model_dir / "eval_eval" / "metrics.json"
         if not eval_metrics_path.exists():
             continue
 
         eval_payload = load_main_results(eval_metrics_path)
-        eval_eer = get_first_numeric_value(eval_payload, ["eer", "eval_eer"])
-        eval_mindcf = get_first_numeric_value(eval_payload, ["min_dcf", "eval_mindcf"])
-        model_entry: Dict[str, float] = {}
-        if eval_eer is not None:
-            model_entry["eval_eer"] = eval_eer
-        if eval_mindcf is not None:
-            model_entry["eval_mindcf"] = eval_mindcf
+        eval_eer = eval_payload.get("eer")
+        eval_mindcf = eval_payload.get("min_dcf")
+        model_result: Dict[str, Optional[float]] = {
+            "eval_eer": float(eval_eer) if isinstance(eval_eer, (int, float)) else None,
+            "eval_mindcf": float(eval_mindcf) if isinstance(eval_mindcf, (int, float)) else None,
+            "dev_eer": None,
+        }
 
-        dev_candidate_paths = [
-            results_dir / run_dir / "eval_dev" / "metrics.json",
-            results_dir / run_dir / "metrics.json",
-            results_dir / run_dir / "metrics_train.json",
-        ]
-        for dev_path in dev_candidate_paths:
-            if not dev_path.exists():
-                continue
-            dev_payload = load_main_results(dev_path)
-            dev_eer = extract_dev_eer_from_payload(dev_payload)
-            if dev_eer is not None:
-                model_entry["dev_eer"] = dev_eer
-                break
+        dev_eer = get_best_dev_eer(model_dir / "logs.jsonl")
+        if dev_eer is None:
+            for fallback_path in [
+                model_dir / "eval_dev" / "metrics.json",
+                model_dir / "metrics.json",
+                model_dir / "metrics_train.json",
+            ]:
+                if not fallback_path.exists():
+                    continue
+                fallback_payload = load_main_results(fallback_path)
+                dev_eer = extract_dev_eer_from_metrics_payload(fallback_payload)
+                if dev_eer is not None:
+                    break
 
-        results[model_key] = model_entry
+        model_result["dev_eer"] = dev_eer
+        results[model_key] = model_result
 
     return results
 
@@ -218,10 +272,18 @@ def plot_ood_gap_bars(
     
     fig, ax = plt.subplots(figsize=figsize)
     
-    available_keys = [model_key for model_key in MODEL_ORDER if model_key in data]
-    groups = [(MODEL_LABELS.get(model_key, model_key), model_key) for model_key in available_keys]
-    if not groups:
-        raise ValueError("No model data available for OOD gap bars")
+    # Define groups
+    groups = [
+        ("WavLM ERM", "wavlm_erm"),
+        ("WavLM DANN", "wavlm_dann"),
+        ("W2V2 ERM", "w2v2_erm"),
+        ("W2V2 DANN v1", "w2v2_dann"),
+        ("W2V2 DANN v2", "w2v2_dann_v2"),
+        ("LFCC-GMM", "lfcc_gmm"),
+        ("TRILLsson Logistic", "trillsson_logistic"),
+        ("TRILLsson MLP", "trillsson_mlp"),
+    ]
+    groups = [group for group in groups if group[1] in data]
     
     n_groups = len(groups)
     x = np.arange(n_groups)
@@ -234,13 +296,13 @@ def plot_ood_gap_bars(
     
     for _, key in groups:
         model_data = data.get(key, {})
-        dev_raw = model_data.get("dev_eer")
-        eval_raw = model_data.get("eval_eer")
-        dev_eer = (float(dev_raw) * 100.0) if dev_raw is not None else np.nan
-        eval_eer = (float(eval_raw) * 100.0) if eval_raw is not None else np.nan
+        dev_raw = model_data.get("dev_eer", 0)
+        eval_raw = model_data.get("eval_eer", 0)
+        dev_eer = (dev_raw if isinstance(dev_raw, (int, float)) else 0.0) * 100
+        eval_eer = (eval_raw if isinstance(eval_raw, (int, float)) else 0.0) * 100
         dev_eers.append(dev_eer)
         eval_eers.append(eval_eer)
-        gaps.append(eval_eer - dev_eer if np.isfinite(dev_eer) and np.isfinite(eval_eer) else np.nan)
+        gaps.append(eval_eer - dev_eer)
     
     # Plot bars
     bars_dev = ax.bar(
@@ -261,10 +323,8 @@ def plot_ood_gap_bars(
         alpha=0.85,
     )
     
-    # Add gap arrows and annotations where both dev+eval exist
+    # Add gap arrows and annotations
     for i, (dev_bar, eval_bar, gap) in enumerate(zip(bars_dev, bars_eval, gaps)):
-        if not np.isfinite(gap):
-            continue
         dev_height = dev_bar.get_height()
         eval_height = eval_bar.get_height()
         
@@ -293,23 +353,28 @@ def plot_ood_gap_bars(
             color=COLORS["gap_arrow"],
         )
     
-    # Add reduction callouts for the canonical ERM->DANN pairs when both gaps exist.
-    pair_specs = [("wavlm_erm", "wavlm_dann", "WavLM"), ("w2v2_erm", "w2v2_dann", "Wav2Vec2")]
-    key_to_index = {key: idx for idx, (_, key) in enumerate(groups)}
-    finite_eval_eers = [value for value in eval_eers if np.isfinite(value)]
-    max_y = (max(finite_eval_eers) + 3.0) if finite_eval_eers else 3.0
-    for erm_key, dann_key, label in pair_specs:
-        if erm_key not in key_to_index or dann_key not in key_to_index:
-            continue
-        erm_gap = gaps[key_to_index[erm_key]]
-        dann_gap = gaps[key_to_index[dann_key]]
-        if not np.isfinite(erm_gap) or not np.isfinite(dann_gap) or erm_gap <= 0:
-            continue
-        reduction = (erm_gap - dann_gap) / erm_gap * 100.0
-        mid_x = (key_to_index[erm_key] + key_to_index[dann_key]) / 2.0
+    # Calculate gap reductions
+    max_y = max(eval_eers) + 3 if eval_eers else 1
+
+    key_to_gap = {key: gap for (_, key), gap in zip(groups, gaps)}
+    if "wavlm_erm" in key_to_gap and "wavlm_dann" in key_to_gap and key_to_gap["wavlm_erm"] > 0:
+        wavlm_reduction = ((key_to_gap["wavlm_erm"] - key_to_gap["wavlm_dann"]) / key_to_gap["wavlm_erm"] * 100)
         ax.annotate(
-            f'{label} Gap ↓{reduction:.1f}%',
-            xy=(mid_x, max_y + 1),
+            f'Gap ↓{wavlm_reduction:.1f}%',
+            xy=(0.5, max_y + 1),
+            ha='center', va='bottom',
+            fontsize=11,
+            fontweight='bold',
+            color='#2E7D32',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='#E8F5E9', edgecolor='#2E7D32', alpha=0.8),
+        )
+
+    if "w2v2_erm" in key_to_gap and "w2v2_dann" in key_to_gap and key_to_gap["w2v2_erm"] > 0:
+        w2v2_reduction = ((key_to_gap["w2v2_erm"] - key_to_gap["w2v2_dann"]) / key_to_gap["w2v2_erm"] * 100)
+        x_anchor = 2.5 if len(groups) >= 4 else max(0.5, len(groups) - 1)
+        ax.annotate(
+            f'Gap ↓{w2v2_reduction:.1f}%',
+            xy=(x_anchor, max_y + 1),
             ha='center', va='bottom',
             fontsize=11,
             fontweight='bold',
@@ -323,15 +388,16 @@ def plot_ood_gap_bars(
     ax.set_title('OOD Generalization Gap: Dev (In-Domain) vs Eval (Out-of-Domain)')
     
     ax.set_xticks(x)
-    ax.set_xticklabels([g[0] for g in groups], rotation=20, ha='right')
+    ax.set_xticklabels([g[0] for g in groups])
     
     # Y-axis limits
-    finite_values = [value for value in dev_eers + eval_eers if np.isfinite(value)]
-    y_max = max(finite_values) + 6 if finite_values else 10
-    ax.set_ylim(0, y_max)
+    ax.set_ylim(0, max(eval_eers) + 6)
+    
+    if len(groups) >= 4:
+        ax.axvline(x=1.5, color='gray', linestyle='--', alpha=0.5, linewidth=1)
     
     # Legend
-    ax.legend(loc='upper left', framealpha=0.9)
+    ax.legend(loc='upper right', framealpha=0.9)
     
     plt.tight_layout()
     
@@ -350,28 +416,28 @@ def plot_ood_gap_slope(
     
     fig, ax = plt.subplots(figsize=figsize)
     
-    marker_cycle = ["o", "s", "^", "D", "v", "P", "X", "*"]
-    color_cycle = ["#E57373", "#64B5F6", "#FFB74D", "#81C784", "#BA68C8", "#A1887F", "#4DB6AC", "#9575CD"]
-    available_models = [model_key for model_key in MODEL_ORDER if model_key in data]
-    if not available_models:
-        raise ValueError("No model data available for OOD gap slope")
+    # Define models and their properties
+    models = {
+        "wavlm_erm": {"label": "WavLM ERM", "color": "#E57373", "marker": "o", "linestyle": "-"},
+        "wavlm_dann": {"label": "WavLM DANN", "color": "#64B5F6", "marker": "s", "linestyle": "-"},
+        "w2v2_erm": {"label": "W2V2 ERM", "color": "#FFB74D", "marker": "^", "linestyle": "--"},
+        "w2v2_dann": {"label": "W2V2 DANN v1", "color": "#81C784", "marker": "D", "linestyle": "--"},
+        "w2v2_dann_v2": {"label": "W2V2 DANN v2", "color": "#BA68C8", "marker": "v", "linestyle": "--"},
+        "lfcc_gmm": {"label": "LFCC-GMM", "color": "#A1887F", "marker": "P", "linestyle": "-."},
+        "trillsson_logistic": {"label": "TRILLsson Logistic", "color": "#4DB6AC", "marker": "X", "linestyle": "-."},
+        "trillsson_mlp": {"label": "TRILLsson MLP", "color": "#9575CD", "marker": "*", "linestyle": "-."},
+    }
     
     x_positions = [0, 1]  # Dev (0) and Eval (1)
     
-    for idx, model_key in enumerate(available_models):
-        props = {
-            "label": MODEL_LABELS.get(model_key, model_key),
-            "color": color_cycle[idx % len(color_cycle)],
-            "marker": marker_cycle[idx % len(marker_cycle)],
-            "linestyle": "-" if "erm" in model_key else "--",
-        }
-        model_data = data.get(model_key, {})
-        dev_raw = model_data.get("dev_eer")
-        eval_raw = model_data.get("eval_eer")
-        if dev_raw is None or eval_raw is None:
+    for model_key, props in models.items():
+        if model_key not in data:
             continue
-        dev_eer = float(dev_raw) * 100
-        eval_eer = float(eval_raw) * 100
+        model_data = data.get(model_key, {})
+        dev_raw = model_data.get("dev_eer", 0)
+        eval_raw = model_data.get("eval_eer", 0)
+        dev_eer = (dev_raw if isinstance(dev_raw, (int, float)) else 0.0) * 100
+        eval_eer = (eval_raw if isinstance(eval_raw, (int, float)) else 0.0) * 100
         
         ax.plot(
             x_positions, [dev_eer, eval_eer],
@@ -403,7 +469,7 @@ def plot_ood_gap_slope(
     ax.set_xlim(-0.2, 1.4)
     
     # Legend
-    ax.legend(loc='upper left', framealpha=0.9)
+    ax.legend(loc='upper left', framealpha=0.9, ncol=2)
     
     plt.tight_layout()
     
@@ -424,13 +490,13 @@ def parse_args() -> argparse.Namespace:
         "--results-dir",
         type=Path,
         default=Path("results/runs"),
-        help="Runs directory containing model subdirectories",
+        help="Path to runs directory for auto-loading metrics",
     )
     p.add_argument(
         "--input",
         type=Path,
         default=None,
-        help="Override path to main results JSON",
+        help="Path to main results JSON (override runs loading)",
     )
     p.add_argument(
         "--output",
@@ -481,7 +547,7 @@ def main() -> int:
     # Load or generate data
     if args.demo:
         data = generate_demo_data()
-    elif args.input:
+    elif args.input is not None:
         if not args.input.exists():
             logger.error(f"Input file not found: {args.input}")
             logger.info("Use --demo or omit --input to load from --results-dir")
@@ -490,8 +556,7 @@ def main() -> int:
     else:
         data = load_main_results_from_runs(args.results_dir)
         if not data:
-            logger.error(f"No run-derived metrics found under: {args.results_dir}")
-            logger.info("Use --demo for synthetic data or --input for JSON override")
+            logger.error(f"No run metrics found in: {args.results_dir}")
             return 1
     
     # Output directory
@@ -536,31 +601,33 @@ def main() -> int:
     logger.info("OOD Gap Figure Summary")
     logger.info("=" * 60)
     
-    for model_key in [key for key in MODEL_ORDER if key in data]:
-        model_data = data.get(model_key, {})
-        dev_eer = model_data.get("dev_eer")
-        eval_eer = model_data.get("eval_eer")
-        if dev_eer is None or eval_eer is None:
-            logger.info(f"{model_key}: Dev=-, Eval={eval_eer * 100:.2f}% (gap unavailable)" if eval_eer is not None else f"{model_key}: Dev=-, Eval=-, gap unavailable")
+    for model_key in [
+        "wavlm_erm",
+        "wavlm_dann",
+        "w2v2_erm",
+        "w2v2_dann",
+        "w2v2_dann_v2",
+        "lfcc_gmm",
+        "trillsson_logistic",
+        "trillsson_mlp",
+    ]:
+        if model_key not in data:
             continue
+        model_data = data.get(model_key, {})
+        dev_raw = model_data.get("dev_eer", 0)
+        eval_raw = model_data.get("eval_eer", 0)
+        dev_eer = float(dev_raw) if isinstance(dev_raw, (int, float)) else 0.0
+        eval_eer = float(eval_raw) if isinstance(eval_raw, (int, float)) else 0.0
         gap = (eval_eer - dev_eer) * 100
         logger.info(f"{model_key}: Dev={dev_eer*100:.2f}%, Eval={eval_eer*100:.2f}%, Gap={gap:.2f}%")
     
     # Calculate reductions
-    wavlm_erm = data.get("wavlm_erm", {})
-    wavlm_dann = data.get("wavlm_dann", {})
-    wavlm_erm_gap = (
-        wavlm_erm["eval_eer"] - wavlm_erm["dev_eer"]
-        if wavlm_erm.get("eval_eer") is not None and wavlm_erm.get("dev_eer") is not None
-        else None
-    )
-    wavlm_dann_gap = (
-        wavlm_dann["eval_eer"] - wavlm_dann["dev_eer"]
-        if wavlm_dann.get("eval_eer") is not None and wavlm_dann.get("dev_eer") is not None
-        else None
-    )
-
-    if wavlm_erm_gap is not None and wavlm_dann_gap is not None and wavlm_erm_gap > 0:
+    wavlm_erm_gap = (data.get("wavlm_erm", {}).get("eval_eer", 0) - 
+                    data.get("wavlm_erm", {}).get("dev_eer", 0))
+    wavlm_dann_gap = (data.get("wavlm_dann", {}).get("eval_eer", 0) - 
+                     data.get("wavlm_dann", {}).get("dev_eer", 0))
+    
+    if wavlm_erm_gap > 0:
         wavlm_reduction = (wavlm_erm_gap - wavlm_dann_gap) / wavlm_erm_gap * 100
         logger.info(f"\nWavLM Gap Reduction: {wavlm_reduction:.1f}%")
     
