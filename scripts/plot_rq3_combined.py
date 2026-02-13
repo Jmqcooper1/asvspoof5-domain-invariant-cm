@@ -277,7 +277,7 @@ def plot_backbone_panel(
     ax.set_ylim(0, 1.0)
     
     if show_legend:
-        ax.legend(loc='lower left', framealpha=0.9)
+        ax.legend(loc='upper right', framealpha=0.9)
 
 
 def plot_projection_panel(
@@ -469,23 +469,19 @@ def _plot_projection_panel_dual(
         label=f'Chance ({CHANCE_LEVEL:.3f})',
     )
     
-    # Add reduction annotations below x-axis under each backbone group.
-    # Use axis transform so x follows data coordinates while y is axis-relative.
-    reduction_label_y = -0.17
-
+    # Add reduction annotations for each backbone
+    y_annot = 0.08
+    
     # WavLM reduction
     if "comparison" in projection_data_wavlm:
         comp = projection_data_wavlm["comparison"]
         rel_red = comp.get("relative_reduction", 0) * 100
         ax.annotate(
             f'↓{rel_red:.1f}%',
-            xy=(0.5, reduction_label_y),
+            xy=(0.5, min(wavlm_accs) - 0.06),
             ha='center', va='top',
             fontsize=10, fontweight='bold',
-            color='#333333',
-            transform=ax.get_xaxis_transform(),
-            clip_on=False,
-            annotation_clip=False,
+            color=COLORS["wavlm"],
         )
     
     # W2V2 reduction
@@ -494,13 +490,10 @@ def _plot_projection_panel_dual(
         rel_red = comp.get("relative_reduction", 0) * 100
         ax.annotate(
             f'↓{rel_red:.1f}%',
-            xy=(3.0, reduction_label_y),
+            xy=(3.0, min(w2v2_accs) - 0.06),
             ha='center', va='top',
             fontsize=10, fontweight='bold',
-            color='#333333',
-            transform=ax.get_xaxis_transform(),
-            clip_on=False,
-            annotation_clip=False,
+            color=COLORS["w2v2"],
         )
     
     # Formatting
@@ -513,10 +506,10 @@ def _plot_projection_panel_dual(
     ax.set_xticklabels(['ERM', 'DANN', 'ERM', 'DANN'], fontsize=10)
     
     # Add backbone labels below
-    ax.text(0.5, -0.10, 'WavLM', ha='center', va='top',
+    ax.text(0.5, -0.12, 'WavLM', ha='center', va='top', 
             transform=ax.get_xaxis_transform(), fontsize=11, fontweight='bold',
             color=COLORS["wavlm"])
-    ax.text(3.0, -0.10, 'W2V2', ha='center', va='top',
+    ax.text(3.0, -0.12, 'W2V2', ha='center', va='top',
             transform=ax.get_xaxis_transform(), fontsize=11, fontweight='bold',
             color=COLORS["w2v2"])
     
@@ -570,8 +563,7 @@ def create_combined_figure(
         fontsize=14, fontweight='bold', y=1.02,
     )
     
-    # Reserve extra bottom margin for below-axis annotations in the dual projection panel.
-    plt.tight_layout(rect=(0, 0.14, 1, 1))
+    plt.tight_layout()
     
     return fig
 
