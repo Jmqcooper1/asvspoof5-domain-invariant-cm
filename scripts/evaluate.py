@@ -150,8 +150,8 @@ def parse_args():
     parser.add_argument(
         "--max-samples",
         type=int,
-        default=50000,
-        help="Maximum samples for quick-eval/subset mode",
+        default=None,
+        help="Maximum samples for evaluation (default: all samples). Implies --quick-eval if set.",
     )
     parser.add_argument(
         "--subset-seed",
@@ -605,8 +605,9 @@ def main():
 
     # Optional quick-eval subset
     total_samples = len(dataset)
-    if args.quick_eval or (args.max_samples and args.max_samples < total_samples):
-        subset_size = min(args.max_samples, total_samples)
+    max_samples = args.max_samples if args.max_samples is not None else (50000 if args.quick_eval else total_samples)
+    if args.quick_eval or (args.max_samples is not None and args.max_samples < total_samples):
+        subset_size = min(max_samples, total_samples)
         rng = np.random.default_rng(args.subset_seed)
         subset_indices = rng.choice(total_samples, size=subset_size, replace=False)
         dataset = torch.utils.data.Subset(dataset, subset_indices)
