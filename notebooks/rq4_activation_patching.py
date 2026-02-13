@@ -26,7 +26,9 @@ import os
 import sys
 from pathlib import Path
 
-project_root = Path("..").resolve()
+# Resolve project paths from this script location instead of current working directory.
+script_dir = Path(__file__).resolve().parent
+project_root = script_dir.parent
 src_root = project_root / "src"
 for candidate_path in (src_root, project_root):
     candidate_path_str = str(candidate_path)
@@ -380,6 +382,20 @@ def _get_selected_layer_indices(backbone: torch.nn.Module, total_layers: int) ->
     return list(range(total_layers))
 
 
+def _get_model_backbone(model: torch.nn.Module) -> torch.nn.Module:
+    """Return a backbone for representation extraction.
+
+    Supports both plain models (ERM/DANN) and PatchedModel wrappers.
+    """
+    if hasattr(model, "backbone"):
+        return model.backbone
+    if hasattr(model, "base_model") and hasattr(model.base_model, "backbone"):
+        return model.base_model.backbone
+    raise RuntimeError(
+        f"Model of type {type(model).__name__} does not expose a compatible backbone."
+    )
+
+
 @torch.no_grad()
 def extract_layer_representations(
     model: torch.nn.Module,
@@ -420,15 +436,17 @@ def extract_layer_representations(
             layer_reps.setdefault("repr", []).append(outputs["repr"].cpu())
 
         elif representation == "mixed":
-            mixed, _ = model.backbone(waveform, attention_mask)
+            backbone = _get_model_backbone(model)
+            mixed, _ = backbone(waveform, attention_mask)
             layer_reps.setdefault("mixed", []).append(mixed.mean(dim=1).cpu())
 
         elif representation == "layer_contrib":
+            backbone = _get_model_backbone(model)
             total_layers = len(all_hidden_states)
-            selected_indices = _get_selected_layer_indices(model.backbone, total_layers)
+            selected_indices = _get_selected_layer_indices(backbone, total_layers)
             selected_states = [all_hidden_states[idx] for idx in selected_indices]
 
-            layer_pooling = getattr(model.backbone, "layer_pooling", None)
+            layer_pooling = getattr(backbone, "layer_pooling", None)
             if layer_pooling is None or not hasattr(layer_pooling, "weights"):
                 raise RuntimeError("Backbone missing layer_pooling.weights needed for layer_contrib extraction.")
 
@@ -641,6 +659,7 @@ class PatchedModel(torch.nn.Module):
         self.donor_model.eval()
 
         self._donor_activations = {}
+        self._patching_active = False
         self._handles = []
         self._setup_hooks()
 
@@ -684,6 +703,8 @@ class PatchedModel(torch.nn.Module):
 
             def make_patch_hook(idx):
                 def hook(module, input, output):
+                    if not self._patching_active:
+                        return output
                     if idx not in self._donor_activations:
                         return output
 
@@ -736,8 +757,13 @@ class PatchedModel(torch.nn.Module):
         if missing_layers:
             raise RuntimeError(f"Missing donor activations for patch layers: {missing_layers}")
 
-        # Run base model (hooks will patch activations)
-        output = self.base_model(waveform, attention_mask, lengths)
+        # Run base model (hooks patch only while this flag is enabled)
+        self._patching_active = True
+        try:
+            output = self.base_model(waveform, attention_mask, lengths)
+        finally:
+            self._patching_active = False
+            self._donor_activations.clear()
 
         return output
 
@@ -976,15 +1002,17 @@ def extract_representations_for_probing(
                 layer_reps.setdefault("repr", []).append(outputs["repr"].cpu().numpy())
 
             elif representation == "mixed":
-                mixed, _ = model.backbone(waveform, attention_mask)
+                backbone = _get_model_backbone(model)
+                mixed, _ = backbone(waveform, attention_mask)
                 layer_reps.setdefault("mixed", []).append(mixed.mean(dim=1).cpu().numpy())
 
             elif representation == "layer_contrib":
+                backbone = _get_model_backbone(model)
                 total_layers = len(all_hidden_states)
-                selected_indices = _get_selected_layer_indices(model.backbone, total_layers)
+                selected_indices = _get_selected_layer_indices(backbone, total_layers)
                 selected_states = [all_hidden_states[idx] for idx in selected_indices]
 
-                layer_pooling = getattr(model.backbone, "layer_pooling", None)
+                layer_pooling = getattr(backbone, "layer_pooling", None)
                 if layer_pooling is None or not hasattr(layer_pooling, "weights"):
                     raise RuntimeError("Backbone missing layer_pooling.weights needed for layer_contrib probing.")
 
