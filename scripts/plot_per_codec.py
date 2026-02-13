@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import logging
 import sys
@@ -44,13 +45,47 @@ COLORS = {
     "wavlm_dann": "#64B5F6",  # Light blue
     "w2v2_erm": "#FFB74D",    # Light orange
     "w2v2_dann": "#81C784",   # Light green
+    "w2v2_dann_v2": "#BA68C8",
+    "lfcc_gmm": "#A1887F",
+    "trillsson_logistic": "#4DB6AC",
+    "trillsson_mlp": "#9575CD",
+}
+
+MODEL_RUN_DIRS = {
+    "wavlm_erm": "wavlm_erm",
+    "wavlm_dann": "wavlm_dann",
+    "w2v2_erm": "w2v2_erm",
+    "w2v2_dann": "w2v2_dann",
+    "w2v2_dann_v2": "w2v2_dann_v2",
+    "lfcc_gmm": "lfcc_gmm_32",
+    "trillsson_logistic": "trillsson_logistic",
+    "trillsson_mlp": "trillsson_mlp",
 }
 
 MODEL_LABELS = {
     "wavlm_erm": "WavLM ERM",
     "wavlm_dann": "WavLM DANN",
     "w2v2_erm": "W2V2 ERM",
-    "w2v2_dann": "W2V2 DANN",
+    "w2v2_dann": "W2V2 DANN v1",
+    "w2v2_dann_v2": "W2V2 DANN v2",
+    "lfcc_gmm": "LFCC-GMM",
+    "trillsson_logistic": "TRILLsson Logistic",
+    "trillsson_mlp": "TRILLsson MLP",
+}
+
+CODEC_NAMES = {
+    "C01": "AMR-WB",
+    "C02": "EVS",
+    "C03": "G.722",
+    "C04": "G.726",
+    "C05": "GSM-FR",
+    "C06": "iLBC",
+    "C07": "MP3",
+    "C08": "Opus",
+    "C09": "Speex",
+    "C10": "Vorbis",
+    "C11": "mu-law",
+    "NONE": "Uncoded",
 }
 
 STYLE_CONFIG = {
@@ -115,6 +150,27 @@ def load_per_codec_data(path: Path) -> Dict[str, Any]:
     return data
 
 
+def load_per_codec_from_runs(results_dir: Path) -> Dict[str, Dict[str, float]]:
+    """Load per-codec EER from results/runs/*/eval_eval/tables/metrics_by_codec.csv."""
+    data: Dict[str, Dict[str, float]] = {}
+    for model_key, run_dir_name in MODEL_RUN_DIRS.items():
+        csv_path = results_dir / run_dir_name / "eval_eval" / "tables" / "metrics_by_codec.csv"
+        if not csv_path.exists():
+            continue
+        with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
+            reader = csv.DictReader(csv_file)
+            for row in reader:
+                codec = row.get("domain")
+                eer_raw = row.get("eer")
+                if not codec or eer_raw is None:
+                    continue
+                try:
+                    data.setdefault(codec, {})[model_key] = float(eer_raw)
+                except (TypeError, ValueError):
+                    continue
+    return data
+
+
 def generate_demo_data() -> Dict[str, Any]:
     """Generate demo data for testing."""
     logger.info("Generating demo data")
@@ -143,7 +199,7 @@ def generate_demo_data() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 def plot_per_codec_eer(
     data: Dict[str, Any],
-    figsize: tuple[float, float] = (14, 6),
+    figsize: tuple[float, float] = (16, 7),
     show_values: bool = False,
 ) -> plt.Figure:
     """Create grouped bar chart for per-codec EER.
@@ -160,15 +216,22 @@ def plot_per_codec_eer(
               "C07", "C08", "C09", "C10", "C11", "NONE"]
     codecs = [c for c in codecs if c in data]
     
-    # Models in order
-    models = ["wavlm_erm", "wavlm_dann", "w2v2_erm", "w2v2_dann"]
+    # Models in order (all available in data)
+    model_order = list(MODEL_RUN_DIRS.keys())
+    available_models = {
+        model_key
+        for codec_payload in data.values()
+        for model_key in codec_payload.keys()
+    }
+    models = [model_key for model_key in model_order if model_key in available_models]
     
     # Prepare data arrays
     n_codecs = len(codecs)
     n_models = len(models)
     
     x = np.arange(n_codecs)
-    width = 0.18  # Width of each bar
+    # Keep grouped bars within each codec bucket to avoid overlap.
+    width = min(0.22, 0.82 / max(1, n_models))
     
     fig, ax = plt.subplots(figsize=figsize)
     
@@ -185,8 +248,8 @@ def plot_per_codec_eer(
         offset = (i - n_models / 2 + 0.5) * width
         bars = ax.bar(
             x + offset, eers, width,
-            label=MODEL_LABELS[model],
-            color=COLORS[model],
+            label=MODEL_LABELS.get(model, model),
+            color=COLORS.get(model, "#9E9E9E"),
             edgecolor='black',
             linewidth=0.5,
             alpha=0.85,
@@ -212,7 +275,8 @@ def plot_per_codec_eer(
     ax.set_title('Per-Codec EER Comparison on Eval Set')
     
     ax.set_xticks(x)
-    ax.set_xticklabels(codecs, rotation=45, ha='right')
+    codec_labels = [f"{codec}\n({CODEC_NAMES.get(codec, codec)})" for codec in codecs]
+    ax.set_xticklabels(codec_labels, rotation=35, ha='right')
     
     # Set y-axis limits
     all_eers = []
@@ -228,7 +292,7 @@ def plot_per_codec_eer(
         ax.set_ylim(0, max_eer * 1.15)
     
     # Legend
-    ax.legend(loc='upper right', framealpha=0.9, ncol=2)
+    ax.legend(loc='upper left', framealpha=0.9, ncol=2)
     
     # Grid
     ax.yaxis.grid(True, linestyle='--', alpha=0.3)
@@ -250,10 +314,16 @@ def parse_args() -> argparse.Namespace:
     )
     
     p.add_argument(
+        "--results-dir",
+        type=Path,
+        default=Path("results/runs"),
+        help="Path to runs directory for auto-loading per-codec CSV metrics",
+    )
+    p.add_argument(
         "--input",
         type=Path,
-        default=Path("results/per_codec_eer.json"),
-        help="Path to per-codec EER JSON",
+        default=None,
+        help="Path to per-codec EER JSON (override runs loading)",
     )
     p.add_argument(
         "--output",
@@ -303,12 +373,17 @@ def main() -> int:
     # Load or generate data
     if args.demo:
         data = generate_demo_data()
-    elif args.input.exists():
+    elif args.input is not None:
+        if not args.input.exists():
+            logger.error(f"Input file not found: {args.input}")
+            logger.info("Use --demo or omit --input to load from --results-dir")
+            return 1
         data = load_per_codec_data(args.input)
     else:
-        logger.error(f"Input file not found: {args.input}")
-        logger.info("Use --demo flag to generate with demo data")
-        return 1
+        data = load_per_codec_from_runs(args.results_dir)
+        if not data:
+            logger.error(f"No per-codec CSV metrics found in: {args.results_dir}")
+            return 1
     
     # Create figure
     fig = plot_per_codec_eer(
