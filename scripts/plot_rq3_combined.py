@@ -23,6 +23,13 @@ Usage:
         --projection-probes results/rq3_projection.json \\
         --output figures/rq3_combined.png
 
+    # With both WavLM and W2V2 projection probes
+    python scripts/plot_rq3_combined.py \\
+        --backbone-probes probe_results/comparison_results.json \\
+        --projection-probes results/rq3_projection.json \\
+        --projection-probes-w2v2 results/rq3_projection_w2v2.json \\
+        --output figures/rq3_combined.png
+
     # With custom backbone selection
     python scripts/plot_rq3_combined.py \\
         --backbone-probes probe_results/comparison_results.json \\
@@ -277,8 +284,28 @@ def plot_projection_panel(
     ax: plt.Axes,
     projection_data: Dict[str, Dict[str, float]],
     backbone_name: str = "WavLM",
+    projection_data_w2v2: Optional[Dict[str, Dict[str, float]]] = None,
 ) -> None:
-    """Plot projection layer ERM vs DANN comparison (right panel)."""
+    """Plot projection layer ERM vs DANN comparison (right panel).
+    
+    When projection_data_w2v2 is provided, shows 4 bars grouped by backbone:
+    [WavLM ERM, WavLM DANN] [W2V2 ERM, W2V2 DANN]
+    """
+    
+    if projection_data_w2v2 is not None:
+        # Four-bar layout: grouped by backbone
+        _plot_projection_panel_dual(ax, projection_data, projection_data_w2v2)
+    else:
+        # Original two-bar layout
+        _plot_projection_panel_single(ax, projection_data, backbone_name)
+
+
+def _plot_projection_panel_single(
+    ax: plt.Axes,
+    projection_data: Dict[str, Dict[str, float]],
+    backbone_name: str = "WavLM",
+) -> None:
+    """Plot single-backbone projection panel (2 bars: ERM vs DANN)."""
     
     models = ['erm', 'dann']
     x = np.arange(len(models))
@@ -352,14 +379,172 @@ def plot_projection_panel(
     ax.legend(loc='upper right', framealpha=0.9)
 
 
+def _plot_projection_panel_dual(
+    ax: plt.Axes,
+    projection_data_wavlm: Dict[str, Dict[str, float]],
+    projection_data_w2v2: Dict[str, Dict[str, float]],
+) -> None:
+    """Plot dual-backbone projection panel (4 bars: WavLM ERM/DANN, W2V2 ERM/DANN)."""
+    
+    # Bar positions: grouped by backbone with gap between groups
+    # Group 1 (WavLM): positions 0, 1
+    # Group 2 (W2V2): positions 2.5, 3.5
+    width = 0.7
+    x_wavlm = np.array([0, 1])
+    x_w2v2 = np.array([2.5, 3.5])
+    
+    # Extract data for WavLM
+    wavlm_accs = []
+    wavlm_stds = []
+    for model in ['erm', 'dann']:
+        if model in projection_data_wavlm:
+            wavlm_accs.append(projection_data_wavlm[model]["accuracy"])
+            wavlm_stds.append(projection_data_wavlm[model]["accuracy_std"])
+        else:
+            wavlm_accs.append(0)
+            wavlm_stds.append(0)
+    
+    # Extract data for W2V2
+    w2v2_accs = []
+    w2v2_stds = []
+    for model in ['erm', 'dann']:
+        if model in projection_data_w2v2:
+            w2v2_accs.append(projection_data_w2v2[model]["accuracy"])
+            w2v2_stds.append(projection_data_w2v2[model]["accuracy_std"])
+        else:
+            w2v2_accs.append(0)
+            w2v2_stds.append(0)
+    
+    # Color scheme: use backbone colors with ERM darker, DANN lighter
+    wavlm_colors = [COLORS["wavlm"], COLORS["wavlm"]]
+    w2v2_colors = [COLORS["w2v2"], COLORS["w2v2"]]
+    
+    # Create hatching to distinguish ERM vs DANN
+    hatches = ['', '///']  # ERM solid, DANN hatched
+    
+    # Plot WavLM bars
+    for i, (x_pos, acc, std, color, hatch) in enumerate(
+        zip(x_wavlm, wavlm_accs, wavlm_stds, wavlm_colors, hatches)
+    ):
+        bar = ax.bar(
+            x_pos, acc, width,
+            yerr=std, color=color,
+            alpha=0.85 if i == 0 else 0.65,
+            hatch=hatch,
+            capsize=4, error_kw={'linewidth': 1.5},
+            edgecolor='black', linewidth=0.5,
+        )
+        # Value label
+        ax.annotate(
+            f'{acc:.3f}',
+            xy=(x_pos, acc + std + 0.02),
+            ha='center', va='bottom',
+            fontsize=10, fontweight='bold',
+        )
+    
+    # Plot W2V2 bars
+    for i, (x_pos, acc, std, color, hatch) in enumerate(
+        zip(x_w2v2, w2v2_accs, w2v2_stds, w2v2_colors, hatches)
+    ):
+        bar = ax.bar(
+            x_pos, acc, width,
+            yerr=std, color=color,
+            alpha=0.85 if i == 0 else 0.65,
+            hatch=hatch,
+            capsize=4, error_kw={'linewidth': 1.5},
+            edgecolor='black', linewidth=0.5,
+        )
+        # Value label
+        ax.annotate(
+            f'{acc:.3f}',
+            xy=(x_pos, acc + std + 0.02),
+            ha='center', va='bottom',
+            fontsize=10, fontweight='bold',
+        )
+    
+    # Chance level line
+    ax.axhline(
+        y=CHANCE_LEVEL, color=COLORS["chance"],
+        linestyle='--', linewidth=1.5,
+        label=f'Chance ({CHANCE_LEVEL:.3f})',
+    )
+    
+    # Add reduction annotations for each backbone
+    y_annot = 0.08
+    
+    # WavLM reduction
+    if "comparison" in projection_data_wavlm:
+        comp = projection_data_wavlm["comparison"]
+        rel_red = comp.get("relative_reduction", 0) * 100
+        ax.annotate(
+            f'↓{rel_red:.1f}%',
+            xy=(0.5, min(wavlm_accs) - 0.06),
+            ha='center', va='top',
+            fontsize=10, fontweight='bold',
+            color=COLORS["wavlm"],
+        )
+    
+    # W2V2 reduction
+    if "comparison" in projection_data_w2v2:
+        comp = projection_data_w2v2["comparison"]
+        rel_red = comp.get("relative_reduction", 0) * 100
+        ax.annotate(
+            f'↓{rel_red:.1f}%',
+            xy=(3.0, min(w2v2_accs) - 0.06),
+            ha='center', va='top',
+            fontsize=10, fontweight='bold',
+            color=COLORS["w2v2"],
+        )
+    
+    # Formatting
+    ax.set_xlabel('')
+    ax.set_ylabel('Codec Probe Accuracy')
+    ax.set_title('(b) Projection Layer Probes (WavLM & W2V2)\n(Trainable — DANN reduces codec info)')
+    
+    # X-axis labels
+    ax.set_xticks([0, 1, 2.5, 3.5])
+    ax.set_xticklabels(['ERM', 'DANN', 'ERM', 'DANN'], fontsize=10)
+    
+    # Add backbone labels below
+    ax.text(0.5, -0.12, 'WavLM', ha='center', va='top', 
+            transform=ax.get_xaxis_transform(), fontsize=11, fontweight='bold',
+            color=COLORS["wavlm"])
+    ax.text(3.0, -0.12, 'W2V2', ha='center', va='top',
+            transform=ax.get_xaxis_transform(), fontsize=11, fontweight='bold',
+            color=COLORS["w2v2"])
+    
+    ax.set_xlim(-0.6, 4.1)
+    ax.set_ylim(0, 1.0)
+    
+    # Custom legend
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor=COLORS["wavlm"], edgecolor='black', label='WavLM'),
+        Patch(facecolor=COLORS["w2v2"], edgecolor='black', label='W2V2'),
+        Patch(facecolor='white', edgecolor='black', hatch='///', label='DANN'),
+        plt.Line2D([0], [0], color=COLORS["chance"], linestyle='--', label=f'Chance ({CHANCE_LEVEL:.3f})'),
+    ]
+    ax.legend(handles=legend_elements, loc='upper right', framealpha=0.9, fontsize=9)
+
+
 def create_combined_figure(
     backbone_data: Dict[str, Any],
     projection_data: Dict[str, Dict[str, float]],
     backbones: list[str],
     backbone_name: str,
     figsize: tuple[float, float] = (12, 5),
+    projection_data_w2v2: Optional[Dict[str, Dict[str, float]]] = None,
 ) -> plt.Figure:
-    """Create the combined RQ3 figure with two panels."""
+    """Create the combined RQ3 figure with two panels.
+    
+    Args:
+        backbone_data: Layer-wise probe data for backbone panel
+        projection_data: WavLM projection probe data (ERM vs DANN)
+        backbones: List of backbones to show in left panel
+        backbone_name: Display name for backbone(s)
+        figsize: Figure dimensions
+        projection_data_w2v2: Optional W2V2 projection probe data for 4-bar display
+    """
     
     # Apply style
     plt.rcParams.update(STYLE_CONFIG)
@@ -370,7 +555,7 @@ def create_combined_figure(
     plot_backbone_panel(ax1, backbone_data, backbones)
     
     # Right panel: Projection layer comparison
-    plot_projection_panel(ax2, projection_data, backbone_name)
+    plot_projection_panel(ax2, projection_data, backbone_name, projection_data_w2v2)
     
     # Overall title
     fig.suptitle(
@@ -404,7 +589,13 @@ def parse_args() -> argparse.Namespace:
         "--projection-probes",
         type=Path,
         required=True,
-        help="Path to projection probe results JSON (e.g., results/rq3_projection.json)",
+        help="Path to WavLM projection probe results JSON (e.g., results/rq3_projection.json)",
+    )
+    p.add_argument(
+        "--projection-probes-w2v2",
+        type=Path,
+        default=None,
+        help="Path to W2V2 projection probe results JSON (optional, e.g., results/rq3_projection_w2v2.json)",
     )
     
     # Backbone selection
@@ -468,6 +659,16 @@ def main() -> int:
         backbone_data = load_backbone_probes(args.backbone_probes)
         projection_data_raw = load_projection_probes(args.projection_probes)
         projection_data = extract_projection_data(projection_data_raw)
+        
+        # Load W2V2 projection data if provided
+        projection_data_w2v2 = None
+        if args.projection_probes_w2v2:
+            if not args.projection_probes_w2v2.exists():
+                logger.error(f"W2V2 projection probes file not found: {args.projection_probes_w2v2}")
+                return 1
+            projection_data_w2v2_raw = load_projection_probes(args.projection_probes_w2v2)
+            projection_data_w2v2 = extract_projection_data(projection_data_w2v2_raw)
+            logger.info(f"Loaded W2V2 projection probes from: {args.projection_probes_w2v2}")
     except Exception as e:
         logger.error(f"Failed to load data: {e}")
         return 1
@@ -480,7 +681,13 @@ def main() -> int:
         backbones = [args.backbone]
         backbone_name = "WavLM" if args.backbone == "wavlm" else "Wav2Vec2"
     
+    # Override backbone_name if showing both projection probes
+    if projection_data_w2v2 is not None:
+        backbone_name = "WavLM & W2V2"
+    
     logger.info(f"Plotting backbones: {backbones}")
+    if projection_data_w2v2:
+        logger.info("Projection panel: showing both WavLM and W2V2 (4 bars)")
     
     # Create figure
     fig = create_combined_figure(
@@ -489,6 +696,7 @@ def main() -> int:
         backbones=backbones,
         backbone_name=backbone_name,
         figsize=tuple(args.figsize),
+        projection_data_w2v2=projection_data_w2v2,
     )
     
     # Save outputs
@@ -519,7 +727,7 @@ def main() -> int:
         logger.info(f"  Accuracy range: {accs.min():.3f} - {accs.max():.3f}")
         logger.info(f"  Peak layer: {layers[np.argmax(accs)]} ({accs.max():.3f})")
     
-    logger.info(f"\nProjection Layer ({backbone_name}):")
+    logger.info(f"\nProjection Layer (WavLM):")
     if "erm" in projection_data:
         logger.info(f"  ERM accuracy:  {projection_data['erm']['accuracy']:.3f}")
     if "dann" in projection_data:
@@ -528,6 +736,17 @@ def main() -> int:
         comp = projection_data["comparison"]
         logger.info(f"  Reduction:     {comp.get('reduction', 0):.3f} "
                    f"({comp.get('relative_reduction', 0)*100:.1f}% relative)")
+    
+    if projection_data_w2v2:
+        logger.info(f"\nProjection Layer (W2V2):")
+        if "erm" in projection_data_w2v2:
+            logger.info(f"  ERM accuracy:  {projection_data_w2v2['erm']['accuracy']:.3f}")
+        if "dann" in projection_data_w2v2:
+            logger.info(f"  DANN accuracy: {projection_data_w2v2['dann']['accuracy']:.3f}")
+        if "comparison" in projection_data_w2v2:
+            comp = projection_data_w2v2["comparison"]
+            logger.info(f"  Reduction:     {comp.get('reduction', 0):.3f} "
+                       f"({comp.get('relative_reduction', 0)*100:.1f}% relative)")
     
     logger.info(f"\nOutputs saved to: {output_dir}")
     
