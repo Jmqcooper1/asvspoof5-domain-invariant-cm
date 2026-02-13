@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import logging
 import sys
@@ -44,13 +45,34 @@ COLORS = {
     "wavlm_dann": "#64B5F6",  # Light blue
     "w2v2_erm": "#FFB74D",    # Light orange
     "w2v2_dann": "#81C784",   # Light green
+    "w2v2_dann_v2": "#BA68C8",
+    "lfcc_gmm": "#A1887F",
+    "trillsson_logistic": "#4DB6AC",
+    "trillsson_mlp": "#9575CD",
 }
+
+MODEL_RUN_DIR = {
+    "wavlm_erm": "wavlm_erm",
+    "wavlm_dann": "wavlm_dann",
+    "w2v2_erm": "w2v2_erm",
+    "w2v2_dann": "w2v2_dann",
+    "w2v2_dann_v2": "w2v2_dann_v2",
+    "lfcc_gmm": "lfcc_gmm_32",
+    "trillsson_logistic": "trillsson_logistic",
+    "trillsson_mlp": "trillsson_mlp",
+}
+
+MODEL_ORDER = list(MODEL_RUN_DIR.keys())
 
 MODEL_LABELS = {
     "wavlm_erm": "WavLM ERM",
     "wavlm_dann": "WavLM DANN",
-    "w2v2_erm": "W2V2 ERM",
-    "w2v2_dann": "W2V2 DANN",
+    "w2v2_erm": "Wav2Vec2 ERM",
+    "w2v2_dann": "Wav2Vec2 DANN v1",
+    "w2v2_dann_v2": "Wav2Vec2 DANN v2",
+    "lfcc_gmm": "LFCC-GMM",
+    "trillsson_logistic": "TRILLsson Logistic",
+    "trillsson_mlp": "TRILLsson MLP",
 }
 
 STYLE_CONFIG = {
@@ -115,6 +137,29 @@ def load_per_codec_data(path: Path) -> Dict[str, Any]:
     return data
 
 
+def load_per_codec_from_runs(results_dir: Path) -> Dict[str, Dict[str, float]]:
+    """Load per-codec EER from results/runs/*/eval_eval/tables/metrics_by_codec.csv."""
+    data: Dict[str, Dict[str, float]] = {}
+    for model_key in MODEL_ORDER:
+        run_dir = MODEL_RUN_DIR[model_key]
+        csv_path = results_dir / run_dir / "eval_eval" / "tables" / "metrics_by_codec.csv"
+        if not csv_path.exists():
+            continue
+        with csv_path.open(newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                codec = row.get("domain")
+                eer_raw = row.get("eer")
+                if not codec or eer_raw is None:
+                    continue
+                try:
+                    eer = float(eer_raw)
+                except (TypeError, ValueError):
+                    continue
+                data.setdefault(codec, {})[model_key] = eer
+    return data
+
+
 def generate_demo_data() -> Dict[str, Any]:
     """Generate demo data for testing."""
     logger.info("Generating demo data")
@@ -161,14 +206,17 @@ def plot_per_codec_eer(
     codecs = [c for c in codecs if c in data]
     
     # Models in order
-    models = ["wavlm_erm", "wavlm_dann", "w2v2_erm", "w2v2_dann"]
+    discovered_models = {model for codec_values in data.values() for model in codec_values.keys()}
+    models = [model for model in MODEL_ORDER if model in discovered_models]
+    if not models:
+        models = ["wavlm_erm", "wavlm_dann", "w2v2_erm", "w2v2_dann"]
     
     # Prepare data arrays
     n_codecs = len(codecs)
     n_models = len(models)
     
     x = np.arange(n_codecs)
-    width = 0.18  # Width of each bar
+    width = min(0.18, 0.75 / max(1, n_models))  # Width of each bar
     
     fig, ax = plt.subplots(figsize=figsize)
     
@@ -185,8 +233,8 @@ def plot_per_codec_eer(
         offset = (i - n_models / 2 + 0.5) * width
         bars = ax.bar(
             x + offset, eers, width,
-            label=MODEL_LABELS[model],
-            color=COLORS[model],
+            label=MODEL_LABELS.get(model, model),
+            color=COLORS.get(model, "#9E9E9E"),
             edgecolor='black',
             linewidth=0.5,
             alpha=0.85,
@@ -250,10 +298,16 @@ def parse_args() -> argparse.Namespace:
     )
     
     p.add_argument(
+        "--results-dir",
+        type=Path,
+        default=Path("results/runs"),
+        help="Runs directory containing model subdirectories",
+    )
+    p.add_argument(
         "--input",
         type=Path,
-        default=Path("results/per_codec_eer.json"),
-        help="Path to per-codec EER JSON",
+        default=None,
+        help="Override path to per-codec EER JSON",
     )
     p.add_argument(
         "--output",
@@ -303,12 +357,18 @@ def main() -> int:
     # Load or generate data
     if args.demo:
         data = generate_demo_data()
-    elif args.input.exists():
+    elif args.input:
+        if not args.input.exists():
+            logger.error(f"Input file not found: {args.input}")
+            logger.info("Use --demo or omit --input to load from --results-dir")
+            return 1
         data = load_per_codec_data(args.input)
     else:
-        logger.error(f"Input file not found: {args.input}")
-        logger.info("Use --demo flag to generate with demo data")
-        return 1
+        data = load_per_codec_from_runs(args.results_dir)
+        if not data:
+            logger.error(f"No per-codec CSV data found under: {args.results_dir}")
+            logger.info("Use --demo for synthetic data or --input for JSON override")
+            return 1
     
     # Create figure
     fig = plot_per_codec_eer(
@@ -338,7 +398,8 @@ def main() -> int:
     logger.info("Per-Codec EER Figure Summary")
     logger.info("=" * 60)
     logger.info(f"Codecs: {len(data)}")
-    logger.info(f"Models: {len(COLORS)}")
+    discovered_models = {model for codec_values in data.values() for model in codec_values.keys()}
+    logger.info(f"Models: {len(discovered_models)}")
     logger.info(f"Output: {output_dir}")
     
     return 0
