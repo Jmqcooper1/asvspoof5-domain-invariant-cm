@@ -214,8 +214,9 @@ data/
 
 datasets/
 experiments/
-runs/
-outputs/
+/runs/
+!/results/runs/
+# outputs/
 checkpoints/
 artifacts/
 wandb/
