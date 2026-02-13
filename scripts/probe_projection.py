@@ -50,7 +50,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import torch
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
