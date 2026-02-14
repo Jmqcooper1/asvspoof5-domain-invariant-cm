@@ -4,8 +4,6 @@
 **Institution:** University of Amsterdam  
 **Date:** February 2026  
 
----
-
 ## Research Question
 
 > **Can domain-adversarial training (DANN) improve generalization of speech deepfake detectors to unseen transmission codecs?**
@@ -41,10 +39,10 @@
 **✅ Yes.** WavLM OOD gap reduced from 160% to 54% (66% relative reduction).
 
 ### RQ2: Does DANN improve per-codec performance?
-**✅ Yes.** Improvement across all codecs, especially unseen ones in eval set.
+**✅ Yes.** Improvement observed across all codecs in the evaluation set.
 
 ### RQ3: Where is domain information removed?
-**✅ Projection layer.** Probing analysis shows codec probe accuracy drops 43.4% → 38.8% in projection layer. Backbone layers identical (frozen).
+**✅ Projection layer.** Probing analysis shows codec probe accuracy drops 43.4% → 38.8% in projection layer. Backbone layers identical (frozen). Note: We find that applying DANN at this layer already gives great performance increase in invariance, not that it is the only location where this can occur.
 
 ### RQ4: What components cause domain invariance?
 **✅ Pooling weights + projection head.** CKA analysis shows layer 11 contributions diverge dramatically (CKA=0.098). Component ablation confirms projection layer patching reduces domain leakage.
@@ -147,33 +145,6 @@
 
 ---
 
-## Suggested Venues
-
-| Venue | Fit | Timeline |
-|-------|-----|----------|
-| **Interspeech 2026** | Excellent (speech + security) | Deadline ~March 2026 |
-| **ICASSP 2027** | Good | Deadline ~Oct 2026 |
-| **ASVSPOOF Workshop** | Perfect if running | TBD |
-
-*Note: No rush — thesis complete, paper can be submitted when ready.*
-
----
-
-## Section Grades
-
-| Section | Grade | Notes |
-|---------|-------|-------|
-| Research Design | A | Clear RQs, proper baselines, testable hypotheses |
-| Methodology | A- | Solid architecture, could add more DA baselines |
-| Experiments | A | Comprehensive: 5 SSL models + 3 baselines, full eval |
-| Results | A | Consistent positive story, good effect sizes |
-| Analysis | A | Probing + CKA + ablation + visualization |
-| Interpretability | B+ | Good depth, correctly scoped (not overclaimed) |
-| Presentation | A- | Figures ready, tables ready, needs paper polish |
-| **Overall** | **A-** | Strong thesis, publishable with minor additions |
-
----
-
 ## Pre-Publication Checklist
 
 - [x] Full eval (680k samples) completed
@@ -192,7 +163,7 @@
 ### Core Results
 - `results/runs/*/eval_eval_full/metrics.json` — main results
 - `rq4_results_summary.csv` — RQ4 intervention results
-- `rq4_stats_summary.csv` — bootstrap CIs
+- `rq4_stats_summary.csv` — bootstrap CIs (pending generation)
 - `rq4_cka_results.csv` — CKA layer analysis
 
 ### Figures
@@ -201,7 +172,7 @@
 - `figures/rq3_combined.png` — probing results
 - `figures/rq4/cka_layer_divergence.png` — CKA analysis
 - `figures/rq4/intervention_comparison.png` — ablation results
-- `figures/rq4/representation_dr.png` — PCA/UMAP/t-SNE
+- `figures/rq4/representation_dr.png` — PCA/UMAP/t-SNE (pending generation)
 
 ### Tables
 - `figures/tables/T1_main_results.tex` — main results
