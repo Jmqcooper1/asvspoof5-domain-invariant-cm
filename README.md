@@ -26,7 +26,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Clone and install
 git clone https://github.com/Jmqcooper1/asvspoof5-domain-invariant-cm.git
 cd asvspoof5-domain-invariant-cm
-uv venv && source .venv/bin/activate
+uv venv && source .venv/activate
 uv pip install -e ".[dev]"
 
 # Verify
@@ -72,10 +72,25 @@ uv run python scripts/make_manifest.py --validate
 
 ```bash
 cp .env.example .env
-# Edit with:
-# ASVSPOOF5_ROOT=/scratch-shared/$USER/asvspoof5
-# WANDB_API_KEY=your_key
-# HF_HOME=/scratch-shared/$USER/.cache/huggingface
+```
+
+Example `.env` for Snellius:
+```bash
+# Dataset location
+ASVSPOOF5_ROOT=/projects/prjs1904/data/asvspoof5
+
+# Pre-computed augmentations cache (speeds up DANN training ~5x)
+AUGMENTATION_CACHE_DIR=/scratch-shared/jcooper/asvspoof5_augmented_cache
+
+# Checkpoints and results (use persistent storage, not scratch)
+RUNS_DIR=/projects/prjs1904/runs
+
+# HuggingFace model cache
+HF_HOME=/scratch-shared/jcooper/.cache/huggingface
+
+# Wandb (optional)
+WANDB_API_KEY=your_key
+WANDB_PROJECT=asvspoof5-dann
 ```
 
 ### Submit All Jobs
