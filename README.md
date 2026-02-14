@@ -108,22 +108,32 @@ WANDB_PROJECT=asvspoof5-dann
 
 ### Job Pipeline
 
-```
-stage_dataset.job     → Unpack tarballs, create manifests
-setup_environment.job → Download HuggingFace models
-    ↓
-Training (parallel):
-  - train_wavlm_erm.job
-  - train_wavlm_erm_aug.job
-  - train_wavlm_dann.job
-  - train_wavlm_dann_exp.job
-  - train_w2v2_erm.job
-  - train_w2v2_erm_aug.job
-  - train_w2v2_dann.job
-    ↓
-evaluate_models.job   → Eval all checkpoints
-probe_domain.job      → ERM vs DANN domain probes
-run_analysis.job      → CKA, activation patching
+```mermaid
+flowchart TD
+    subgraph Setup
+        A[stage_dataset.job<br><i>Unpack tarballs, create manifests</i>]
+        B[setup_environment.job<br><i>Download HuggingFace models</i>]
+    end
+
+    subgraph Training [Training - parallel]
+        C1[train_wavlm_erm.job]
+        C2[train_wavlm_erm_aug.job]
+        C3[train_wavlm_dann.job]
+        C4[train_wavlm_dann_exp.job]
+        C5[train_w2v2_erm.job]
+        C6[train_w2v2_erm_aug.job]
+        C7[train_w2v2_dann.job]
+    end
+
+    subgraph Analysis [Analysis - after training]
+        D[evaluate_models.job<br><i>Eval all checkpoints</i>]
+        E[probe_domain.job<br><i>ERM vs DANN domain probes</i>]
+        F[run_analysis.job<br><i>CKA, activation patching</i>]
+    end
+
+    A --> B
+    B --> C1 & C2 & C3 & C4 & C5 & C6 & C7
+    C1 & C2 & C3 & C4 & C5 & C6 & C7 --> D & E & F
 ```
 
 ### Monitor Jobs
