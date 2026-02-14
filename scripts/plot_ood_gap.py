@@ -273,7 +273,7 @@ def generate_demo_data() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 def plot_ood_gap_bars(
     data: Dict[str, Any],
-    figsize: tuple[float, float] = (10, 6),
+    figsize: tuple[float, float] = (12, 6.5),
 ) -> plt.Figure:
     """Create paired bar chart showing dev vs eval EER with gap annotations.
     
@@ -400,7 +400,7 @@ def plot_ood_gap_bars(
     ax.set_title('OOD Generalization Gap: Dev (In-Domain) vs Eval (Out-of-Domain)')
     
     ax.set_xticks(x)
-    ax.set_xticklabels([g[0] for g in groups])
+    ax.set_xticklabels([g[0] for g in groups], rotation=20, ha='right')
     
     # Y-axis limits
     ax.set_ylim(0, max(eval_eers) + 6)
@@ -408,6 +408,8 @@ def plot_ood_gap_bars(
     if len(groups) >= 4:
         ax.axvline(x=1.5, color='gray', linestyle='--', alpha=0.5, linewidth=1)
     
+    ax.set_axisbelow(True)
+
     # Legend
     ax.legend(loc='upper right', framealpha=0.9)
     
@@ -418,7 +420,7 @@ def plot_ood_gap_bars(
 
 def plot_ood_gap_slope(
     data: Dict[str, Any],
-    figsize: tuple[float, float] = (10, 6),
+    figsize: tuple[float, float] = (12, 6.5),
 ) -> plt.Figure:
     """Create slope chart showing dev→eval transition with gap annotations.
     
@@ -442,6 +444,17 @@ def plot_ood_gap_slope(
     
     x_positions = [0, 1]  # Dev (0) and Eval (1)
     
+    annotation_offsets = {
+        "wavlm_erm": 0.00,
+        "wavlm_dann": -0.30,
+        "w2v2_erm": 0.35,
+        "w2v2_dann": -0.45,
+        "w2v2_dann_v2": 0.30,
+        "lfcc_gmm": 0.20,
+        "trillsson_logistic": -0.20,
+        "trillsson_mlp": 0.10,
+    }
+
     for model_key, props in models.items():
         if model_key not in data:
             continue
@@ -454,8 +467,8 @@ def plot_ood_gap_slope(
         ax.plot(
             x_positions, [dev_eer, eval_eer],
             marker=props["marker"],
-            markersize=10,
-            linewidth=2.5,
+            markersize=9,
+            linewidth=2.2,
             color=props["color"],
             linestyle=props["linestyle"],
             label=props["label"],
@@ -465,7 +478,7 @@ def plot_ood_gap_slope(
         gap = eval_eer - dev_eer
         ax.annotate(
             f'+{gap:.1f}%',
-            xy=(1.05, eval_eer),
+            xy=(1.05, eval_eer + annotation_offsets.get(model_key, 0.0)),
             ha='left', va='center',
             fontsize=9,
             color=props["color"],
@@ -478,8 +491,10 @@ def plot_ood_gap_slope(
     
     ax.set_xticks(x_positions)
     ax.set_xticklabels(['Dev\n(In-Domain)', 'Eval\n(Out-of-Domain)'], fontsize=11)
-    ax.set_xlim(-0.2, 1.4)
+    ax.set_xlim(-0.25, 1.45)
     
+    ax.set_axisbelow(True)
+
     # Legend
     ax.legend(loc='upper left', framealpha=0.9, ncol=2)
     
@@ -531,9 +546,9 @@ def parse_args() -> argparse.Namespace:
         "--figsize",
         type=float,
         nargs=2,
-        default=[10, 6],
+        default=[12, 6.5],
         metavar=("WIDTH", "HEIGHT"),
-        help="Figure size in inches (default: 10 6)",
+        help="Figure size in inches (default: 12 6.5)",
     )
     p.add_argument(
         "--dpi",

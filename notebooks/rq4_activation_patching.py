@@ -22,6 +22,7 @@
 # In[5]:
 
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -86,6 +87,31 @@ from asvspoof5_domain_invariant_cm.models import (
 set_seed(42)
 device = get_device()
 print(f"Using device: {device}")
+
+
+def _get_env_int(name: str, default: int | None) -> int | None:
+    raw_value = os.environ.get(name)
+    if raw_value is None or raw_value.strip() == "":
+        return default
+    return int(raw_value)
+
+
+rq4_eval_split = os.environ.get("RQ4_EVAL_SPLIT", "dev")
+rq4_max_eval_samples = _get_env_int("RQ4_MAX_EVAL_SAMPLES", 20000)
+rq4_max_cka_samples = _get_env_int("RQ4_MAX_CKA_SAMPLES", 5000)
+rq4_max_probe_samples = _get_env_int("RQ4_MAX_PROBE_SAMPLES", 5000)
+rq4_probe_split = os.environ.get("RQ4_PROBE_SPLIT", rq4_eval_split)
+rq4_output_prefix = os.environ.get("RQ4_OUTPUT_PREFIX", "rq4")
+rq4_repr_cache_name = os.environ.get("RQ4_REPR_CACHE", f"{rq4_output_prefix}_repr_cache.npz")
+rq4_metadata_name = os.environ.get("RQ4_METADATA_JSON", f"{rq4_output_prefix}_metadata.json")
+print(
+    "RQ4 run config | "
+    f"eval_split={rq4_eval_split} "
+    f"probe_split={rq4_probe_split} "
+    f"max_eval_samples={rq4_max_eval_samples} "
+    f"max_cka_samples={rq4_max_cka_samples} "
+    f"max_probe_samples={rq4_max_probe_samples}"
+)
 
 
 # ## 1. Load Checkpoints
@@ -518,11 +544,11 @@ if cka_representation == "hidden_states":
 # Create dataloader for CKA analysis (use subset for speed)
 print(f"Creating evaluation dataloader for CKA analysis ({cka_representation})...")
 eval_loader = create_eval_dataloader(
-    split="dev",
+    split=rq4_eval_split,
     codec_vocab=codec_vocab,
     codec_q_vocab=codec_q_vocab,
     config=erm_config,
-    max_samples=5000,  # Use subset for speed
+    max_samples=rq4_max_cka_samples,
     batch_size=32,
 )
 
@@ -546,11 +572,11 @@ print(f"Extracted {len(erm_reps)} keys, shapes: {[(k, v.shape) for k, v in erm_r
 
 # Reset dataloader for model B
 eval_loader = create_eval_dataloader(
-    split="dev",
+    split=rq4_eval_split,
     codec_vocab=codec_vocab,
     codec_q_vocab=codec_q_vocab,
     config=dann_config,
-    max_samples=5000,
+    max_samples=rq4_max_cka_samples,
     batch_size=32,
 )
 
@@ -870,11 +896,12 @@ def compute_mode_cka(
     codec_vocab: dict,
     codec_q_vocab: dict,
     device: torch.device,
+    split: str,
     max_samples: int = 5000,
 ) -> dict:
     """Compute CKA for a chosen representation space."""
     mode_loader = create_eval_dataloader(
-        split="dev",
+        split=split,
         codec_vocab=codec_vocab,
         codec_q_vocab=codec_q_vocab,
         config=base_config,
@@ -888,7 +915,7 @@ def compute_mode_cka(
         representation=representation,
     )
     mode_loader = create_eval_dataloader(
-        split="dev",
+        split=split,
         codec_vocab=codec_vocab,
         codec_q_vocab=codec_q_vocab,
         config=donor_config,
@@ -1018,11 +1045,11 @@ def evaluate_model(
 # Create fresh dataloader for evaluation (full dev set or subset)
 print("Creating evaluation dataloader...")
 eval_loader = create_eval_dataloader(
-    split="dev",
+    split=rq4_eval_split,
     codec_vocab=codec_vocab,
     codec_q_vocab=codec_q_vocab,
     config=erm_config,
-    max_samples=10000,  # Use subset for faster evaluation, None for full set
+    max_samples=rq4_max_eval_samples,
     batch_size=32,
 )
 
@@ -1041,11 +1068,11 @@ print(f"{model_a_name} EER: {erm_results['eer']:.2%}, minDCF: {erm_results['min_
 
 # Recreate dataloader for model B
 eval_loader = create_eval_dataloader(
-    split="dev",
+    split=rq4_eval_split,
     codec_vocab=codec_vocab,
     codec_q_vocab=codec_q_vocab,
     config=dann_config,
-    max_samples=10000,
+    max_samples=rq4_max_eval_samples,
     batch_size=32,
 )
 
@@ -1179,7 +1206,7 @@ def extract_representations_for_probing(
 # Select representation for domain probing.
 # Keep hidden_states to preserve layer-wise leakage profile.
 probe_representation = "hidden_states"
-probe_split = os.environ.get("RQ4_PROBE_SPLIT", "dev")
+probe_split = rq4_probe_split
 
 # Create dataloader for probing
 probe_loader = create_eval_dataloader(
@@ -1187,7 +1214,7 @@ probe_loader = create_eval_dataloader(
     codec_vocab=codec_vocab,
     codec_q_vocab=codec_q_vocab,
     config=erm_config,
-    max_samples=5000,
+    max_samples=rq4_max_probe_samples,
     batch_size=32,
 )
 
@@ -1197,7 +1224,7 @@ erm_reps_probe, codec_labels, codec_q_labels = extract_representations_for_probi
     erm_model,
     probe_loader,
     device,
-    max_samples=5000,
+    max_samples=rq4_max_probe_samples,
     representation=probe_representation,
 )
 print(f"Extracted representation keys: {list(erm_reps_probe.keys())[:10]}")
@@ -1240,6 +1267,7 @@ def run_probe_for_model(
     model: torch.nn.Module,
     representation: str,
     split: str,
+    max_samples: int,
 ) -> dict:
     """Extract representations and run domain probing for a model."""
     probe_loader_local = create_eval_dataloader(
@@ -1247,14 +1275,14 @@ def run_probe_for_model(
         codec_vocab=codec_vocab,
         codec_q_vocab=codec_q_vocab,
         config=erm_config,
-        max_samples=5000,
+        max_samples=max_samples,
         batch_size=32,
     )
     model_reps, codec_labels_local, codec_q_labels_local = extract_representations_for_probing(
         model,
         probe_loader_local,
         device,
-        max_samples=5000,
+        max_samples=max_samples,
         representation=representation,
     )
     probe_target_name_local, probe_labels_local = choose_probe_target(
@@ -1327,6 +1355,7 @@ mode_results = []
 mode_cka_rows = []
 baseline_probe_cache = {}
 created_patch_models = []
+mode_eval_cache: dict[str, dict[str, np.ndarray]] = {}
 
 for mode in selected_intervention_modes:
     print("\n" + "=" * 100)
@@ -1344,7 +1373,8 @@ for mode in selected_intervention_modes:
         codec_vocab,
         codec_q_vocab,
         device,
-        max_samples=5000,
+        split=rq4_eval_split,
+        max_samples=rq4_max_cka_samples,
     )
     print(
         f"Mode {mode} CKA ({mode_cka_rep}): "
@@ -1390,11 +1420,11 @@ for mode in selected_intervention_modes:
         raise ValueError(f"Unsupported intervention mode: {mode}")
 
     mode_eval_loader = create_eval_dataloader(
-        split="dev",
+        split=rq4_eval_split,
         codec_vocab=codec_vocab,
         codec_q_vocab=codec_q_vocab,
         config=erm_config,
-        max_samples=10000,
+        max_samples=rq4_max_eval_samples,
         batch_size=32,
     )
     try:
@@ -1407,12 +1437,14 @@ for mode in selected_intervention_modes:
                 erm_model,
                 representation=mode_probe_rep,
                 split=probe_split,
+                max_samples=rq4_max_probe_samples,
             )
         baseline_probe = baseline_probe_cache[mode_probe_rep]
         mode_probe = run_probe_for_model(
             intervention_model,
             representation=mode_probe_rep,
             split=probe_split,
+            max_samples=rq4_max_probe_samples,
         )
     finally:
         if transplanted_original_weights is not None:
@@ -1421,15 +1453,32 @@ for mode in selected_intervention_modes:
 
     baseline_probe_acc = float(baseline_probe["results"]["max_leakage_accuracy"])
     mode_probe_acc = float(mode_probe["results"]["max_leakage_accuracy"])
+    probe_target_unique = int(np.unique(mode_probe["labels"]).shape[0])
+    probe_chance_acc = 1.0 / probe_target_unique if probe_target_unique > 0 else 0.0
+    mode_eval_cache[mode] = {
+        "scores": np.asarray(mode_eval["scores"]),
+        "labels": np.asarray(mode_eval["labels"]),
+    }
     mode_results.append(
         {
             "mode": mode,
             "model_label": f"{patched_model_name}:{mode}",
             "eer": float(mode_eval["eer"]),
             "min_dcf": float(mode_eval["min_dcf"]),
+            "eval_split": rq4_eval_split,
+            "probe_split": probe_split,
+            "max_eval_samples": rq4_max_eval_samples if rq4_max_eval_samples is not None else -1,
+            "max_cka_samples": rq4_max_cka_samples if rq4_max_cka_samples is not None else -1,
+            "max_probe_samples": rq4_max_probe_samples if rq4_max_probe_samples is not None else -1,
             "probe_representation": mode_probe_rep,
             "probe_target": mode_probe["target_name"],
+            "codec_unique": int(codec_unique),
+            "codec_q_unique": int(codec_q_unique),
+            "probe_target_unique": probe_target_unique,
+            "probe_chance_acc": probe_chance_acc,
+            "probe_chance_pct": probe_chance_acc * 100.0,
             "max_probe_acc": mode_probe_acc,
+            "probe_num_samples": int(mode_probe["labels"].shape[0]),
             "max_leakage_layer": mode_probe["results"]["max_leakage_layer"],
             "delta_eer_vs_base": float(mode_eval["eer"] - erm_results["eer"]),
             "delta_min_dcf_vs_base": float(mode_eval["min_dcf"] - erm_results["min_dcf"]),
@@ -1475,12 +1524,73 @@ print(
 )
 
 # Save results to files
-mode_results_df.to_csv("rq4_results_summary.csv", index=False)
-print("Results saved to rq4_results_summary.csv")
+results_path = Path(f"{rq4_output_prefix}_results_summary.csv")
+mode_results_df.to_csv(results_path, index=False)
+print(f"Results saved to {results_path}")
 
 cka_df = pd.DataFrame(mode_cka_rows)
-cka_df.to_csv("rq4_cka_results.csv", index=False)
-print("CKA results saved to rq4_cka_results.csv")
+cka_path = Path(f"{rq4_output_prefix}_cka_results.csv")
+cka_df.to_csv(cka_path, index=False)
+print(f"CKA results saved to {cka_path}")
+
+# Save score-level artifacts for bootstrap/significance tests.
+stats_cache_path = Path(f"{rq4_output_prefix}_stats_cache.npz")
+stats_cache_payload = {
+    "baseline_scores": np.asarray(erm_results["scores"]),
+    "baseline_labels": np.asarray(erm_results["labels"]),
+    "dann_scores": np.asarray(dann_results["scores"]),
+    "dann_labels": np.asarray(dann_results["labels"]),
+    "modes": np.array(sorted(mode_eval_cache.keys()), dtype=object),
+}
+for mode_key, mode_payload in mode_eval_cache.items():
+    stats_cache_payload[f"{mode_key}__scores"] = mode_payload["scores"]
+    stats_cache_payload[f"{mode_key}__labels"] = mode_payload["labels"]
+np.savez_compressed(stats_cache_path, **stats_cache_payload)
+print(f"Saved stats cache: {stats_cache_path}")
+
+# Save projection representations for DR visualizations (ERM vs DANN).
+erm_repr_probe = run_probe_for_model(
+    erm_model,
+    representation="repr",
+    split=probe_split,
+    max_samples=rq4_max_probe_samples,
+)
+dann_repr_probe = run_probe_for_model(
+    dann_model,
+    representation="repr",
+    split=probe_split,
+    max_samples=rq4_max_probe_samples,
+)
+repr_cache_path = Path(rq4_repr_cache_name)
+np.savez_compressed(
+    repr_cache_path,
+    erm_repr=erm_repr_probe["inputs"][0],
+    dann_repr=dann_repr_probe["inputs"][0],
+    erm_labels=erm_repr_probe["labels"],
+    dann_labels=dann_repr_probe["labels"],
+    probe_target=np.array([erm_repr_probe["target_name"]], dtype=object),
+    probe_split=np.array([probe_split], dtype=object),
+)
+print(f"Saved representation cache: {repr_cache_path}")
+
+metadata = {
+    "eval_split": rq4_eval_split,
+    "probe_split": probe_split,
+    "max_eval_samples": rq4_max_eval_samples,
+    "max_cka_samples": rq4_max_cka_samples,
+    "max_probe_samples": rq4_max_probe_samples,
+    "codec_unique": int(codec_unique),
+    "codec_q_unique": int(codec_q_unique),
+    "result_rows": int(mode_results_df.shape[0]),
+    "results_csv": str(results_path),
+    "cka_csv": str(cka_path),
+    "stats_cache": str(stats_cache_path),
+    "repr_cache": str(repr_cache_path),
+}
+metadata_path = Path(rq4_metadata_name)
+with metadata_path.open("w", encoding="utf-8") as metadata_file:
+    json.dump(metadata, metadata_file, indent=2)
+print(f"Saved RQ4 metadata: {metadata_path}")
 
 
 # ## Conclusions

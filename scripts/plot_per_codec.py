@@ -212,7 +212,7 @@ def generate_demo_data() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 def plot_per_codec_eer(
     data: Dict[str, Any],
-    figsize: tuple[float, float] = (16, 7),
+    figsize: tuple[float, float] = (15, 7),
     show_values: bool = False,
 ) -> plt.Figure:
     """Create grouped bar chart for per-codec EER.
@@ -244,7 +244,7 @@ def plot_per_codec_eer(
     
     x = np.arange(n_codecs)
     # Keep grouped bars within each codec bucket to avoid overlap.
-    width = min(0.22, 0.82 / max(1, n_models))
+    width = min(0.20, 0.80 / max(1, n_models))
     
     fig, ax = plt.subplots(figsize=figsize)
     
@@ -289,7 +289,7 @@ def plot_per_codec_eer(
     
     ax.set_xticks(x)
     codec_labels = [f"{codec}\n({CODEC_NAMES.get(codec, codec)})" for codec in codecs]
-    ax.set_xticklabels(codec_labels, rotation=35, ha='right')
+    ax.set_xticklabels(codec_labels, rotation=28, ha='right')
     
     # Set y-axis limits
     all_eers = []
@@ -305,10 +305,11 @@ def plot_per_codec_eer(
         ax.set_ylim(0, max_eer * 1.15)
     
     # Legend
-    ax.legend(loc='upper left', framealpha=0.9, ncol=2)
+    legend_cols = 2 if n_models <= 6 else 3
+    ax.legend(loc='upper left', framealpha=0.92, ncol=legend_cols)
     
     # Grid
-    ax.yaxis.grid(True, linestyle='--', alpha=0.3)
+    ax.yaxis.grid(True, linestyle='--', linewidth=0.9, alpha=0.32)
     ax.set_axisbelow(True)
     
     plt.tight_layout()
@@ -358,9 +359,9 @@ def parse_args() -> argparse.Namespace:
         "--figsize",
         type=float,
         nargs=2,
-        default=[14, 6],
+        default=[15, 7],
         metavar=("WIDTH", "HEIGHT"),
-        help="Figure size in inches (default: 14 6)",
+        help="Figure size in inches (default: 15 7)",
     )
     p.add_argument(
         "--dpi",

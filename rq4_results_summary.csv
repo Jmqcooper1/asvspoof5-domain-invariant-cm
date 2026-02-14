@@ -1,0 +1,5 @@
+mode,model_label,eer,min_dcf,probe_representation,probe_target,max_probe_acc,max_leakage_layer,delta_eer_vs_base,delta_min_dcf_vs_base,delta_probe_vs_base,notes
+layer_patch_mixed,Patched A:ERM:layer_patch_mixed,0.025791368041626517,0.2466781779689945,mixed,CODEC,0.7013999999999999,0,-0.0065835040510798665,-0.0579648291697919,0.0,global_mixed_patch
+pool_weight_transplant,Patched A:ERM:pool_weight_transplant,0.025791368041626517,0.2466781779689945,layer_contrib,CODEC,0.7682,0,-0.0065835040510798665,-0.0579648291697919,0.0,"pool_weight_transplant (l2_delta=0.689905, max_abs_delta=0.355985)"
+layer_patch_repr,Patched A:ERM:layer_patch_repr,0.02935444414851291,0.28470411482883834,repr,CODEC,0.388,0,-0.0030204279441934725,-0.019938892309948053,-0.047599999999999976,global_repr_patch
+layer_patch_hidden,Patched A:ERM:layer_patch_hidden,0.03237487209270638,0.3046430071387864,hidden_states,CODEC,0.7686,0,0.0,0.0,0.0,"layers=[11, 0, 4]"

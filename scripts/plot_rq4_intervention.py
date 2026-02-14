@@ -48,18 +48,85 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Publication-quality settings
-FIGSIZE_SINGLE = (6, 4)
-FIGSIZE_WIDE = (10, 4)
-FIGSIZE_TALL = (6, 6)
+FIGSIZE_SINGLE = (7.2, 4.8)
+FIGSIZE_WIDE = (12, 4.8)
 DPI = 300
 
-# Color palette (consistent with other thesis figures)
-COLORS = {
-    'erm': '#2ecc71',      # Green
-    'dann': '#3498db',     # Blue
-    'divergent': '#e74c3c', # Red for divergent layers
-    'neutral': '#95a5a6',   # Gray
+# Style contract matching plot_rq3_combined.py
+STYLE_CONFIG = {
+    "font.family": "serif",
+    "font.size": 11,
+    "axes.labelsize": 12,
+    "axes.titlesize": 13,
+    "legend.fontsize": 10,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "figure.dpi": 150,
+    "savefig.dpi": 300,
+    "savefig.bbox": "tight",
+    "axes.grid": True,
+    "grid.alpha": 0.3,
+    "axes.spines.top": False,
+    "axes.spines.right": False,
 }
+
+# Thesis palette aligned with RQ3 styling
+COLORS = {
+    "erm": "#E57373",
+    "dann": "#64B5F6",
+    "wavlm": "#4C72B0",
+    "w2v2": "#DD8452",
+    "chance": "#9E9E9E",
+    "neutral": "#90A4AE",
+    "highlight": "#2E7D32",
+    "divergent": "#D32F2F",
+}
+
+INTERVENTION_ORDER = [
+    "layer_patch_mixed",
+    "pool_weight_transplant",
+    "layer_patch_repr",
+    "layer_patch_hidden",
+]
+
+INTERVENTION_LABELS = {
+    "layer_patch_hidden": "Baseline\n(no patch)",
+    "layer_patch_repr": "Patch\nProjection",
+    "layer_patch_mixed": "Patch\nMixed",
+    "pool_weight_transplant": "Transplant\nPool Weights",
+}
+
+
+def sort_interventions(df: pd.DataFrame) -> pd.DataFrame:
+    """Return intervention rows in a stable, presentation-friendly order."""
+    ordered_modes = [mode for mode in INTERVENTION_ORDER if mode in set(df["mode"].values)]
+    sorted_df = (
+        df.assign(mode=pd.Categorical(df["mode"], categories=ordered_modes, ordered=True))
+        .sort_values("mode")
+        .copy()
+    )
+    sorted_df["mode"] = sorted_df["mode"].astype(str)
+    return sorted_df
+
+
+def infer_probe_chance_from_results(df: pd.DataFrame) -> tuple[float, str]:
+    """Infer probe chance accuracy from RQ4 results metadata columns."""
+    if "probe_chance_acc" in df.columns:
+        valid_values = pd.to_numeric(df["probe_chance_acc"], errors="coerce").dropna()
+        if not valid_values.empty:
+            chance_acc = float(valid_values.mode().iloc[0])
+            if chance_acc > 0:
+                classes = int(round(1.0 / chance_acc))
+                return chance_acc * 100.0, f"Chance ({classes} codecs)"
+    if "probe_target_unique" in df.columns:
+        valid_values = pd.to_numeric(df["probe_target_unique"], errors="coerce").dropna()
+        if not valid_values.empty:
+            classes = int(valid_values.mode().iloc[0])
+            if classes > 0:
+                return 100.0 / classes, f"Chance ({classes} codecs)"
+
+    logger.warning("Could not infer codec cardinality from intervention CSV; defaulting chance to 33.3%%")
+    return 33.3, "Chance (3 codecs)"
 
 
 def plot_cka_layer_bar(df: pd.DataFrame, output_path: Path) -> None:
@@ -67,6 +134,8 @@ def plot_cka_layer_bar(df: pd.DataFrame, output_path: Path) -> None:
     
     Highlights layer 11's dramatic divergence.
     """
+    plt.rcParams.update(STYLE_CONFIG)
+
     # Filter to pool_weight_transplant layer_contrib (the meaningful comparison)
     layer_data = df[
         (df['mode'] == 'pool_weight_transplant') & 
@@ -85,15 +154,15 @@ def plot_cka_layer_bar(df: pd.DataFrame, output_path: Path) -> None:
     cka_values = layer_data['cka'].values
     
     # Color bars based on divergence
-    colors = [COLORS['divergent'] if cka < 0.5 else COLORS['dann'] for cka in cka_values]
+    colors = [COLORS["divergent"] if cka < 0.5 else COLORS["wavlm"] for cka in cka_values]
     
     fig, ax = plt.subplots(figsize=FIGSIZE_SINGLE)
     
-    bars = ax.bar(layers, cka_values, color=colors, edgecolor='black', linewidth=0.5)
+    bars = ax.bar(layers, cka_values, color=colors, edgecolor="black", linewidth=0.5, alpha=0.9)
     
     # Add horizontal reference lines
-    ax.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5, label='Identical')
-    ax.axhline(y=0.5, color='orange', linestyle=':', alpha=0.5, label='Moderate similarity')
+    ax.axhline(y=1.0, color=COLORS["chance"], linestyle="--", linewidth=1.5, label="Identical")
+    ax.axhline(y=0.5, color="#D9A441", linestyle=":", linewidth=2.0, label="Moderate similarity")
     
     # Annotate layer 11
     layer_11_idx = np.where(layers == 11)[0]
@@ -102,29 +171,30 @@ def plot_cka_layer_bar(df: pd.DataFrame, output_path: Path) -> None:
         ax.annotate(
             f'CKA={cka_values[idx]:.2f}',
             xy=(11, cka_values[idx]),
-            xytext=(9, 0.3),
-            arrowprops=dict(arrowstyle='->', color='red', lw=1.5),
+            xytext=(9.1, 0.32),
+            arrowprops=dict(arrowstyle="->", color=COLORS["divergent"], lw=1.8),
             fontsize=10,
-            fontweight='bold',
-            color='red'
+            fontweight="bold",
+            color=COLORS["divergent"],
         )
     
-    ax.set_xlabel('Transformer Layer', fontsize=12)
-    ax.set_ylabel('CKA Similarity (ERM vs DANN)', fontsize=12)
-    ax.set_title('Layer Contribution Similarity: ERM vs DANN', fontsize=14, fontweight='bold')
+    ax.set_xlabel("Transformer Layer")
+    ax.set_ylabel("CKA Similarity (ERM vs DANN)")
+    ax.set_title("Layer Contribution Similarity: ERM vs DANN", fontweight="bold")
     ax.set_xticks(layers)
-    ax.set_ylim(0, 1.05)
-    ax.legend(loc='lower left')
+    ax.set_ylim(0, 1.06)
+    ax.margins(x=0.02)
+    ax.legend(loc="lower left", framealpha=0.9)
     
     # Add interpretation text
     ax.text(
         0.98, 0.02,
-        'Layer 11: DANN diverges\n(codec info removed)',
+        "Layer 11: DANN diverges\n(codec info removed)",
         transform=ax.transAxes,
-        ha='right', va='bottom',
+        ha="right", va="bottom",
         fontsize=9,
-        style='italic',
-        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        style="italic",
+        bbox=dict(boxstyle="round", facecolor="#FFF8E1", edgecolor="#BDBDBD", alpha=0.85),
     )
     
     plt.tight_layout()
@@ -136,70 +206,110 @@ def plot_cka_layer_bar(df: pd.DataFrame, output_path: Path) -> None:
 
 def plot_intervention_comparison(df: pd.DataFrame, output_path: Path) -> None:
     """Create grouped bar chart comparing intervention effects on EER and probe accuracy."""
-    
+
+    plt.rcParams.update(STYLE_CONFIG)
+    df_sorted = sort_interventions(df)
     fig, axes = plt.subplots(1, 2, figsize=FIGSIZE_WIDE)
-    
-    # Prepare data
-    modes = df['mode'].values
-    mode_labels = {
-        'layer_patch_hidden': 'Baseline\n(no patch)',
-        'layer_patch_repr': 'Patch\nProjection',
-        'layer_patch_mixed': 'Patch\nMixed',
-        'pool_weight_transplant': 'Transplant\nPool Weights'
-    }
-    labels = [mode_labels.get(m, m) for m in modes]
-    
-    eer_values = df['eer'].values * 100  # Convert to percentage
-    probe_values = df['max_probe_acc'].values * 100
-    
+
+    modes = df_sorted["mode"].values
+    labels = [INTERVENTION_LABELS.get(mode, mode) for mode in modes]
+    eer_values = df_sorted["eer"].values * 100
+    probe_values = df_sorted["max_probe_acc"].values * 100
+    chance_pct, chance_label = infer_probe_chance_from_results(df_sorted)
+
     x = np.arange(len(modes))
-    width = 0.6
-    
+    width = 0.62
+
+    mode_colors = []
+    for mode in modes:
+        if mode == "layer_patch_hidden":
+            mode_colors.append(COLORS["neutral"])
+        elif mode == "layer_patch_repr":
+            mode_colors.append(COLORS["highlight"])
+        elif mode == "pool_weight_transplant":
+            mode_colors.append(COLORS["wavlm"])
+        else:
+            mode_colors.append(COLORS["dann"])
+
     # Left panel: EER
-    colors_eer = [COLORS['neutral'] if i == 0 else COLORS['dann'] for i in range(len(modes))]
-    axes[0].bar(x, eer_values, width, color=colors_eer, edgecolor='black', linewidth=0.5)
-    axes[0].set_ylabel('EER (%)', fontsize=12)
-    axes[0].set_title('Spoofing Detection Performance', fontsize=12, fontweight='bold')
+    eer_bars = axes[0].bar(
+        x,
+        eer_values,
+        width,
+        color=mode_colors,
+        edgecolor="black",
+        linewidth=0.5,
+        alpha=0.9,
+    )
+    axes[0].set_ylabel("EER (%)")
+    axes[0].set_title("Spoofing Detection Performance", fontweight="bold")
     axes[0].set_xticks(x)
-    axes[0].set_xticklabels(labels, fontsize=9)
-    axes[0].set_ylim(0, max(eer_values) * 1.2)
-    
-    # Add value labels
-    for i, v in enumerate(eer_values):
-        axes[0].text(i, v + 0.1, f'{v:.2f}%', ha='center', va='bottom', fontsize=9)
-    
-    # Right panel: Probe accuracy (domain leakage)
-    colors_probe = [COLORS['divergent'] if v > 50 else COLORS['erm'] for v in probe_values]
-    axes[1].bar(x, probe_values, width, color=colors_probe, edgecolor='black', linewidth=0.5)
-    axes[1].set_ylabel('Codec Probe Accuracy (%)', fontsize=12)
-    axes[1].set_title('Domain Information Leakage', fontsize=12, fontweight='bold')
-    axes[1].set_xticks(x)
-    axes[1].set_xticklabels(labels, fontsize=9)
-    axes[1].set_ylim(0, 100)
-    
-    # Add chance level line
-    axes[1].axhline(y=33.3, color='gray', linestyle='--', alpha=0.7, label='Chance (3 codecs)')
-    axes[1].legend(loc='upper right')
-    
-    # Add value labels
-    for i, v in enumerate(probe_values):
-        axes[1].text(i, v + 1, f'{v:.1f}%', ha='center', va='bottom', fontsize=9)
-    
-    # Highlight the key finding
-    repr_idx = list(modes).index('layer_patch_repr') if 'layer_patch_repr' in modes else None
-    if repr_idx is not None:
-        axes[1].annotate(
-            'Domain invariance\nachieved here',
-            xy=(repr_idx, probe_values[repr_idx]),
-            xytext=(repr_idx + 0.8, probe_values[repr_idx] + 15),
-            arrowprops=dict(arrowstyle='->', color='green', lw=1.5),
+    axes[0].set_xticklabels(labels)
+    axes[0].set_ylim(0, max(eer_values) + 0.8)
+
+    for bar, value in zip(eer_bars, eer_values):
+        axes[0].text(
+            bar.get_x() + bar.get_width() / 2,
+            value + 0.08,
+            f"{value:.2f}%",
+            ha="center",
+            va="bottom",
             fontsize=9,
-            color='green',
-            fontweight='bold'
         )
-    
-    plt.suptitle('RQ4: Activation Patching Ablation', fontsize=14, fontweight='bold', y=1.02)
-    plt.tight_layout()
+
+    # Right panel: Probe accuracy (domain leakage)
+    probe_colors = [
+        COLORS["highlight"] if mode == "layer_patch_repr" else COLORS["divergent"]
+        for mode in modes
+    ]
+    probe_bars = axes[1].bar(
+        x,
+        probe_values,
+        width,
+        color=probe_colors,
+        edgecolor="black",
+        linewidth=0.5,
+        alpha=0.9,
+    )
+    axes[1].set_ylabel("Codec Probe Accuracy (%)")
+    axes[1].set_title("Domain Information Leakage", fontweight="bold")
+    axes[1].set_xticks(x)
+    axes[1].set_xticklabels(labels)
+    axes[1].set_ylim(0, 100)
+    axes[1].axhline(
+        y=chance_pct,
+        color=COLORS["chance"],
+        linestyle="--",
+        linewidth=1.5,
+        label=chance_label,
+    )
+    axes[1].legend(loc="upper right", framealpha=0.9)
+
+    for bar, value in zip(probe_bars, probe_values):
+        axes[1].text(
+            bar.get_x() + bar.get_width() / 2,
+            value + 1.2,
+            f"{value:.1f}%",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
+
+    repr_indices = np.where(modes == "layer_patch_repr")[0]
+    if len(repr_indices) > 0:
+        repr_idx = int(repr_indices[0])
+        axes[1].annotate(
+            "Domain invariance\nachieved here",
+            xy=(repr_idx, probe_values[repr_idx]),
+            xytext=(repr_idx + 0.85, min(94, probe_values[repr_idx] + 20)),
+            arrowprops=dict(arrowstyle="->", color=COLORS["highlight"], lw=1.8),
+            fontsize=9,
+            color=COLORS["highlight"],
+            fontweight="bold",
+        )
+
+    plt.suptitle("RQ4: Activation Patching Ablation", fontsize=14, fontweight="bold", y=1.03)
+    plt.tight_layout(rect=(0, 0, 1, 0.96))
     plt.savefig(output_path, dpi=DPI, bbox_inches='tight')
     plt.savefig(output_path.with_suffix('.pdf'), bbox_inches='tight')
     plt.close()
@@ -208,7 +318,8 @@ def plot_intervention_comparison(df: pd.DataFrame, output_path: Path) -> None:
 
 def plot_cka_heatmap(df: pd.DataFrame, output_path: Path) -> None:
     """Create heatmap showing CKA across different intervention modes."""
-    
+    plt.rcParams.update(STYLE_CONFIG)
+
     # Get unique modes and their CKA summaries
     modes = df['mode'].unique()
     
@@ -249,28 +360,28 @@ def plot_cka_heatmap(df: pd.DataFrame, output_path: Path) -> None:
     layer_nums = layer_data['layer_num'].astype(int).values
     
     # Create simple heatmap (1 row x n_layers)
-    fig, ax = plt.subplots(figsize=(max(8, n_layers * 0.8), 2))
+    fig, ax = plt.subplots(figsize=(max(9.5, n_layers * 0.9), 2.8))
     
     cka_matrix = layer_data['cka'].values.reshape(1, -1)
     
-    im = ax.imshow(cka_matrix, cmap='RdYlGn', aspect='auto', vmin=0, vmax=1)
+    im = ax.imshow(cka_matrix, cmap="RdYlGn", aspect="auto", vmin=0, vmax=1)
     
     # Labels - use actual layer numbers from data
     ax.set_xticks(range(n_layers))
-    ax.set_xticklabels([f'L{i}' for i in layer_nums])
+    ax.set_xticklabels([f"L{i}" for i in layer_nums], fontsize=11)
     ax.set_yticks([0])
-    ax.set_yticklabels(['ERM↔DANN'])
-    ax.set_xlabel('Transformer Layer')
-    ax.set_title('CKA Similarity: Layer Contributions (ERM vs DANN)', fontweight='bold')
+    ax.set_yticklabels(["ERM↔DANN"], fontsize=11)
+    ax.set_xlabel("Transformer Layer")
+    ax.set_title("CKA Similarity: Layer Contributions (ERM vs DANN)", fontweight="bold", pad=10)
     
     # Add colorbar
-    cbar = plt.colorbar(im, ax=ax, orientation='horizontal', pad=0.3, shrink=0.8)
-    cbar.set_label('CKA Similarity')
+    cbar = plt.colorbar(im, ax=ax, orientation="horizontal", pad=0.34, shrink=0.82)
+    cbar.set_label("CKA Similarity")
     
     # Annotate low CKA values
     for i, cka in enumerate(layer_data['cka'].values):
-        color = 'white' if cka < 0.5 else 'black'
-        ax.text(i, 0, f'{cka:.2f}', ha='center', va='center', fontsize=8, color=color)
+        color = "white" if cka <= 0.35 else "black"
+        ax.text(i, 0, f"{cka:.2f}", ha="center", va="center", fontsize=10, fontweight="bold", color=color)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=DPI, bbox_inches='tight')
@@ -281,53 +392,114 @@ def plot_cka_heatmap(df: pd.DataFrame, output_path: Path) -> None:
 
 def plot_delta_scatter(df: pd.DataFrame, output_path: Path) -> None:
     """Scatter plot: Δ EER vs Δ Probe accuracy for each intervention."""
-    
+    plt.rcParams.update(STYLE_CONFIG)
     fig, ax = plt.subplots(figsize=FIGSIZE_SINGLE)
-    
+
     # Filter out baseline (delta = 0)
-    plot_df = df[df['mode'] != 'layer_patch_hidden'].copy()
-    
-    delta_eer = plot_df['delta_eer_vs_base'].values * 100
-    delta_probe = plot_df['delta_probe_vs_base'].values * 100
-    modes = plot_df['mode'].values
-    
+    plot_df = sort_interventions(df[df["mode"] != "layer_patch_hidden"].copy())
+
+    delta_eer = plot_df["delta_eer_vs_base"].values * 100
+    delta_probe = plot_df["delta_probe_vs_base"].values * 100
+    modes = plot_df["mode"].values
+
     mode_labels = {
-        'layer_patch_repr': 'Projection\nPatch',
-        'layer_patch_mixed': 'Mixed\nPatch',
-        'pool_weight_transplant': 'Pool Weight\nTransplant'
+        "layer_patch_repr": "Projection Patch",
+        "layer_patch_mixed": "Mixed Patch",
+        "pool_weight_transplant": "Pool Weight Transplant",
     }
-    
-    colors = [COLORS['erm'], COLORS['dann'], COLORS['divergent']]
-    
-    for i, (de, dp, mode) in enumerate(zip(delta_eer, delta_probe, modes)):
-        ax.scatter(de, dp, s=200, c=colors[i % len(colors)], edgecolor='black', linewidth=1.5, zorder=3)
+    mode_colors = {
+        "layer_patch_repr": COLORS["highlight"],
+        "layer_patch_mixed": COLORS["dann"],
+        "pool_weight_transplant": COLORS["divergent"],
+    }
+    label_offsets = {
+        "layer_patch_mixed": (0.02, 0.35),
+        "pool_weight_transplant": (-0.09, 0.35),
+        "layer_patch_repr": (-0.08, -0.7),
+    }
+
+    for de, dp, mode in zip(delta_eer, delta_probe, modes):
+        ax.scatter(
+            de,
+            dp,
+            s=560,
+            c=mode_colors.get(mode, COLORS["neutral"]),
+            edgecolor="black",
+            linewidth=2.0,
+            zorder=3,
+        )
+        dx, dy = label_offsets.get(mode, (0.02, 0.35))
         ax.annotate(
             mode_labels.get(mode, mode),
             xy=(de, dp),
-            xytext=(de + 0.1, dp + 2),
-            fontsize=9,
-            ha='left'
+            xytext=(de + dx, dp + dy),
+            fontsize=10,
+            ha="left" if dx >= 0 else "right",
+            va="bottom" if dy >= 0 else "top",
+            annotation_clip=False,
         )
-    
+
     # Add quadrant lines
-    ax.axhline(y=0, color='gray', linestyle='-', alpha=0.3)
-    ax.axvline(x=0, color='gray', linestyle='-', alpha=0.3)
-    
+    ax.axhline(y=0, color=COLORS["chance"], linestyle="-", alpha=0.5, linewidth=1.2)
+    ax.axvline(x=0, color=COLORS["chance"], linestyle="-", alpha=0.5, linewidth=1.2)
+
     # Quadrant labels
-    ax.text(0.02, 0.98, 'Better EER\nMore leakage', transform=ax.transAxes, 
-            ha='left', va='top', fontsize=8, color='gray', style='italic')
-    ax.text(0.98, 0.98, 'Worse EER\nMore leakage', transform=ax.transAxes,
-            ha='right', va='top', fontsize=8, color='gray', style='italic')
-    ax.text(0.02, 0.02, 'Better EER\nLess leakage ✓', transform=ax.transAxes,
-            ha='left', va='bottom', fontsize=8, color='green', style='italic', fontweight='bold')
-    ax.text(0.98, 0.02, 'Worse EER\nLess leakage', transform=ax.transAxes,
-            ha='right', va='bottom', fontsize=8, color='gray', style='italic')
-    
-    ax.set_xlabel('Δ EER (%) vs Baseline', fontsize=12)
-    ax.set_ylabel('Δ Probe Accuracy (%) vs Baseline', fontsize=12)
-    ax.set_title('Intervention Trade-offs: Detection vs Domain Invariance', fontsize=12, fontweight='bold')
-    
-    plt.tight_layout()
+    ax.text(
+        0.02,
+        0.98,
+        "Better EER\nMore leakage",
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=8,
+        color=COLORS["chance"],
+        style="italic",
+    )
+    ax.text(
+        0.98,
+        0.98,
+        "Worse EER\nMore leakage",
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=8,
+        color=COLORS["chance"],
+        style="italic",
+    )
+    ax.text(
+        0.02,
+        0.02,
+        "Better EER\nLess leakage",
+        transform=ax.transAxes,
+        ha="left",
+        va="bottom",
+        fontsize=8,
+        color=COLORS["highlight"],
+        style="italic",
+        fontweight="bold",
+    )
+    ax.text(
+        0.98,
+        0.02,
+        "Worse EER\nLess leakage",
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=8,
+        color=COLORS["chance"],
+        style="italic",
+    )
+
+    x_padding = 0.05
+    y_padding = 0.35
+    ax.set_xlim(delta_eer.min() - x_padding, delta_eer.max() + x_padding)
+    ax.set_ylim(delta_probe.min() - y_padding, delta_probe.max() + y_padding)
+    ax.set_xlabel("Δ EER (%) vs Baseline")
+    ax.set_ylabel("Δ Probe Accuracy (%) vs Baseline")
+    ax.set_title("Intervention Trade-offs: Detection vs Domain Invariance", fontweight="bold")
+    ax.margins(x=0.08, y=0.08)
+
+    plt.tight_layout(pad=1.1)
     plt.savefig(output_path, dpi=DPI, bbox_inches='tight')
     plt.savefig(output_path.with_suffix('.pdf'), bbox_inches='tight')
     plt.close()
