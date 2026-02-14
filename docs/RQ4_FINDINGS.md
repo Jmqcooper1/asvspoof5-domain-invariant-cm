@@ -11,19 +11,21 @@ Even with frozen backbone, layer 11's **contribution** to the final representati
 
 ### 2. Domain Invariance in Projection Head
 `layer_patch_repr` intervention shows:
-- Probe accuracy drops: 76.9% → 38.8% (-4.8%)
-- EER only slightly affected: 3.24% → 2.94% (-0.30%)
+- Probe accuracy drops: 76.9% → 38.8% (**-38.1 pp**)
+- EER only slightly affected: 3.24% → 2.94% (-0.30 pp)
 
-**Interpretation:** Domain invariance happens specifically in the projection head, not the backbone.
+**Interpretation:** Domain invariance happens specifically in the projection head, not the backbone. The 38 percentage point drop in codec probe accuracy confirms domain information is actively removed.
 
 ### 3. Intervention Results Summary
 
-| Mode | EER | Δ EER | Probe Acc | Δ Probe |
-|------|-----|-------|-----------|---------|
+| Mode | EER | Δ EER (pp) | Probe Acc | Δ Probe (pp) |
+|------|-----|------------|-----------|--------------|
 | layer_patch_hidden (baseline) | 3.24% | — | 76.9% | — |
-| layer_patch_repr | 2.94% | -0.30% | 38.8% | **-4.8%** |
-| layer_patch_mixed | 2.58% | -0.66% | 70.1% | 0.0 |
-| pool_weight_transplant | 2.58% | -0.66% | 76.8% | 0.0 |
+| layer_patch_repr | 2.94% | -0.30 | 38.8% | **-38.1** |
+| layer_patch_mixed | 2.58% | -0.66 | 70.1% | -6.8 |
+| pool_weight_transplant | 2.58% | -0.66 | 76.8% | -0.1 |
+
+*pp = percentage points*
 
 ### 4. CKA Layer-by-Layer (ERM vs DANN)
 

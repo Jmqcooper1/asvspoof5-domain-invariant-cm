@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -245,16 +244,20 @@ def plot_cka_heatmap(df: pd.DataFrame, output_path: Path) -> None:
     layer_data = layer_data.dropna(subset=['layer_num'])
     layer_data = layer_data.sort_values('layer_num')
     
-    # Create simple heatmap (1 row x 12 layers)
-    fig, ax = plt.subplots(figsize=(10, 2))
+    # Dynamically determine number of layers from data
+    n_layers = len(layer_data)
+    layer_nums = layer_data['layer_num'].astype(int).values
+    
+    # Create simple heatmap (1 row x n_layers)
+    fig, ax = plt.subplots(figsize=(max(8, n_layers * 0.8), 2))
     
     cka_matrix = layer_data['cka'].values.reshape(1, -1)
     
     im = ax.imshow(cka_matrix, cmap='RdYlGn', aspect='auto', vmin=0, vmax=1)
     
-    # Labels
-    ax.set_xticks(range(12))
-    ax.set_xticklabels([f'L{i}' for i in range(12)])
+    # Labels - use actual layer numbers from data
+    ax.set_xticks(range(n_layers))
+    ax.set_xticklabels([f'L{i}' for i in layer_nums])
     ax.set_yticks([0])
     ax.set_yticklabels(['ERM↔DANN'])
     ax.set_xlabel('Transformer Layer')
