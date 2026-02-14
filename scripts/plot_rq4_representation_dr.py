@@ -41,13 +41,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cache",
         type=Path,
-        default=Path("rq4_repr_cache.npz"),
+        default=Path("results/rq4_repr_cache.npz"),
         help="Path to representation cache NPZ from rq4_activation_patching.py",
     )
     parser.add_argument(
         "--results",
         type=Path,
-        default=None,
+        default=Path("results/rq4_results_summary.csv"),
         help="Optional RQ4 summary CSV for subtitle metadata",
     )
     parser.add_argument(

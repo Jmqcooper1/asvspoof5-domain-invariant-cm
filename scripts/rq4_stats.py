@@ -26,13 +26,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--results",
         type=Path,
-        default=Path("rq4_results_summary.csv"),
+        default=Path("results/rq4_results_summary.csv"),
         help="Path to RQ4 summary CSV",
     )
     parser.add_argument(
         "--stats-cache",
         type=Path,
-        default=Path("rq4_stats_cache.npz"),
+        default=Path("results/rq4_stats_cache.npz"),
         help="Path to NPZ score cache emitted by rq4_activation_patching.py",
     )
     parser.add_argument(
@@ -50,7 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("rq4_stats_summary.csv"),
+        default=Path("results/rq4_stats_summary.csv"),
         help="Output CSV path",
     )
     return parser.parse_args()

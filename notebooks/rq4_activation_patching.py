@@ -102,15 +102,26 @@ rq4_max_cka_samples = _get_env_int("RQ4_MAX_CKA_SAMPLES", 5000)
 rq4_max_probe_samples = _get_env_int("RQ4_MAX_PROBE_SAMPLES", 5000)
 rq4_probe_split = os.environ.get("RQ4_PROBE_SPLIT", rq4_eval_split)
 rq4_output_prefix = os.environ.get("RQ4_OUTPUT_PREFIX", "rq4")
+rq4_output_dir = Path(os.environ.get("RQ4_OUTPUT_DIR", "results"))
+rq4_output_dir.mkdir(parents=True, exist_ok=True)
 rq4_repr_cache_name = os.environ.get("RQ4_REPR_CACHE", f"{rq4_output_prefix}_repr_cache.npz")
 rq4_metadata_name = os.environ.get("RQ4_METADATA_JSON", f"{rq4_output_prefix}_metadata.json")
+
+
+def resolve_rq4_output_path(value: str) -> Path:
+    """Resolve output path: relative filenames go under RQ4_OUTPUT_DIR."""
+    candidate = Path(value)
+    if candidate.is_absolute() or candidate.parent != Path("."):
+        return candidate
+    return rq4_output_dir / candidate
 print(
     "RQ4 run config | "
     f"eval_split={rq4_eval_split} "
     f"probe_split={rq4_probe_split} "
     f"max_eval_samples={rq4_max_eval_samples} "
     f"max_cka_samples={rq4_max_cka_samples} "
-    f"max_probe_samples={rq4_max_probe_samples}"
+    f"max_probe_samples={rq4_max_probe_samples} "
+    f"output_dir={rq4_output_dir}"
 )
 
 
@@ -1524,17 +1535,17 @@ print(
 )
 
 # Save results to files
-results_path = Path(f"{rq4_output_prefix}_results_summary.csv")
+results_path = resolve_rq4_output_path(f"{rq4_output_prefix}_results_summary.csv")
 mode_results_df.to_csv(results_path, index=False)
 print(f"Results saved to {results_path}")
 
 cka_df = pd.DataFrame(mode_cka_rows)
-cka_path = Path(f"{rq4_output_prefix}_cka_results.csv")
+cka_path = resolve_rq4_output_path(f"{rq4_output_prefix}_cka_results.csv")
 cka_df.to_csv(cka_path, index=False)
 print(f"CKA results saved to {cka_path}")
 
 # Save score-level artifacts for bootstrap/significance tests.
-stats_cache_path = Path(f"{rq4_output_prefix}_stats_cache.npz")
+stats_cache_path = resolve_rq4_output_path(f"{rq4_output_prefix}_stats_cache.npz")
 stats_cache_payload = {
     "baseline_scores": np.asarray(erm_results["scores"]),
     "baseline_labels": np.asarray(erm_results["labels"]),
@@ -1561,7 +1572,7 @@ dann_repr_probe = run_probe_for_model(
     split=probe_split,
     max_samples=rq4_max_probe_samples,
 )
-repr_cache_path = Path(rq4_repr_cache_name)
+repr_cache_path = resolve_rq4_output_path(rq4_repr_cache_name)
 np.savez_compressed(
     repr_cache_path,
     erm_repr=erm_repr_probe["inputs"][0],
@@ -1587,7 +1598,7 @@ metadata = {
     "stats_cache": str(stats_cache_path),
     "repr_cache": str(repr_cache_path),
 }
-metadata_path = Path(rq4_metadata_name)
+metadata_path = resolve_rq4_output_path(rq4_metadata_name)
 with metadata_path.open("w", encoding="utf-8") as metadata_file:
     json.dump(metadata, metadata_file, indent=2)
 print(f"Saved RQ4 metadata: {metadata_path}")

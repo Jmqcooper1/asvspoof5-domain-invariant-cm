@@ -508,8 +508,18 @@ def plot_delta_scatter(df: pd.DataFrame, output_path: Path) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--cka-results', type=Path, required=True, help='Path to rq4_cka_results.csv')
-    parser.add_argument('--intervention-results', type=Path, required=True, help='Path to rq4_results_summary.csv')
+    parser.add_argument(
+        '--cka-results',
+        type=Path,
+        default=Path('results/rq4_cka_results.csv'),
+        help='Path to rq4_cka_results.csv (default: results/rq4_cka_results.csv)',
+    )
+    parser.add_argument(
+        '--intervention-results',
+        type=Path,
+        default=Path('results/rq4_results_summary.csv'),
+        help='Path to rq4_results_summary.csv (default: results/rq4_results_summary.csv)',
+    )
     parser.add_argument('--output-dir', type=Path, default=Path('figures/rq4'), help='Output directory')
     args = parser.parse_args()
     
