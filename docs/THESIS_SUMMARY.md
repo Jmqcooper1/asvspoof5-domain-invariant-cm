@@ -3,7 +3,6 @@
 **Author:** Mike Cooper  
 **Institution:** University of Amsterdam  
 **Date:** February 2026  
-**Duration:** 5-6 weeks (allocated: 5 months)
 
 ---
 
