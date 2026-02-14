@@ -487,6 +487,25 @@ valid_representations = {"hidden_states", "mixed", "repr", "layer_contrib"}
 if cka_representation not in valid_representations:
     raise ValueError(f"Invalid cka_representation={cka_representation}. Choose from {sorted(valid_representations)}")
 
+# Intervention mode controls
+available_intervention_modes = [
+    "layer_patch_hidden",
+    "layer_patch_mixed",
+    "layer_patch_repr",
+    "pool_weight_transplant",
+]
+run_all_modes = os.environ.get("RQ4_RUN_ALL_MODES", "true").lower() == "true"
+configured_mode = os.environ.get("RQ4_INTERVENTION_MODE", "layer_patch_hidden")
+if configured_mode not in available_intervention_modes:
+    raise ValueError(
+        f"Invalid RQ4_INTERVENTION_MODE={configured_mode}. "
+        f"Choose from {available_intervention_modes}"
+    )
+selected_intervention_modes = (
+    list(available_intervention_modes) if run_all_modes else [configured_mode]
+)
+print(f"Selected intervention modes: {selected_intervention_modes}")
+
 if cka_representation == "hidden_states":
     is_frozen_base = bool(erm_config.get("backbone", {}).get("freeze", True))
     is_frozen_donor = bool(dann_config.get("backbone", {}).get("freeze", True))
@@ -769,51 +788,169 @@ class PatchedModel(torch.nn.Module):
 
     def __del__(self):
         """Cleanup hooks on deletion."""
-        self.remove_hooks()
+        # Interpreter shutdown can leave torch internals partially torn down.
+        try:
+            self.remove_hooks()
+        except Exception:
+            pass
 
+
+class MixedPatchedModel(torch.nn.Module):
+    """Replace base mixed representation with donor mixed representation."""
+
+    def __init__(self, base_model: torch.nn.Module, donor_model: torch.nn.Module):
+        super().__init__()
+        self.base_model = base_model
+        self.donor_model = donor_model
+        self.base_model.eval()
+        self.donor_model.eval()
+
+    def forward(
+        self,
+        waveform: torch.Tensor,
+        attention_mask: torch.Tensor = None,
+        lengths: torch.Tensor = None,
+    ) -> dict:
+        mixed_base, all_hidden_states_base = self.base_model.backbone(waveform, attention_mask)
+        mixed_donor, _ = self.donor_model.backbone(waveform, attention_mask)
+        if mixed_base.shape != mixed_donor.shape:
+            raise RuntimeError(
+                "Mixed representation shape mismatch: "
+                f"base={tuple(mixed_base.shape)} donor={tuple(mixed_donor.shape)}"
+            )
+        pooled = self.base_model.pooling(mixed_donor, lengths)
+        repr_ = self.base_model.projection(pooled)
+        task_logits = self.base_model.task_head(repr_)
+        return {
+            "task_logits": task_logits,
+            "repr": repr_,
+            "all_hidden_states": all_hidden_states_base,
+        }
+
+
+class ReprPatchedModel(torch.nn.Module):
+    """Replace base repr with donor repr before task head."""
+
+    def __init__(self, base_model: torch.nn.Module, donor_model: torch.nn.Module):
+        super().__init__()
+        self.base_model = base_model
+        self.donor_model = donor_model
+        self.base_model.eval()
+        self.donor_model.eval()
+
+    def forward(
+        self,
+        waveform: torch.Tensor,
+        attention_mask: torch.Tensor = None,
+        lengths: torch.Tensor = None,
+    ) -> dict:
+        base_outputs = self.base_model(waveform, attention_mask, lengths)
+        donor_outputs = self.donor_model(waveform, attention_mask, lengths)
+        base_repr = base_outputs["repr"]
+        donor_repr = donor_outputs["repr"]
+        if base_repr.shape != donor_repr.shape:
+            raise RuntimeError(
+                "Repr shape mismatch: "
+                f"base={tuple(base_repr.shape)} donor={tuple(donor_repr.shape)}"
+            )
+        task_logits = self.base_model.task_head(donor_repr)
+        return {
+            "task_logits": task_logits,
+            "repr": donor_repr,
+            "all_hidden_states": base_outputs["all_hidden_states"],
+        }
+
+
+def compute_mode_cka(
+    base_model: torch.nn.Module,
+    donor_model: torch.nn.Module,
+    base_config: dict,
+    donor_config: dict,
+    representation: str,
+    codec_vocab: dict,
+    codec_q_vocab: dict,
+    device: torch.device,
+    max_samples: int = 5000,
+) -> dict:
+    """Compute CKA for a chosen representation space."""
+    mode_loader = create_eval_dataloader(
+        split="dev",
+        codec_vocab=codec_vocab,
+        codec_q_vocab=codec_q_vocab,
+        config=base_config,
+        max_samples=max_samples,
+        batch_size=32,
+    )
+    base_reps = extract_layer_representations(
+        base_model,
+        mode_loader,
+        device,
+        representation=representation,
+    )
+    mode_loader = create_eval_dataloader(
+        split="dev",
+        codec_vocab=codec_vocab,
+        codec_q_vocab=codec_q_vocab,
+        config=donor_config,
+        max_samples=max_samples,
+        batch_size=32,
+    )
+    donor_reps = extract_layer_representations(
+        donor_model,
+        mode_loader,
+        device,
+        representation=representation,
+    )
+    return compare_representations(
+        erm_layers={k: v.numpy() for k, v in base_reps.items()},
+        dann_layers={k: v.numpy() for k, v in donor_reps.items()},
+    )
+
+
+def select_divergent_transformer_layers(base_model: torch.nn.Module, cka_results: dict, top_k: int = 3) -> list[int]:
+    """Select top-k lowest CKA transformer layers that exist in base model."""
+    cka_per_layer = cka_results["per_layer"]
+    sorted_layers = sorted(
+        [k for k in cka_per_layer.keys() if isinstance(k, int)],
+        key=lambda k: cka_per_layer[k]["cka"],
+    )
+    available_transformer_layers = {
+        int(name.split(".")[-1])
+        for name, _ in base_model.named_modules()
+        if name.startswith("backbone.model.encoder.layers.") and name.split(".")[-1].isdigit()
+    }
+    selected = [layer_idx for layer_idx in sorted_layers if layer_idx in available_transformer_layers][:top_k]
+    if len(selected) < top_k:
+        raise RuntimeError(
+            f"Expected at least {top_k} patchable transformer layers, found {len(selected)}. "
+            f"Available layers: {sorted(available_transformer_layers)}"
+        )
+    return selected
 
 # In[ ]:
 
 
-# Identify most divergent layers (lowest CKA = most different representations)
-cka_per_layer = cka_results['per_layer']
-sorted_layers = sorted(
-    [k for k in cka_per_layer.keys() if isinstance(k, int)],
-    key=lambda k: cka_per_layer[k]['cka'],
-)
-
-# Patch the 3 most divergent transformer layers that exist in the model
-available_transformer_layers = {
-    int(name.split(".")[-1])
-    for name, _ in erm_model.named_modules()
-    if name.startswith("backbone.model.encoder.layers.") and name.split(".")[-1].isdigit()
-}
-divergent_layers = [layer_idx for layer_idx in sorted_layers if layer_idx in available_transformer_layers][:3]
-if len(divergent_layers) < 3:
-    raise RuntimeError(
-        f"Expected at least 3 patchable transformer layers, found {len(divergent_layers)}. "
-        f"Available layers: {sorted(available_transformer_layers)}"
-    )
-print(f"Most divergent transformer layers (lowest CKA): {divergent_layers}")
-cka_value_strings = [f"{cka_per_layer[layer_idx]['cka']:.4f}" for layer_idx in divergent_layers]
-print(f"CKA values: {cka_value_strings}")
-
-# Create patched model (base=model A, donor=model B)
-patched_model = PatchedModel(
-    base_model=erm_model,
-    donor_model=dann_model,
-    patch_layers=divergent_layers,
-)
-patched_model.eval()
-print(f"\n{patched_model_name} created successfully!")
-
-
-# ## 4. Evaluation
-# 
-# Compare:
-# 1. Original ERM
-# 2. Original DANN
-# 3. Patched ERM (with DANN activations at selected layers)
+def make_intervention_model(mode: str, divergent_layers: list[int]) -> torch.nn.Module:
+    """Build intervention model for a given mode."""
+    if mode == "layer_patch_hidden":
+        model = PatchedModel(
+            base_model=erm_model,
+            donor_model=dann_model,
+            patch_layers=divergent_layers,
+        )
+        model.eval()
+        return model
+    if mode == "layer_patch_mixed":
+        model = MixedPatchedModel(base_model=erm_model, donor_model=dann_model)
+        model.eval()
+        return model
+    if mode == "layer_patch_repr":
+        model = ReprPatchedModel(base_model=erm_model, donor_model=dann_model)
+        model.eval()
+        return model
+    if mode == "pool_weight_transplant":
+        return erm_model
+    raise ValueError(f"Unknown intervention mode: {mode}")
 
 # In[ ]:
 
@@ -893,7 +1030,7 @@ eval_loader = create_eval_dataloader(
 # In[ ]:
 
 
-# Evaluate model A
+# Evaluate model A baseline
 print(f"Evaluating {model_a_name}...")
 erm_results = evaluate_model(erm_model, eval_loader, device)
 print(f"{model_a_name} EER: {erm_results['eer']:.2%}, minDCF: {erm_results['min_dcf']:.4f}")
@@ -902,7 +1039,7 @@ print(f"{model_a_name} EER: {erm_results['eer']:.2%}, minDCF: {erm_results['min_
 # In[ ]:
 
 
-# Recreate dataloader for DANN
+# Recreate dataloader for model B
 eval_loader = create_eval_dataloader(
     split="dev",
     codec_vocab=codec_vocab,
@@ -912,7 +1049,7 @@ eval_loader = create_eval_dataloader(
     batch_size=32,
 )
 
-# Evaluate model B
+# Evaluate model B baseline
 print(f"Evaluating {model_b_name}...")
 dann_results = evaluate_model(dann_model, eval_loader, device)
 print(f"{model_b_name} EER: {dann_results['eer']:.2%}, minDCF: {dann_results['min_dcf']:.4f}")
@@ -921,42 +1058,15 @@ print(f"{model_b_name} EER: {dann_results['eer']:.2%}, minDCF: {dann_results['mi
 # In[ ]:
 
 
-# Recreate dataloader for patched model
-eval_loader = create_eval_dataloader(
-    split="dev",
-    codec_vocab=codec_vocab,
-    codec_q_vocab=codec_q_vocab,
-    config=erm_config,
-    max_samples=10000,
-    batch_size=32,
-)
-
-# Evaluate patched model A
-print(f"Evaluating {patched_model_name}...")
-patched_results = evaluate_model(patched_model, eval_loader, device)
-print(f"{patched_model_name} EER: {patched_results['eer']:.2%}, minDCF: {patched_results['min_dcf']:.4f}")
-
-
-# In[ ]:
-
-
-# Compare results
-print("\n" + "="*60)
-print("EVALUATION RESULTS")
-print("="*60)
+# Baseline-only comparison; intervention modes are evaluated in ablation loop below.
+print("\n" + "=" * 60)
+print("BASELINE EVALUATION")
+print("=" * 60)
 print(f"{'Model':<20} {'EER':>10} {'minDCF':>10}")
-print("-"*60)
+print("-" * 60)
 print(f"{model_a_name:<20} {erm_results['eer']:>9.2%} {erm_results['min_dcf']:>10.4f}")
 print(f"{model_b_name:<20} {dann_results['eer']:>9.2%} {dann_results['min_dcf']:>10.4f}")
-print(f"{patched_model_name:<20} {patched_results['eer']:>9.2%} {patched_results['min_dcf']:>10.4f}")
-print("="*60)
-
-
-# ## 5. Domain Probe on Patched Model
-# 
-# Verify that patching reduces domain leakage by running codec probes on the patched representations.
-# 
-# Lower probe accuracy = more domain-invariant representations.
+print("=" * 60)
 
 # In[ ]:
 
@@ -1069,10 +1179,11 @@ def extract_representations_for_probing(
 # Select representation for domain probing.
 # Keep hidden_states to preserve layer-wise leakage profile.
 probe_representation = "hidden_states"
+probe_split = os.environ.get("RQ4_PROBE_SPLIT", "dev")
 
 # Create dataloader for probing
 probe_loader = create_eval_dataloader(
-    split="dev",
+    split=probe_split,
     codec_vocab=codec_vocab,
     codec_q_vocab=codec_q_vocab,
     config=erm_config,
@@ -1090,202 +1201,284 @@ erm_reps_probe, codec_labels, codec_q_labels = extract_representations_for_probi
     representation=probe_representation,
 )
 print(f"Extracted representation keys: {list(erm_reps_probe.keys())[:10]}")
-print(f"Codec labels shape: {codec_labels.shape}, unique values: {np.unique(codec_labels).shape[0]}")
-
-
-# In[ ]:
-
-
-# Run domain probes on model A
-print(f"\nRunning CODEC probes on {model_a_name}...")
-erm_probe_inputs = {k: v for k, v in erm_reps_probe.items() if isinstance(k, int)}
-if not erm_probe_inputs:
-    raise RuntimeError(
-        "Layer-wise probing requires integer layer keys. "
-        f"Current probe_representation={probe_representation} produced keys={list(erm_reps_probe.keys())}"
+codec_unique = int(np.unique(codec_labels).shape[0])
+codec_q_unique = int(np.unique(codec_q_labels).shape[0])
+print(
+    f"Probe split: {probe_split} | "
+    f"CODEC unique={codec_unique} | CODEC_Q unique={codec_q_unique}"
+)
+def choose_probe_target(codec_labels: np.ndarray, codec_q_labels: np.ndarray, split: str) -> tuple[str, np.ndarray]:
+    """Pick probe target that has at least 2 classes."""
+    codec_unique = int(np.unique(codec_labels).shape[0])
+    codec_q_unique = int(np.unique(codec_q_labels).shape[0])
+    print(
+        f"Probe split: {split} | "
+        f"CODEC unique={codec_unique} | CODEC_Q unique={codec_q_unique}"
+    )
+    if codec_unique >= 2:
+        return "CODEC", codec_labels
+    if codec_q_unique >= 2:
+        print("Warning: CODEC labels are single-class; falling back to CODEC_Q probing.")
+        return "CODEC_Q", codec_q_labels
+    raise ValueError(
+        "Both CODEC and CODEC_Q labels are single-class on the selected probe split, "
+        f"so probing is undefined. split={split}, codec_unique={codec_unique}, "
+        f"codec_q_unique={codec_q_unique}. Try setting RQ4_PROBE_SPLIT to another split."
     )
 
-erm_codec_probes = layerwise_probing(
-    erm_probe_inputs,
-    codec_labels,
-    classifier="logistic",
-    cv_folds=5,
-    seed=42,
-)
 
-print(f"{model_a_name} max leakage layer: {erm_codec_probes['max_leakage_layer']}")
-print(f"{model_a_name} max accuracy: {erm_codec_probes['max_leakage_accuracy']:.4f}")
+def to_probe_inputs(representations: dict) -> dict[int, np.ndarray]:
+    """Convert representation dict into layerwise_probing-compatible integer keys."""
+    int_keys = sorted([k for k in representations.keys() if isinstance(k, int)])
+    if int_keys:
+        return {k: representations[k] for k in int_keys}
+    ordered_keys = sorted(representations.keys(), key=lambda x: str(x))
+    return {idx: representations[key] for idx, key in enumerate(ordered_keys)}
 
 
-# In[ ]:
-
-
-# Recreate dataloader and extract patched model representations
-probe_loader = create_eval_dataloader(
-    split="dev",
-    codec_vocab=codec_vocab,
-    codec_q_vocab=codec_q_vocab,
-    config=erm_config,
-    max_samples=5000,
-    batch_size=32,
-)
-
-print(f"Extracting patched model representations for probing ({probe_representation})...")
-patched_reps_probe, _, _ = extract_representations_for_probing(
-    patched_model,
-    probe_loader,
-    device,
-    max_samples=5000,
-    representation=probe_representation,
-)
-
-
-# In[ ]:
-
-
-# Run domain probes on patched model
-print("Running CODEC probes on patched model...")
-patched_probe_inputs = {k: v for k, v in patched_reps_probe.items() if isinstance(k, int)}
-if not patched_probe_inputs:
-    raise RuntimeError(
-        "Layer-wise probing requires integer layer keys. "
-        f"Current probe_representation={probe_representation} produced keys={list(patched_reps_probe.keys())}"
+def run_probe_for_model(
+    model: torch.nn.Module,
+    representation: str,
+    split: str,
+) -> dict:
+    """Extract representations and run domain probing for a model."""
+    probe_loader_local = create_eval_dataloader(
+        split=split,
+        codec_vocab=codec_vocab,
+        codec_q_vocab=codec_q_vocab,
+        config=erm_config,
+        max_samples=5000,
+        batch_size=32,
     )
+    model_reps, codec_labels_local, codec_q_labels_local = extract_representations_for_probing(
+        model,
+        probe_loader_local,
+        device,
+        max_samples=5000,
+        representation=representation,
+    )
+    probe_target_name_local, probe_labels_local = choose_probe_target(
+        codec_labels_local,
+        codec_q_labels_local,
+        split,
+    )
+    probe_inputs = to_probe_inputs(model_reps)
+    if not probe_inputs:
+        raise RuntimeError(
+            "No valid probing inputs extracted. "
+            f"representation={representation}, keys={list(model_reps.keys())}"
+        )
+    probe_results = layerwise_probing(
+        probe_inputs,
+        probe_labels_local,
+        classifier="logistic",
+        cv_folds=5,
+        seed=42,
+    )
+    return {
+        "target_name": probe_target_name_local,
+        "labels": probe_labels_local,
+        "inputs": probe_inputs,
+        "results": probe_results,
+    }
 
-patched_codec_probes = layerwise_probing(
-    patched_probe_inputs,
-    codec_labels,
-    classifier="logistic",
-    cv_folds=5,
-    seed=42,
-)
 
-print(f"Patched Max leakage layer: {patched_codec_probes['max_leakage_layer']}")
-print(f"Patched Max accuracy: {patched_codec_probes['max_leakage_accuracy']:.4f}")
+def copy_layer_pooling_weights_from_donor(base_model: torch.nn.Module, donor_model: torch.nn.Module) -> tuple[torch.Tensor, dict]:
+    """Copy donor layer-pooling weights into base model; return original for restore."""
+    base_pool = getattr(base_model.backbone, "layer_pooling", None)
+    donor_pool = getattr(donor_model.backbone, "layer_pooling", None)
+    if base_pool is None or donor_pool is None:
+        raise RuntimeError("Missing layer_pooling in base/donor backbone for pool_weight_transplant mode.")
+    base_weights = getattr(base_pool, "weights", None)
+    donor_weights = getattr(donor_pool, "weights", None)
+    if base_weights is None or donor_weights is None:
+        raise RuntimeError("Missing layer_pooling.weights in base/donor backbone.")
+    if base_weights.shape != donor_weights.shape:
+        raise RuntimeError(
+            "Layer-pooling weight shape mismatch: "
+            f"base={tuple(base_weights.shape)} donor={tuple(donor_weights.shape)}"
+        )
+    original = base_weights.detach().clone()
+    with torch.no_grad():
+        base_weights.copy_(donor_weights.detach())
+    delta = (donor_weights.detach() - original).cpu().numpy()
+    stats = {
+        "l2_delta": float(np.linalg.norm(delta)),
+        "max_abs_delta": float(np.max(np.abs(delta))),
+        "num_weights": int(delta.shape[0]),
+    }
+    return original, stats
 
 
-# In[ ]:
+mode_to_cka_representation = {
+    "layer_patch_hidden": "hidden_states",
+    "layer_patch_mixed": "mixed",
+    "layer_patch_repr": "repr",
+    "pool_weight_transplant": "layer_contrib",
+}
+mode_to_probe_representation = {
+    "layer_patch_hidden": "hidden_states",
+    "layer_patch_mixed": "mixed",
+    "layer_patch_repr": "repr",
+    "pool_weight_transplant": "layer_contrib",
+}
 
+mode_results = []
+mode_cka_rows = []
+baseline_probe_cache = {}
+created_patch_models = []
 
-# Print comparison
-print("\n" + "="*70)
-print("DOMAIN PROBE COMPARISON (CODEC)")
-print("="*70)
-print(f"{'Layer':<10} {f'{model_a_name} Acc':<18} {f'{patched_model_name} Acc':<22} {'Reduction':<12} {'Patched?':<10}")
-print("-"*70)
+for mode in selected_intervention_modes:
+    print("\n" + "=" * 100)
+    print(f"RUNNING INTERVENTION MODE: {mode}")
+    print("=" * 100)
 
-for layer in sorted([k for k in erm_codec_probes['per_layer'].keys()]):
-    erm_result = erm_codec_probes['per_layer'][layer]
-    patched_result = patched_codec_probes['per_layer'][layer]
+    mode_cka_rep = mode_to_cka_representation[mode]
+    mode_probe_rep = mode_to_probe_representation[mode]
+    mode_cka = compute_mode_cka(
+        erm_model,
+        dann_model,
+        erm_config,
+        dann_config,
+        mode_cka_rep,
+        codec_vocab,
+        codec_q_vocab,
+        device,
+        max_samples=5000,
+    )
+    print(
+        f"Mode {mode} CKA ({mode_cka_rep}): "
+        f"mean={mode_cka['mean_cka']:.4f} min={mode_cka['min_cka']:.4f} max={mode_cka['max_cka']:.4f}"
+    )
+    for layer_key, layer_data in mode_cka["per_layer"].items():
+        mode_cka_rows.append(
+            {
+                "mode": mode,
+                "representation_mode": mode_cka_rep,
+                "layer_key": str(layer_key),
+                "cka": float(layer_data["cka"]),
+            }
+        )
 
-    erm_acc = erm_result.get('accuracy', float('nan'))
-    patched_acc = patched_result.get('accuracy', float('nan'))
+    divergent_layers = []
+    intervention_notes = ""
+    intervention_model = None
+    transplanted_original_weights = None
+    transplant_stats = None
 
-    if np.isfinite(erm_acc) and np.isfinite(patched_acc):
-        reduction = erm_acc - patched_acc
-        is_patched = "✓" if layer in divergent_layers else ""
-        print(f"{layer:<10} {erm_acc:<18.4f} {patched_acc:<22.4f} {reduction:+12.4f} {is_patched:<10}")
+    if mode == "layer_patch_hidden":
+        divergent_layers = select_divergent_transformer_layers(erm_model, mode_cka, top_k=3)
+        intervention_model = make_intervention_model(mode, divergent_layers)
+        created_patch_models.append(intervention_model)
+        intervention_notes = f"layers={divergent_layers}"
+    elif mode in {"layer_patch_mixed", "layer_patch_repr"}:
+        intervention_model = make_intervention_model(mode, divergent_layers)
+        created_patch_models.append(intervention_model)
+        intervention_notes = f"global_{mode_cka_rep}_patch"
+    elif mode == "pool_weight_transplant":
+        intervention_model = make_intervention_model(mode, divergent_layers)
+        transplanted_original_weights, transplant_stats = copy_layer_pooling_weights_from_donor(
+            erm_model,
+            dann_model,
+        )
+        intervention_notes = (
+            "pool_weight_transplant "
+            f"(l2_delta={transplant_stats['l2_delta']:.6f}, "
+            f"max_abs_delta={transplant_stats['max_abs_delta']:.6f})"
+        )
     else:
-        print(f"{layer:<10} {'skipped':<18} {'skipped':<22} {'-':<12}")
+        raise ValueError(f"Unsupported intervention mode: {mode}")
 
-print("="*70)
+    mode_eval_loader = create_eval_dataloader(
+        split="dev",
+        codec_vocab=codec_vocab,
+        codec_q_vocab=codec_q_vocab,
+        config=erm_config,
+        max_samples=10000,
+        batch_size=32,
+    )
+    try:
+        mode_eval = evaluate_model(intervention_model, mode_eval_loader, device)
+        print(f"Mode {mode} EER: {mode_eval['eer']:.2%}, minDCF: {mode_eval['min_dcf']:.4f}")
 
+        # Baseline probe cache by representation to keep fair deltas.
+        if mode_probe_rep not in baseline_probe_cache:
+            baseline_probe_cache[mode_probe_rep] = run_probe_for_model(
+                erm_model,
+                representation=mode_probe_rep,
+                split=probe_split,
+            )
+        baseline_probe = baseline_probe_cache[mode_probe_rep]
+        mode_probe = run_probe_for_model(
+            intervention_model,
+            representation=mode_probe_rep,
+            split=probe_split,
+        )
+    finally:
+        if transplanted_original_weights is not None:
+            with torch.no_grad():
+                erm_model.backbone.layer_pooling.weights.copy_(transplanted_original_weights)
 
-# In[ ]:
+    baseline_probe_acc = float(baseline_probe["results"]["max_leakage_accuracy"])
+    mode_probe_acc = float(mode_probe["results"]["max_leakage_accuracy"])
+    mode_results.append(
+        {
+            "mode": mode,
+            "model_label": f"{patched_model_name}:{mode}",
+            "eer": float(mode_eval["eer"]),
+            "min_dcf": float(mode_eval["min_dcf"]),
+            "probe_representation": mode_probe_rep,
+            "probe_target": mode_probe["target_name"],
+            "max_probe_acc": mode_probe_acc,
+            "max_leakage_layer": mode_probe["results"]["max_leakage_layer"],
+            "delta_eer_vs_base": float(mode_eval["eer"] - erm_results["eer"]),
+            "delta_min_dcf_vs_base": float(mode_eval["min_dcf"] - erm_results["min_dcf"]),
+            "delta_probe_vs_base": float(mode_probe_acc - baseline_probe_acc),
+            "notes": intervention_notes,
+        }
+    )
 
+mode_results_df = pd.DataFrame(mode_results)
+mode_results_df = mode_results_df.sort_values(["delta_eer_vs_base", "delta_probe_vs_base"], ascending=[True, True])
 
-# Plot probe accuracy comparison
-layers_for_plot = sorted([k for k in erm_codec_probes['per_layer'].keys() if isinstance(k, int)])
-erm_accs = []
-patched_accs = []
+print("\n" + "=" * 120)
+print("INTERVENTION ABLATION RESULTS")
+print("=" * 120)
+if not mode_results_df.empty:
+    print(mode_results_df.to_string(index=False))
+else:
+    print("No intervention modes were executed.")
+print("=" * 120)
 
-for layer in layers_for_plot:
-    erm_acc = erm_codec_probes['per_layer'][layer].get('accuracy', float('nan'))
-    patched_acc = patched_codec_probes['per_layer'][layer].get('accuracy', float('nan'))
-    erm_accs.append(erm_acc if np.isfinite(erm_acc) else 0)
-    patched_accs.append(patched_acc if np.isfinite(patched_acc) else 0)
+# Balanced rule: no regression on both EER and minDCF, then best leakage reduction.
+eligible_df = mode_results_df[
+    (mode_results_df["delta_eer_vs_base"] <= 0.0) &
+    (mode_results_df["delta_min_dcf_vs_base"] <= 0.0)
+]
+if not eligible_df.empty:
+    recommended_row = eligible_df.sort_values("delta_probe_vs_base", ascending=True).iloc[0]
+    recommendation_reason = "no-regression candidate with strongest leakage reduction"
+else:
+    recommended_row = mode_results_df.sort_values(
+        ["delta_eer_vs_base", "delta_min_dcf_vs_base", "delta_probe_vs_base"],
+        ascending=[True, True, True],
+    ).iloc[0]
+    recommendation_reason = "best trade-off (all candidates had some regression)"
 
-x = np.arange(len(layers_for_plot))
-width = 0.35
-
-fig, ax = plt.subplots(figsize=(14, 6))
-bars1 = ax.bar(x - width/2, erm_accs, width, label=model_a_name, color='steelblue')
-bars2 = ax.bar(x + width/2, patched_accs, width, label=patched_model_name, color='coral')
-
-# Highlight patched layers
-for i, layer in enumerate(layers_for_plot):
-    if layer in divergent_layers:
-        ax.axvspan(i - 0.5, i + 0.5, alpha=0.2, color='yellow')
-
-ax.set_xlabel('Layer', fontsize=12)
-ax.set_ylabel('Domain Probe Accuracy', fontsize=12)
-ax.set_title(
-    f'Domain Probe Accuracy: {model_a_name} vs {patched_model_name}\n'
-    '(Yellow = Patched Layers, Lower = More Domain Invariant)',
-    fontsize=14,
+print("\nRecommended mode:")
+print(
+    f"- mode={recommended_row['mode']} | "
+    f"delta_eer_vs_base={recommended_row['delta_eer_vs_base']:+.4f} | "
+    f"delta_min_dcf_vs_base={recommended_row['delta_min_dcf_vs_base']:+.4f} | "
+    f"delta_probe_vs_base={recommended_row['delta_probe_vs_base']:+.4f} "
+    f"({recommendation_reason})"
 )
-ax.set_xticks(x)
-ax.set_xticklabels(layers_for_plot)
-ax.legend()
-ax.set_ylim(0, 1)
-ax.axhline(y=1/len(np.unique(codec_labels)), color='gray', linestyle='--', alpha=0.5, label='Chance level')
 
-plt.tight_layout()
-plt.show()
-
-
-# ## 6. Results Summary
-
-# In[ ]:
-
-
-# Create summary table
-results_df = pd.DataFrame([
-    {
-        "Model": model_a_name,
-        "Eval EER": f"{erm_results['eer']:.2%}",
-        "Min DCF": f"{erm_results['min_dcf']:.4f}",
-        "Max Codec Probe Acc": f"{erm_codec_probes['max_leakage_accuracy']:.2%}",
-        "Max Leakage Layer": erm_codec_probes['max_leakage_layer'],
-        "Notes": "Base model"
-    },
-    {
-        "Model": model_b_name,
-        "Eval EER": f"{dann_results['eer']:.2%}",
-        "Min DCF": f"{dann_results['min_dcf']:.4f}",
-        "Max Codec Probe Acc": "n/a",
-        "Max Leakage Layer": "n/a",
-        "Notes": "Donor model"
-    },
-    {
-        "Model": patched_model_name,
-        "Eval EER": f"{patched_results['eer']:.2%}",
-        "Min DCF": f"{patched_results['min_dcf']:.4f}",
-        "Max Codec Probe Acc": f"{patched_codec_probes['max_leakage_accuracy']:.2%}",
-        "Max Leakage Layer": patched_codec_probes['max_leakage_layer'],
-        "Notes": f"Layers {divergent_layers} patched from {model_b_name}"
-    },
-])
-
-print("\n" + "="*100)
-print("RESULTS SUMMARY")
-print("="*100)
-print(results_df.to_string(index=False))
-print("="*100)
-
-
-# In[ ]:
-
-
-# Save results to file
-results_df.to_csv("rq4_results_summary.csv", index=False)
+# Save results to files
+mode_results_df.to_csv("rq4_results_summary.csv", index=False)
 print("Results saved to rq4_results_summary.csv")
 
-# Save CKA results
-cka_df = pd.DataFrame([
-    {"Layer": layer, "CKA": cka_results['per_layer'][layer]['cka']}
-    for layer in sorted(cka_results['per_layer'].keys())
-])
+cka_df = pd.DataFrame(mode_cka_rows)
 cka_df.to_csv("rq4_cka_results.csv", index=False)
 print("CKA results saved to rq4_cka_results.csv")
 
@@ -1331,9 +1524,13 @@ print("CKA results saved to rq4_cka_results.csv")
 
 
 # Cleanup
-if 'patched_model' in globals() and patched_model is not None:
-    patched_model.remove_hooks()
-    print("Hooks cleaned up.")
+cleaned_hooks = 0
+for model in created_patch_models:
+    if isinstance(model, PatchedModel):
+        model.remove_hooks()
+        cleaned_hooks += 1
+if cleaned_hooks:
+    print(f"Hooks cleaned up for {cleaned_hooks} hook-based intervention model(s).")
 else:
-    print("No patched model found; skipping hook cleanup.")
+    print("No hook-based intervention models found; skipping hook cleanup.")
 
