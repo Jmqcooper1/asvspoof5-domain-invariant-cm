@@ -195,7 +195,10 @@ def load_main_results_from_runs(results_dir: Path) -> Dict[str, Dict[str, Option
 
     for model_key, run_dir_name in MODEL_RUN_DIRS.items():
         model_dir = results_dir / run_dir_name
-        eval_metrics_path = model_dir / "eval_eval" / "metrics.json"
+        eval_dir_name = resolve_eval_results_dir(model_dir)
+        if eval_dir_name is None:
+            continue
+        eval_metrics_path = model_dir / eval_dir_name / "metrics.json"
         if not eval_metrics_path.exists():
             continue
 
@@ -226,6 +229,15 @@ def load_main_results_from_runs(results_dir: Path) -> Dict[str, Dict[str, Option
         results[model_key] = model_result
 
     return results
+
+
+def resolve_eval_results_dir(model_dir: Path) -> Optional[str]:
+    """Pick best available eval directory (prefer full eval)."""
+    candidate_dirs = ["eval_eval_full", "eval_eval", "eval_eval_epoch5"]
+    for candidate_dir in candidate_dirs:
+        if (model_dir / candidate_dir / "metrics.json").exists():
+            return candidate_dir
+    return None
 
 
 def generate_demo_data() -> Dict[str, Any]:

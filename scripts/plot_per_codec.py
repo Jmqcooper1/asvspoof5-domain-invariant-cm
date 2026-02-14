@@ -151,10 +151,14 @@ def load_per_codec_data(path: Path) -> Dict[str, Any]:
 
 
 def load_per_codec_from_runs(results_dir: Path) -> Dict[str, Dict[str, float]]:
-    """Load per-codec EER from results/runs/*/eval_eval/tables/metrics_by_codec.csv."""
+    """Load per-codec EER from eval tables under results/runs."""
     data: Dict[str, Dict[str, float]] = {}
     for model_key, run_dir_name in MODEL_RUN_DIRS.items():
-        csv_path = results_dir / run_dir_name / "eval_eval" / "tables" / "metrics_by_codec.csv"
+        model_dir = results_dir / run_dir_name
+        eval_dir_name = resolve_eval_results_dir(model_dir)
+        if eval_dir_name is None:
+            continue
+        csv_path = model_dir / eval_dir_name / "tables" / "metrics_by_codec.csv"
         if not csv_path.exists():
             continue
         with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
@@ -169,6 +173,15 @@ def load_per_codec_from_runs(results_dir: Path) -> Dict[str, Dict[str, float]]:
                 except (TypeError, ValueError):
                     continue
     return data
+
+
+def resolve_eval_results_dir(model_dir: Path) -> Optional[str]:
+    """Pick best available eval directory (prefer full eval)."""
+    candidate_dirs = ["eval_eval_full", "eval_eval", "eval_eval_epoch5"]
+    for candidate_dir in candidate_dirs:
+        if (model_dir / candidate_dir / "metrics.json").exists():
+            return candidate_dir
+    return None
 
 
 def generate_demo_data() -> Dict[str, Any]:

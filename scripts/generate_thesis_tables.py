@@ -175,7 +175,10 @@ def load_main_results_from_runs(results_dir: Path) -> Dict[str, Dict[str, Option
 
     for model_key, run_dir_name in MODEL_RUN_DIRS.items():
         model_dir = results_dir / run_dir_name
-        eval_metrics_path = model_dir / "eval_eval" / "metrics.json"
+        eval_dir_name = resolve_eval_results_dir(model_dir)
+        if eval_dir_name is None:
+            continue
+        eval_metrics_path = model_dir / eval_dir_name / "metrics.json"
         if not eval_metrics_path.exists():
             continue
 
@@ -213,11 +216,30 @@ def load_main_results_from_runs(results_dir: Path) -> Dict[str, Dict[str, Option
     return results
 
 
+def resolve_eval_results_dir(model_dir: Path) -> Optional[str]:
+    """Pick the best available eval results directory for a run.
+
+    Preference order:
+    1) eval_eval_full (full eval)
+    2) eval_eval (default eval)
+    3) eval_eval_epoch5 (legacy wavlm_dann patched checkpoint eval)
+    """
+    candidate_dirs = ["eval_eval_full", "eval_eval", "eval_eval_epoch5"]
+    for candidate_dir in candidate_dirs:
+        if (model_dir / candidate_dir / "metrics.json").exists():
+            return candidate_dir
+    return None
+
+
 def load_per_codec_from_runs(results_dir: Path) -> Dict[str, Dict[str, float]]:
     """Load per-codec EER from eval tables under results/runs."""
     per_codec: Dict[str, Dict[str, float]] = {}
     for model_key, run_dir_name in MODEL_RUN_DIRS.items():
-        csv_path = results_dir / run_dir_name / "eval_eval" / "tables" / "metrics_by_codec.csv"
+        model_dir = results_dir / run_dir_name
+        eval_dir_name = resolve_eval_results_dir(model_dir)
+        if eval_dir_name is None:
+            continue
+        csv_path = model_dir / eval_dir_name / "tables" / "metrics_by_codec.csv"
         if not csv_path.exists():
             continue
         with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
@@ -320,17 +342,39 @@ def generate_t1_main_results(
             ["DANN", "WavLM", "—", "—", "—"],
             ["ERM", "W2V2", "—", "—", "—"],
             ["DANN", "W2V2", "—", "—", "—"],
+            ["LFCC-GMM", "LFCC", "—", "—", "—"],
+            ["TRILLsson Logistic", "TRILLsson", "—", "—", "—"],
+            ["TRILLsson MLP", "TRILLsson", "—", "—", "—"],
         ]
         logger.warning("Using placeholder data for T1 (no main_results.json)")
     else:
         rows = []
-        model_order = ["wavlm_erm", "wavlm_dann", "w2v2_erm", "w2v2_dann", "w2v2_dann_v2"]
+        model_order = [
+            "wavlm_erm",
+            "wavlm_dann",
+            "w2v2_erm",
+            "w2v2_dann",
+            "w2v2_dann_v2",
+            "lfcc_gmm",
+            "trillsson_logistic",
+            "trillsson_mlp",
+        ]
         for model_key in model_order:
             if model_key not in main_results:
                 continue
             model_data = main_results.get(model_key, {})
-            backbone = "WavLM" if "wavlm" in model_key else "W2V2"
-            method = "DANN v2" if model_key == "w2v2_dann_v2" else ("DANN" if "dann" in model_key else "ERM")
+            if model_key == "lfcc_gmm":
+                backbone = "LFCC"
+                method = "LFCC-GMM"
+            elif model_key == "trillsson_logistic":
+                backbone = "TRILLsson"
+                method = "TRILLsson Logistic"
+            elif model_key == "trillsson_mlp":
+                backbone = "TRILLsson"
+                method = "TRILLsson MLP"
+            else:
+                backbone = "WavLM" if "wavlm" in model_key else "W2V2"
+                method = "DANN v2" if model_key == "w2v2_dann_v2" else ("DANN" if "dann" in model_key else "ERM")
             
             dev_eer = model_data.get("dev_eer", "—")
             eval_eer = model_data.get("eval_eer", "—")
