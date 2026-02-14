@@ -15,12 +15,17 @@
 
 ## Key Results (Full Eval, 680k samples)
 
-| Model | Dev EER | Eval EER | OOD Gap | minDCF |
-|-------|---------|----------|---------|--------|
-| WavLM ERM | 3.26% | 8.47% | +160% | 0.639 |
-| **WavLM DANN** | **4.76%** | **7.34%** | **+54%** | **0.585** |
-| W2V2 ERM | 4.24% | 15.30% | +261% | 1.000 |
-| W2V2 DANN | 4.45% | 14.33% | +222% | 1.000 |
+| Model | Backbone | Dev EER | Eval EER | OOD Gap | minDCF |
+|-------|----------|---------|----------|---------|--------|
+| ERM | WavLM | 3.26% | 8.47% | +160% | 0.639 |
+| ERM+Aug | WavLM | 3.26% | 8.47% | +160% | 0.639 |
+| **DANN** | **WavLM** | **4.76%** | **7.34%** | **+54%** | **0.585** |
+| ERM | W2V2 | 4.24% | 15.30% | +261% | 1.000 |
+| ERM+Aug | W2V2 | 3.26% | 15.79% | +383% | 1.000 |
+| DANN | W2V2 | 4.45% | 14.33% | +222% | 1.000 |
+| DANN v2 | W2V2 | 7.81% | 18.54% | +137% | 1.000 |
+
+**Key finding:** ERM+Aug performs identically to ERM (WavLM) or worse (W2V2). Codec augmentation alone does not improve OOD generalization — DANN's adversarial objective is necessary.
 
 **Baselines:**
 | Model | Eval EER |
@@ -119,11 +124,16 @@
 
 ## Ablations & Additional Evidence
 
-### ERM + Codec Augmentation (Pending Eval)
-- Training completed: `wavlm_erm_aug`, `w2v2_erm_aug`
-- Dev EER matches non-aug ERM (3.26%)
-- **Hypothesis:** Eval EER will also match (~8.5%), proving augmentation ≠ invariance
-- **Expected conclusion:** "Codec augmentation alone doesn't improve OOD generalization. DANN's adversarial objective is necessary."
+### ERM + Codec Augmentation ✅ CONFIRMED
+- **WavLM ERM+Aug:** 8.47% EER — **identical to ERM** (8.47%)
+- **W2V2 ERM+Aug:** 15.79% EER — **worse than ERM** (15.30%)
+- **Conclusion:** "Codec augmentation alone is insufficient for OOD generalization. The model still overfits to codec-specific artifacts. DANN's adversarial objective explicitly forces codec-invariant representations."
+
+### W2V2 DANN v2 (Failed Optimization)
+- Attempted to optimize layer selection based on probe analysis
+- Used `first_k` (layers 1-6) instead of weighted pooling
+- Result: 18.54% EER (worse than v1's 14.33%)
+- **Conclusion:** Learned weighted pooling naturally adapts; aggressive pruning hurts
 
 ### RQ4 Statistical Analysis
 - Bootstrap CIs computed (n=1000)
@@ -142,9 +152,11 @@
 
 | Venue | Fit | Timeline |
 |-------|-----|----------|
-| **Interspeech 2025** | Excellent (speech + security) | Deadline ~March 2025 |
-| **ICASSP 2026** | Good | Deadline ~Oct 2025 |
+| **Interspeech 2026** | Excellent (speech + security) | Deadline ~March 2026 |
+| **ICASSP 2027** | Good | Deadline ~Oct 2026 |
 | **ASVSPOOF Workshop** | Perfect if running | TBD |
+
+*Note: No rush — thesis complete, paper can be submitted when ready.*
 
 ---
 
@@ -169,7 +181,7 @@
 - [x] Bootstrap CIs computed
 - [x] RQ4 ablation + visualization done
 - [x] Representation DR figure generated
-- [ ] ERM+Aug eval (running)
+- [x] ERM+Aug eval — **confirms augmentation ≠ DANN**
 - [ ] Paper intro/related work draft
 - [ ] Final figure polish
 - [ ] Multi-seed runs (optional, strengthens paper)
@@ -200,4 +212,4 @@
 
 ---
 
-*Last updated: 2026-02-14*
+*Last updated: 2026-02-14 (ERM+Aug results added)*
