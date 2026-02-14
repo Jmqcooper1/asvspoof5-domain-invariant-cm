@@ -39,6 +39,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 logging.basicConfig(
     level=logging.INFO,
@@ -78,7 +80,8 @@ COLORS = {
     "w2v2": "#DD8452",
     "chance": "#9E9E9E",
     "neutral": "#90A4AE",
-    "highlight": "#2E7D32",
+    "highlight": "#DD8452",
+    "info_blue": "#6FA8DC",
     "divergent": "#D32F2F",
 }
 
@@ -164,15 +167,16 @@ def plot_cka_layer_bar(df: pd.DataFrame, output_path: Path) -> None:
     ax.axhline(y=1.0, color=COLORS["chance"], linestyle="--", linewidth=1.5, label="Identical")
     ax.axhline(y=0.5, color="#D9A441", linestyle=":", linewidth=2.0, label="Moderate similarity")
     
-    # Annotate layer 11
+    # Highlight layer 11 without overlaying text on bars.
     layer_11_idx = np.where(layers == 11)[0]
     if len(layer_11_idx) > 0:
         idx = layer_11_idx[0]
-        ax.annotate(
-            f'CKA={cka_values[idx]:.2f}',
-            xy=(11, cka_values[idx]),
-            xytext=(9.1, 0.32),
-            arrowprops=dict(arrowstyle="->", color=COLORS["divergent"], lw=1.8),
+        ax.text(
+            11,
+            cka_values[idx] + 0.04,
+            f"L11={cka_values[idx]:.2f}",
+            ha="center",
+            va="bottom",
             fontsize=10,
             fontweight="bold",
             color=COLORS["divergent"],
@@ -182,20 +186,14 @@ def plot_cka_layer_bar(df: pd.DataFrame, output_path: Path) -> None:
     ax.set_ylabel("CKA Similarity (ERM vs DANN)")
     ax.set_title("Layer Contribution Similarity: ERM vs DANN", fontweight="bold")
     ax.set_xticks(layers)
-    ax.set_ylim(0, 1.06)
+    ax.set_ylim(0, 1.08)
     ax.margins(x=0.02)
-    ax.legend(loc="lower left", framealpha=0.9)
-    
-    # Add interpretation text
-    ax.text(
-        0.98, 0.02,
-        "Layer 11: DANN diverges\n(codec info removed)",
-        transform=ax.transAxes,
-        ha="right", va="bottom",
-        fontsize=9,
-        style="italic",
-        bbox=dict(boxstyle="round", facecolor="#FFF8E1", edgecolor="#BDBDBD", alpha=0.85),
-    )
+    legend_handles = [
+        Line2D([0], [0], color=COLORS["chance"], linestyle="--", linewidth=1.5, label="Identical"),
+        Line2D([0], [0], color="#D9A441", linestyle=":", linewidth=2.0, label="Moderate similarity"),
+        Patch(facecolor=COLORS["divergent"], edgecolor="black", label="Layer 11 divergence"),
+    ]
+    ax.legend(handles=legend_handles, loc="lower left", framealpha=0.9)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=DPI, bbox_inches='tight')
@@ -229,7 +227,7 @@ def plot_intervention_comparison(df: pd.DataFrame, output_path: Path) -> None:
         elif mode == "pool_weight_transplant":
             mode_colors.append(COLORS["wavlm"])
         else:
-            mode_colors.append(COLORS["dann"])
+            mode_colors.append(COLORS["info_blue"])
 
     # Left panel: EER
     eer_bars = axes[0].bar(
@@ -259,7 +257,7 @@ def plot_intervention_comparison(df: pd.DataFrame, output_path: Path) -> None:
 
     # Right panel: Probe accuracy (domain leakage)
     probe_colors = [
-        COLORS["highlight"] if mode == "layer_patch_repr" else COLORS["divergent"]
+        COLORS["highlight"] if mode == "layer_patch_repr" else COLORS["wavlm"]
         for mode in modes
     ]
     probe_bars = axes[1].bar(
@@ -295,21 +293,10 @@ def plot_intervention_comparison(df: pd.DataFrame, output_path: Path) -> None:
             fontsize=9,
         )
 
-    repr_indices = np.where(modes == "layer_patch_repr")[0]
-    if len(repr_indices) > 0:
-        repr_idx = int(repr_indices[0])
-        axes[1].annotate(
-            "Domain invariance\nachieved here",
-            xy=(repr_idx, probe_values[repr_idx]),
-            xytext=(repr_idx + 0.85, min(94, probe_values[repr_idx] + 20)),
-            arrowprops=dict(arrowstyle="->", color=COLORS["highlight"], lw=1.8),
-            fontsize=9,
-            color=COLORS["highlight"],
-            fontweight="bold",
-        )
+    # Remove over-assertive callouts; keep figure descriptive and uncluttered.
 
-    plt.suptitle("RQ4: Activation Patching Ablation", fontsize=14, fontweight="bold", y=1.03)
-    plt.tight_layout(rect=(0, 0, 1, 0.96))
+    plt.suptitle("RQ4: Activation Patching Ablation", fontsize=14, fontweight="bold", y=1.02)
+    plt.tight_layout(rect=(0, 0, 1, 0.95))
     plt.savefig(output_path, dpi=DPI, bbox_inches='tight')
     plt.savefig(output_path.with_suffix('.pdf'), bbox_inches='tight')
     plt.close()
@@ -393,7 +380,7 @@ def plot_cka_heatmap(df: pd.DataFrame, output_path: Path) -> None:
 def plot_delta_scatter(df: pd.DataFrame, output_path: Path) -> None:
     """Scatter plot: Δ EER vs Δ Probe accuracy for each intervention."""
     plt.rcParams.update(STYLE_CONFIG)
-    fig, ax = plt.subplots(figsize=FIGSIZE_SINGLE)
+    fig, ax = plt.subplots(figsize=(7.6, 5.4))
 
     # Filter out baseline (delta = 0)
     plot_df = sort_interventions(df[df["mode"] != "layer_patch_hidden"].copy())
@@ -403,40 +390,37 @@ def plot_delta_scatter(df: pd.DataFrame, output_path: Path) -> None:
     modes = plot_df["mode"].values
 
     mode_labels = {
-        "layer_patch_repr": "Projection Patch",
-        "layer_patch_mixed": "Mixed Patch",
-        "pool_weight_transplant": "Pool Weight Transplant",
+        "layer_patch_repr": "Projection patch",
+        "layer_patch_mixed": "Mixed patch",
+        "pool_weight_transplant": "Pool-weight transplant",
     }
     mode_colors = {
         "layer_patch_repr": COLORS["highlight"],
-        "layer_patch_mixed": COLORS["dann"],
-        "pool_weight_transplant": COLORS["divergent"],
+        "layer_patch_mixed": COLORS["info_blue"],
+        "pool_weight_transplant": COLORS["wavlm"],
     }
-    label_offsets = {
-        "layer_patch_mixed": (0.02, 0.35),
-        "pool_weight_transplant": (-0.09, 0.35),
-        "layer_patch_repr": (-0.08, -0.7),
-    }
-
+    legend_handles = []
     for de, dp, mode in zip(delta_eer, delta_probe, modes):
         ax.scatter(
             de,
             dp,
-            s=560,
+            s=520,
             c=mode_colors.get(mode, COLORS["neutral"]),
             edgecolor="black",
             linewidth=2.0,
             zorder=3,
         )
-        dx, dy = label_offsets.get(mode, (0.02, 0.35))
-        ax.annotate(
-            mode_labels.get(mode, mode),
-            xy=(de, dp),
-            xytext=(de + dx, dp + dy),
-            fontsize=10,
-            ha="left" if dx >= 0 else "right",
-            va="bottom" if dy >= 0 else "top",
-            annotation_clip=False,
+        legend_handles.append(
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                linestyle="",
+                markerfacecolor=mode_colors.get(mode, COLORS["neutral"]),
+                markeredgecolor="black",
+                markersize=9,
+                label=mode_labels.get(mode, mode),
+            )
         )
 
     # Add quadrant lines
@@ -446,7 +430,7 @@ def plot_delta_scatter(df: pd.DataFrame, output_path: Path) -> None:
     # Quadrant labels
     ax.text(
         0.02,
-        0.98,
+        0.90,
         "Better EER\nMore leakage",
         transform=ax.transAxes,
         ha="left",
@@ -457,7 +441,7 @@ def plot_delta_scatter(df: pd.DataFrame, output_path: Path) -> None:
     )
     ax.text(
         0.98,
-        0.98,
+        0.90,
         "Worse EER\nMore leakage",
         transform=ax.transAxes,
         ha="right",
@@ -490,16 +474,24 @@ def plot_delta_scatter(df: pd.DataFrame, output_path: Path) -> None:
         style="italic",
     )
 
-    x_padding = 0.05
-    y_padding = 0.35
+    x_padding = 0.02
+    y_padding = 0.60
     ax.set_xlim(delta_eer.min() - x_padding, delta_eer.max() + x_padding)
     ax.set_ylim(delta_probe.min() - y_padding, delta_probe.max() + y_padding)
     ax.set_xlabel("Δ EER (%) vs Baseline")
     ax.set_ylabel("Δ Probe Accuracy (%) vs Baseline")
-    ax.set_title("Intervention Trade-offs: Detection vs Domain Invariance", fontweight="bold")
+    ax.set_title("Intervention Trade-offs: Detection vs Domain Invariance", fontweight="bold", pad=12)
     ax.margins(x=0.08, y=0.08)
+    # Deduplicate legend entries while preserving order.
+    dedup_handles = []
+    seen_labels = set()
+    for handle in legend_handles:
+        if handle.get_label() not in seen_labels:
+            dedup_handles.append(handle)
+            seen_labels.add(handle.get_label())
+    ax.legend(handles=dedup_handles, loc="upper center", ncol=3, framealpha=0.9)
 
-    plt.tight_layout(pad=1.1)
+    plt.tight_layout(pad=1.25)
     plt.savefig(output_path, dpi=DPI, bbox_inches='tight')
     plt.savefig(output_path.with_suffix('.pdf'), bbox_inches='tight')
     plt.close()

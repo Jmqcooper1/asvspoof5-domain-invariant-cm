@@ -23,7 +23,7 @@ STYLE_CONFIG = {
     "font.size": 11,
     "axes.labelsize": 12,
     "axes.titlesize": 13,
-    "legend.fontsize": 9,
+    "legend.fontsize": 8,
     "xtick.labelsize": 10,
     "ytick.labelsize": 10,
     "figure.dpi": 150,
@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-points",
         type=int,
-        default=3000,
+        default=2000,
         help="Maximum points per model for DR plotting",
     )
     parser.add_argument(
@@ -145,7 +145,7 @@ def main() -> int:
     label_to_color = {label: index for index, label in enumerate(unique_labels)}
     color_map = plt.get_cmap("tab20", max(2, len(unique_labels)))
 
-    fig, axes = plt.subplots(3, 2, figsize=(13.5, 14))
+    fig, axes = plt.subplots(3, 2, figsize=(13.2, 13.6))
     method_order = ["PCA", "UMAP", "t-SNE"]
     model_titles = ["ERM", "DANN"]
 
@@ -158,13 +158,13 @@ def main() -> int:
             points = model_embeds[col_idx]
             labels = model_labels[col_idx]
             colors = [label_to_color[int(label)] for label in labels]
-            scatter = axis.scatter(
+            axis.scatter(
                 points[:, 0],
                 points[:, 1],
                 c=colors,
                 cmap=color_map,
-                s=10,
-                alpha=0.65,
+                s=7,
+                alpha=0.45,
                 linewidths=0.0,
             )
             axis.set_title(f"{method_name}: {model_titles[col_idx]}", fontweight="bold")
@@ -185,7 +185,13 @@ def main() -> int:
                 label=f"{probe_target}={label}",
             )
         )
-    fig.legend(handles=handles, loc="lower center", ncol=min(6, len(handles)), framealpha=0.9)
+    fig.legend(
+        handles=handles,
+        loc="lower center",
+        ncol=min(6, len(handles)),
+        framealpha=0.92,
+        bbox_to_anchor=(0.5, 0.03),
+    )
 
     subtitle = f"Split={probe_split} | Samples: ERM={erm_features.shape[0]} DANN={dann_features.shape[0]}"
     if args.results is not None and args.results.exists():
@@ -197,9 +203,9 @@ def main() -> int:
                 f"Samples: ERM={erm_features.shape[0]} DANN={dann_features.shape[0]}"
             )
 
-    fig.suptitle("RQ4 Representation Structure: PCA vs UMAP vs t-SNE", fontsize=15, fontweight="bold", y=0.995)
-    fig.text(0.5, 0.965, subtitle, ha="center", va="center", fontsize=10)
-    plt.tight_layout(rect=(0, 0.05, 1, 0.95))
+    fig.suptitle("RQ4 Representation Structure: PCA vs UMAP vs t-SNE", fontsize=15, fontweight="bold", y=0.988)
+    fig.text(0.5, 0.962, subtitle, ha="center", va="center", fontsize=10)
+    plt.tight_layout(rect=(0, 0.07, 1, 0.95))
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.output, dpi=300, bbox_inches="tight", facecolor="white")
