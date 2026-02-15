@@ -41,11 +41,12 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from asvspoof5_domain_invariant_cm.data.codec_augment import CodecAugmentor, CodecAugmentorConfig
+from asvspoof5_domain_invariant_cm.data.codec_augment import CodecAugmentor, CodecAugmentConfig
 from asvspoof5_domain_invariant_cm.data.audio import load_waveform
 
 logging.basicConfig(
@@ -189,22 +190,28 @@ def create_augmentation_figure(
     """
     plt.rcParams.update(STYLE_CONFIG)
     
-    # Load original audio
-    waveform_orig, sr = load_waveform(str(audio_path), target_sr=sample_rate)
-    if isinstance(waveform_orig, np.ndarray) is False:
-        waveform_orig = waveform_orig.numpy()
-    waveform_orig = waveform_orig.squeeze()
+    # Load original audio (keep as tensor for augmentor)
+    waveform_tensor, sr = load_waveform(str(audio_path), target_sr=sample_rate)
+    if isinstance(waveform_tensor, np.ndarray):
+        waveform_tensor = torch.from_numpy(waveform_tensor)
+    waveform_tensor = waveform_tensor.squeeze()
     
-    # Apply augmentations
+    # Apply augmentations (requires torch.Tensor)
     augmented = {}
     for codec in ["MP3", "AAC"]:
         if codec in augmentor.supported_codecs:
-            aug_waveform, _, _ = augmentor.apply_codec(
-                waveform_orig, sample_rate, codec, quality
+            aug_waveform = augmentor._apply_codec(
+                waveform_tensor, sample_rate, codec, quality
             )
-            augmented[codec] = aug_waveform
+            if aug_waveform is None:
+                logger.warning(f"Codec {codec} augmentation failed (ffmpeg error?), skipping")
+                continue
+            augmented[codec] = aug_waveform.numpy().squeeze()
         else:
             logger.warning(f"Codec {codec} not supported, skipping")
+    
+    # Convert original to numpy for spectrogram
+    waveform_orig = waveform_tensor.numpy() if hasattr(waveform_tensor, 'numpy') else waveform_tensor
     
     if not augmented:
         raise RuntimeError("No codecs available for augmentation")
@@ -304,12 +311,13 @@ def create_multi_sample_figure(
         axes = axes.reshape(1, -1)
     
     for row, audio_path in enumerate(audio_paths):
-        # Load original
-        waveform_orig, sr = load_waveform(str(audio_path), target_sr=sample_rate)
-        if hasattr(waveform_orig, 'numpy'):
-            waveform_orig = waveform_orig.numpy()
-        waveform_orig = waveform_orig.squeeze()
+        # Load original (keep as tensor for augmentor)
+        waveform_tensor, sr = load_waveform(str(audio_path), target_sr=sample_rate)
+        if isinstance(waveform_tensor, np.ndarray):
+            waveform_tensor = torch.from_numpy(waveform_tensor)
+        waveform_tensor = waveform_tensor.squeeze()
         
+        waveform_orig = waveform_tensor.numpy() if hasattr(waveform_tensor, 'numpy') else waveform_tensor
         spec_orig = compute_mel_spectrogram(waveform_orig, sample_rate)
         
         # Plot original
@@ -320,10 +328,13 @@ def create_multi_sample_figure(
         
         # Plot augmented versions
         for col, codec in enumerate(codecs, start=1):
-            aug_waveform, _, _ = augmentor.apply_codec(
-                waveform_orig, sample_rate, codec, quality
+            aug_waveform = augmentor._apply_codec(
+                waveform_tensor, sample_rate, codec, quality
             )
-            spec_aug = compute_mel_spectrogram(aug_waveform, sample_rate)
+            if aug_waveform is None:
+                logger.warning(f"Codec {codec} failed for {audio_path.name}, using zeros")
+                aug_waveform = torch.zeros_like(waveform_tensor)
+            spec_aug = compute_mel_spectrogram(aug_waveform.numpy().squeeze(), sample_rate)
             
             title = f"{codec} (Q{quality})" if row == 0 else ""
             plot_spectrogram(axes[row, col], spec_aug, title, sample_rate, colorbar=False)
@@ -395,7 +406,7 @@ def main() -> int:
     np.random.seed(args.seed)
     
     # Create augmentor
-    config = CodecAugmentorConfig(
+    config = CodecAugmentConfig(
         codec_prob=1.0,  # Always apply for visualization
         codecs=["MP3", "AAC", "OPUS"],
         qualities=[1, 2, 3, 4, 5],
