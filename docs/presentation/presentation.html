@@ -255,7 +255,7 @@
             <section>
                 <h2>Research Question</h2>
                 <div class="rq-box" style="font-size: 1.2em; margin-top: 1em;">
-                    Can domain-adversarial training (DANN) improve generalization of speech deepfake detectors to unseen transmission codecs?
+                    Does domain invariance learned on synthetic codec augmentation (MP3/AAC) transfer to real benchmark codec conditions (C01-C11)?
                 </div>
                 <div style="margin-top: 1.5em;">
                     <h3>Sub-questions</h3>
@@ -457,7 +457,7 @@
             <section>
                 <h2>RQ3: Where is Domain Information Removed?</h2>
                 <div class="card-green card" style="font-size: 1.1em; margin-bottom: 0.8em;">
-                    <strong>✓ Projection layer.</strong> Codec probe accuracy drops 43.4% → 38.8%
+                    <strong>✓ Partial invariance in projection layer.</strong> Probe accuracy drops 43.4% → 38.8% (still above chance)
                 </div>
                 <div class="figure-container">
                     <img src="../../figures/rq3_combined.png" alt="Domain Probing Results">
@@ -602,7 +602,7 @@
             <section>
                 <h2>Novelty & Contributions</h2>
                 <div class="rq-box" style="font-size: 0.95em;">
-                    "First systematic application of domain-adversarial training (DANN) specifically for codec robustness in speech deepfake detection."
+                    "Systematic evaluation of DANN for codec-robust deepfake detection, including transfer from synthetic to real codecs and representation-level analysis."
                 </div>
                 <div style="margin-top: 1em;">
                     <ul class="checklist">
