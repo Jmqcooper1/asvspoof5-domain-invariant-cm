@@ -349,7 +349,7 @@
             <!-- 6. Multi-Task Domain Adaptation: CODEC & CODEC_Q -->
             <section>
                 <h2>Multi-Task Domain Adaptation: CODEC & CODEC_Q</h2>
-                <p>We define <strong>two independent domain discrimination tasks</strong> to cover the full space of transmission conditions:</p>
+                <p>We define <strong>two complementary domain discrimination tasks</strong> to cover transmission conditions:</p>
                 <div class="two-col" style="margin-top: 0.5em;">
                     <div class="col">
                         <div class="card" style="border-left: 3px solid #a855f7;">
@@ -378,7 +378,7 @@
                     </div>
                 </div>
                 <div class="card card-accent" style="margin-top: 0.6em;">
-                    <strong>Key insight:</strong> CODEC and CODEC_Q are <strong>independent</strong> — any codec can have any quality level. By adapting to both jointly, the model becomes robust across the full space of real-world transmission conditions.
+                    <strong>Key insight:</strong> CODEC and CODEC_Q are <strong>complementary</strong> domain tasks. By adapting to both jointly, the model learns representations robust to both codec type and compression severity.
                 </div>
             </section>
             
@@ -610,18 +610,8 @@
                         </div>
                     </div>
                     <div class="col">
-                        <div class="card" style="border-left: 3px solid #a855f7;">
-                            <h3 style="margin-top: 0;">t-DCF <span class="tag tag-amber">Tandem</span></h3>
-                            <p style="font-size: 0.85em;"><strong>Tandem Detection Cost Function</strong></p>
-                            <ul style="font-size: 0.8em;">
-                                <li>ASVspoof-specific metric</li>
-                                <li>Considers CM + ASV as a tandem system</li>
-                                <li>Captures spoofs that would fool the full pipeline</li>
-                            </ul>
-                            <p class="small" style="margin-top: 0.4em;"><strong>Why:</strong> Measures real-world impact — a spoof only matters if it fools both the countermeasure AND the speaker verifier</p>
-                        </div>
                         <div class="card card-accent" style="margin-top: 0.6em;">
-                            <strong>Key insight:</strong> EER tells us detection quality, minDCF adds deployment context, t-DCF reveals actual security impact on speaker verification.
+                            <strong>Our focus:</strong> EER for interpretability, minDCF for application-weighted performance (per ASVspoof5 Track 1 standalone evaluation). We do not report t-DCF as this requires a tandem ASV+CM setup.
                         </div>
                     </div>
                 </div>
