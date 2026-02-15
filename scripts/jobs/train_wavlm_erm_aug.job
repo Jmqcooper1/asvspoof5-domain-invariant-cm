@@ -17,6 +17,14 @@
 
 module purge
 module load 2025
+module load FFmpeg/6.0-GCCcore-12.3.0
+
+# Verify ffmpeg has codec support (fail fast if missing)
+if ! ffmpeg -encoders 2>/dev/null | grep -q libmp3lame; then
+    echo "ERROR: FFmpeg missing libmp3lame encoder. Load a different FFmpeg module." >&2
+    exit 1
+fi
+echo "FFmpeg codec check passed: $(ffmpeg -encoders 2>/dev/null | grep -E 'mp3|aac|opus' | wc -l) encoders available"
 
 # Navigate to repo root (avoid Slurm spool dir)
 if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
