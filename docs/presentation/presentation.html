@@ -558,6 +558,9 @@
                 <div class="rq-box" style="font-size: 0.95em;">
                     Are shortcuts (duration, energy, silence) explaining the OOD gap?
                 </div>
+                <p class="small" style="margin-top: 0.5em; margin-bottom: 0.5em;">
+                    <strong>Method:</strong> Train logistic regression using only 5 shortcut features (no audio content). If it works on train but fails on dev/eval → shortcuts are train-specific artifacts.
+                </p>
                 <div class="two-col" style="margin-top: 1em;">
                     <div>
                         <table class="data">
