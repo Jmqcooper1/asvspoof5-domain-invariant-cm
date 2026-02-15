@@ -176,21 +176,23 @@ def main():
         
         for _, row in tqdm(df.iterrows(), total=len(df), desc=split_name):
             # Handle different path column names (parquet vs protocol)
-            if 'path' in row:
-                rel_path = row['path']
+            if 'audio_path' in row:
+                # Absolute path from our manifests
+                audio_path = Path(row['audio_path'])
+            elif 'path' in row:
+                audio_path = args.data_root / row['path']
             elif 'flac_file' in row:
-                rel_path = row['flac_file']
+                audio_path = args.data_root / row['flac_file']
             elif 'file' in row:
-                rel_path = row['file']
+                audio_path = args.data_root / row['file']
             else:
                 logger.warning(f"No path column found in manifest. Columns: {list(row.index)}")
                 continue
             
-            audio_path = args.data_root / rel_path
             if not audio_path.exists():
                 # Try alternative path structures
                 for alt in ['flac_T', 'flac_D', 'flac_E_eval']:
-                    alt_path = args.data_root / alt / Path(rel_path).name
+                    alt_path = args.data_root / alt / audio_path.name
                     if alt_path.exists():
                         audio_path = alt_path
                         break
@@ -205,7 +207,10 @@ def main():
             features.append(list(feat.values()))
             
             # Handle different label formats (parquet vs protocol)
-            if 'label' in row:
+            if 'y_task' in row:
+                # Our manifests use y_task: 0=bonafide, 1=spoof
+                label = int(row['y_task'])
+            elif 'label' in row:
                 label = int(row['label'])
             elif 'key' in row:
                 # ASVspoof5 protocol: bonafide=0, spoof=1
