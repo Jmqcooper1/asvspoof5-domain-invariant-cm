@@ -844,6 +844,28 @@
                     DANN improves on <strong>all codecs</strong>, including uncovered ones (C04, C07, C11)
                 </p>
             </section>
+
+            <!-- Appendix: Augmentation Visualization -->
+            <section>
+                <h2>Appendix: Augmentation Sanity Check</h2>
+                <p class="small" style="margin-bottom: 0.5em;">
+                    Spectrograms showing codec artifacts introduced by augmentation pipeline (original vs coded vs difference).
+                </p>
+                <div class="two-col" style="gap: 1em;">
+                    <div class="figure-container">
+                        <img src="../../figures/augmentation_examples_q1.png" alt="Q1 Low Bitrate" style="max-height: 280px;">
+                        <div class="figure-caption"><strong>Q1 (Low Bitrate)</strong><br>MP3 64kbps, AAC 32kbps — severe artifacts</div>
+                    </div>
+                    <div class="figure-container">
+                        <img src="../../figures/augmentation_examples.png" alt="Q3 Medium Bitrate" style="max-height: 280px;">
+                        <div class="figure-caption"><strong>Q3 (Medium Bitrate)</strong><br>MP3 128kbps, AAC 96kbps — moderate artifacts</div>
+                    </div>
+                </div>
+                <div class="card" style="margin-top: 0.8em;">
+                    <strong>Confirms:</strong> Augmentation pipeline introduces realistic, quality-dependent codec distortions that DANN learns to be invariant to.
+                </div>
+            </section>
+
             <!-- Thank You -->
             <section style="display: flex; flex-direction: column; justify-content: center; height: 100%;">
                 <h1>Thank You</h1>
