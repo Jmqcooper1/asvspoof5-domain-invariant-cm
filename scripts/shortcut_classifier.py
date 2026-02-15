@@ -167,7 +167,7 @@ def main():
         else:
             df = pd.read_parquet(manifest_path)  # Default to parquet
         
-        # Sample if too large
+        for row in tqdm(df.itertuples(), total=len(df), desc=split_name):
         if len(df) > args.max_samples:
             df = df.sample(n=args.max_samples, random_state=args.seed)
             logger.info(f"  Sampled {args.max_samples} from {len(df)} samples")
