@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate LaTeX and Markdown tables for thesis.
 
-This script generates all tables specified in docs/thesis_figures_spec.md:
+This script generates all thesis tables:
 - T1: Main results table (Dev/Eval EER, minDCF)
 - T2: Per-codec EER comparison
 - T3: OOD gap analysis
