@@ -6,7 +6,9 @@
 
 ## Research Question
 
-> **Can domain-adversarial training (DANN) improve generalization of speech deepfake detectors to unseen transmission codecs?**
+> **Does domain invariance learned on synthetic codec augmentation (MP3/AAC) transfer to real benchmark codec conditions (C01-C11) in speech deepfake detection?**
+
+We frame this as a *transfer problem*: DANN is trained to be invariant to synthetic codecs created via ffmpeg, then evaluated on ASVspoof5's real codec conditions which include neural codecs (Encodec) and device effects not seen during training.
 
 ---
 
@@ -15,14 +17,15 @@
 | Model | Backbone | Dev EER | Eval EER | OOD Gap | minDCF |
 |-------|----------|---------|----------|---------|--------|
 | ERM | WavLM | 3.26% | 8.47% | +160% | 0.639 |
-| ERM+Aug | WavLM | 3.26% | 8.47% | +160% | 0.639 |
+| ~~ERM+Aug~~ | ~~WavLM~~ | ~~3.26%~~ | ~~8.47%~~ | ~~+160%~~ | ~~0.639~~ |
 | **DANN** | **WavLM** | **4.76%** | **7.34%** | **+54%** | **0.585** |
-| ERM | W2V2 | 4.24% | 15.30% | +261% | 1.000 |
-| ERM+Aug | W2V2 | 3.26% | 15.79% | +383% | 1.000 |
-| DANN | W2V2 | 4.45% | 14.33% | +222% | 1.000 |
-| DANN v2 | W2V2 | 7.81% | 18.54% | +137% | 1.000 |
+| ERM | W2V2 | 4.24% | 15.30% | +261% | 1.000* |
+| ~~ERM+Aug~~ | ~~W2V2~~ | ~~3.26%~~ | ~~15.79%~~ | ~~+383%~~ | ~~1.000~~ |
+| DANN | W2V2 | 4.45% | 14.33% | +222% | 1.000* |
 
-**Key finding:** ERM+Aug performs identically to ERM (WavLM) or worse (W2V2). Codec augmentation alone does not improve OOD generalization — DANN's adversarial objective is necessary.
+*\*W2V2 minDCF saturates at 1.0 due to over-confident score distribution (EER threshold ≈ 0.9999). EER is the primary metric for this backbone.*
+
+~~Strikethrough~~ = **Pending re-run** (ERM+Aug had zero augmentation due to missing ffmpeg encoders — see Issue #100)
 
 **Baselines:**
 | Model | Eval EER |
@@ -38,110 +41,71 @@
 ### RQ1: Does DANN reduce the OOD gap?
 **✅ Yes.** WavLM OOD gap reduced from 160% to 54% (66% relative reduction).
 
-### RQ2: Does DANN improve per-codec performance?
-**✅ Yes.** Improvement observed across all codecs in the evaluation set.
+*Note: The OOD gap reflects codec shift combined with other benchmark differences (dev/eval have different shortcut removal post-processing). We cannot isolate codec-only effects without additional controls.*
 
-### RQ3: Where is domain information removed?
-**✅ Projection layer.** Probing analysis shows codec probe accuracy drops 43.4% → 38.8% in projection layer. Backbone layers identical (frozen). Note: We find that applying DANN at this layer already gives great performance increase in invariance, not that it is the only location where this can occur.
+### RQ2: Does DANN improve per-codec performance?
+**✅ Yes.** Improvement observed across all codecs in the evaluation set, including codecs not covered by synthetic augmentation (C04/Encodec, C07/cascade, C11/device).
+
+### RQ3: Where does domain invariance emerge?
+**✅ Projection layer shows partial invariance.** Probing analysis shows codec probe accuracy drops 43.4% → 38.8% in the projection layer (10.6% relative reduction). Backbone layers are identical (frozen).
+
+*Important framing:* Probe accuracy remains above chance (~16.7% for 6 classes), indicating *partial* domain invariance — DANN reduces but does not eliminate domain information. The probe predicts *synthetic* domain labels (MP3/AAC/NONE), not eval codecs (C01-C11); transfer to real codecs is indirect.
 
 ### RQ4: What components cause domain invariance?
-**✅ Pooling weights + projection head.** CKA analysis shows layer 11 contributions diverge dramatically (CKA=0.098). Component ablation confirms projection layer patching reduces domain leakage.
+**✅ Learned layer weights + projection head.** CKA analysis compares `hidden_state × layer_weight` between ERM and DANN. Since the backbone is frozen, raw hidden states are identical; the divergence comes from **different learned layer mixing weights**.
+
+Layer 11 divergence (CKA=0.098) indicates DANN learns to down-weight contributions from the final transformer layer, which contains the most codec-specific information. This is a consequence of the frozen backbone design — DANN can only adjust the learnable components (layer weights, projection head).
 
 ---
 
 ## Novelty Claim
 
-> **"First systematic application of domain-adversarial training (DANN) specifically for codec robustness in speech deepfake detection. Unlike data augmentation approaches, DANN explicitly learns codec-invariant representations, verified via probing analysis."**
+> **"We provide a systematic evaluation of domain-adversarial training (DANN) for codec-robust speech deepfake detection on ASVspoof5, including transfer from synthetic codec augmentation to real benchmark conditions and representation-level analysis via probing, CKA, and activation patching."**
 
 ### Related Work
-- **"Generalizable Speech Deepfake Detection via Information Bottleneck Enhanced Adversarial Alignment"** (Sept 2025) — Uses adversarial training but for TTS/VC domain shift, not codec robustness.
-- Most prior work uses **data augmentation** (codec simulation) not adversarial training.
-- **Face anti-spoofing** has used DANN for domain adaptation, but not speech.
+- **"Generalizable Speech Deepfake Detection via Information Bottleneck Enhanced Adversarial Alignment"** (Sept 2025) — Uses adversarial training for TTS/VC domain shift, not codec robustness.
+- Most prior work uses **data augmentation** (codec simulation) without adversarial objectives.
+- **Face anti-spoofing** has used DANN for domain adaptation, but not speech deepfake detection.
 
-### Why This is Novel
-1. DANN applied specifically to codec mismatch problem
-2. Frozen backbone + DANN = novel finding that invariance emerges in projection layer only
-3. Probing + CKA analysis provides interpretability beyond "it works"
-
----
-
-## Paper Angle
-
-### Suggested Title
-> "Domain-Adversarial Training for Codec-Robust Speech Deepfake Detection"
-
-### Core Narrative
-1. **Problem:** SOTA deepfake detectors fail on codec mismatch (well-documented in ASVspoof literature)
-2. **Solution:** DANN with frozen SSL backbone (compute-efficient)
-3. **Finding 1:** DANN reduces OOD gap by 66% (160%→54%)
-4. **Finding 2:** With frozen backbone, domain invariance emerges entirely in the learnable projection head
-5. **Finding 3:** Layer 11 contributions diverge most (CKA=0.098) — final transformer layer contains most codec-specific information
-6. **Practical takeaway:** Exponential λ schedule + frozen backbone = simple, cheap recipe
-
-### Key Reframings
-- "Projection layer only" is a consequence of frozen backbone design, not universal finding
-- Reframe as: "Domain invariance doesn't require fine-tuning billion-parameter models — a lightweight projection head is sufficient"
-- 2-codec limitation is also a strength: "Even with minimal codec diversity (2 synthetic codecs), DANN achieves significant OOD improvement"
+### Why This is a Contribution
+1. DANN applied specifically to codec mismatch problem with frozen SSL backbone
+2. Evidence that invariance can emerge in a lightweight projection head without fine-tuning billion-parameter models
+3. Multi-method analysis (probing + CKA + patching) beyond "it works"
 
 ---
 
-## Strengths
+## Synthetic Augmentation Design
 
-1. **Clear, testable research question** with practical relevance
-2. **Proper experimental design** — ERM baselines for every DANN model, two backbone architectures
-3. **Multi-method analysis** — probing, CKA, component ablation, DR visualization
-4. **Honest interpretability framing** — "probing + ablation" not overclaimed as mech interp
-5. **Compute-efficient approach** — frozen backbone makes this practical
-6. **Fast execution** — 5-6 weeks vs 5-month allocation
-7. **Publication-ready outputs** — figures, tables, bootstrap CIs
+**Codecs used:** MP3, AAC (OPUS failed silently during training)
+**Quality tiers:** 1-5 (arbitrary bitrate levels per codec)
+
+| Synthetic Domain | Maps to Eval Codecs |
+|------------------|---------------------|
+| NONE (uncoded) | Uncoded ("-") |
+| MP3 | C05 (mp3_wb) |
+| AAC | C06 (m4a_wb) |
+
+**Not covered by synthetic augmentation:**
+- C01/C08 (Opus) — encoder failed
+- C02/C09 (AMR) — not included
+- C03/C10 (Speex) — not included
+- **C04 (Encodec)** — neural codec, fundamentally different
+- **C07 (MP3+Encodec cascade)** — compound degradation
+- **C11 (Device/channel)** — acoustic effects, not codec
+
+*Note: DANN still improved on uncovered codecs (C04, C07, C11), suggesting some transfer of general robustness, not just codec-specific invariance.*
 
 ---
 
 ## Limitations
 
-1. **Only 2 synthetic codecs used** (OPUS failed silently during training)
-   - Mitigation: Results still show OOD improvement; mention in limitations
-   
-2. **Backbone choice matters more than DANN** — WavLM (7.34%) >> W2V2 (14.33%)
-   - Note: DANN still helps both backbones
-
-3. **Frozen backbone limits invariance depth**
-   - Future work: partial unfreezing (Issue #82)
-
-4. **No comparison to other DA methods** (MMD, CORAL)
-   - Defensible for thesis scope; mention in future work
-
-5. **Single training seed**
-   - Bootstrap CIs on eval help; training variance not captured
-
-6. **Not true mechanistic interpretability**
-   - We know *where* (projection head) and *what* (codec info), not *how* (circuit-level)
-
----
-
-## Ablations & Additional Evidence
-
-### ERM + Codec Augmentation ✅ CONFIRMED
-- **WavLM ERM+Aug:** 8.47% EER — **identical to ERM** (8.47%)
-- **W2V2 ERM+Aug:** 15.79% EER — **worse than ERM** (15.30%)
-- **Conclusion:** "Codec augmentation alone is insufficient for OOD generalization. The model still overfits to codec-specific artifacts. DANN's adversarial objective explicitly forces codec-invariant representations."
-
-### W2V2 DANN v2 (Failed Optimization)
-- Attempted to optimize layer selection based on probe analysis
-- Used `first_k` (layers 1-6) instead of weighted pooling
-- Result: 18.54% EER (worse than v1's 14.33%)
-- **Conclusion:** Learned weighted pooling naturally adapts; aggressive pruning hurts
-
-### RQ4 Statistical Analysis
-- Bootstrap CIs computed (n=1000)
-- All interventions significant vs baseline (p=0.000)
-- `layer_patch_repr` is best: EER 7.47% [7.04%, 7.87%], probe acc 38.8%
-
-### Representation Visualization
-- PCA/UMAP/t-SNE shows:
-  - ERM: codec-separated clusters
-  - DANN: mixed/overlapping codec representations
-- Visual proof of domain invariance
+1. **Only 2 synthetic codecs** (MP3, AAC) — OPUS failed silently
+2. **ERM+Aug ablation invalid** — pending re-run (Issue #100)
+3. **Single training seed** — bootstrap CIs on eval only
+4. **Backbone choice matters more than DANN** — WavLM >> W2V2
+5. **W2V2 minDCF saturates** — over-confident scores
+6. **Partial invariance only** — probe accuracy above chance
+7. **OOD gap conflates multiple shifts** — codec + shortcuts + attack distribution
 
 ---
 
@@ -150,36 +114,10 @@
 - [x] Full eval (680k samples) completed
 - [x] Bootstrap CIs computed
 - [x] RQ4 ablation + visualization done
-- [x] Representation DR figure generated
-- [x] ERM+Aug eval — **confirms augmentation ≠ DANN**
+- [ ] **ERM+Aug re-run with working ffmpeg** (Issue #100)
 - [ ] Paper intro/related work draft
-- [ ] Final figure polish
 - [ ] Multi-seed runs (optional, strengthens paper)
 
 ---
 
-## Files Generated
-
-### Core Results
-- `results/runs/*/eval_eval_full/metrics.json` — main results
-- `rq4_results_summary.csv` — RQ4 intervention results
-- `rq4_stats_summary.csv` — bootstrap CIs (pending generation)
-- `rq4_cka_results.csv` — CKA layer analysis
-
-### Figures
-- `figures/ood_gap.png` — OOD gap comparison
-- `figures/per_codec_eer.png` — per-codec performance
-- `figures/rq3_combined.png` — probing results
-- `figures/rq4/cka_layer_divergence.png` — CKA analysis
-- `figures/rq4/intervention_comparison.png` — ablation results
-- `figures/rq4/representation_dr.png` — PCA/UMAP/t-SNE (pending generation)
-
-### Tables
-- `figures/tables/T1_main_results.tex` — main results
-- `figures/tables/T2_per_codec.tex` — per-codec
-- `figures/tables/T3_ood_gap.tex` — OOD analysis
-- `figures/tables/T4_projection_probes.tex` — probing
-
----
-
-*Last updated: 2026-02-14 (ERM+Aug results added)*
+*Last updated: 2026-02-15 (framing fixes, ERM+Aug bug noted)*
