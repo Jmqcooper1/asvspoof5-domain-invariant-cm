@@ -34,8 +34,8 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import torch
-import torchaudio
+import soundfile as sf
+from scipy import signal
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve
@@ -65,11 +65,15 @@ def extract_shortcut_features(
         Dictionary of features, or None if extraction fails.
     """
     try:
-        waveform, sr = torchaudio.load(audio_path)
+        waveform, sr = sf.read(audio_path)
         if sr != sample_rate:
-            waveform = torchaudio.functional.resample(waveform, sr, sample_rate)
+            # Resample using scipy
+            num_samples = int(len(waveform) * sample_rate / sr)
+            waveform = signal.resample(waveform, num_samples)
         
-        waveform = waveform.squeeze().numpy()
+        # Handle stereo by taking mean
+        if waveform.ndim > 1:
+            waveform = waveform.mean(axis=1)
         
         # Handle edge case of empty/silent audio
         if len(waveform) == 0 or np.abs(waveform).max() == 0:
