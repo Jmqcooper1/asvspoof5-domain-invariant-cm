@@ -162,12 +162,11 @@ def main():
             df = pd.read_parquet(manifest_path)
         elif manifest_path.suffix in ['.txt', '.tsv']:
             # ASVspoof5 protocol format (whitespace-separated)
-            logger.info(f"  Sampled {args.max_samples} from original dataset")
+            df = pd.read_csv(manifest_path, sep=r'\s+', header=None,
                            names=['speaker_id', 'flac_file', 'gender', 'attack_label', 'key'])
         else:
             df = pd.read_parquet(manifest_path)  # Default to parquet
         
-        for row in tqdm(df.itertuples(), total=len(df), desc=split_name):
         if len(df) > args.max_samples:
             df = df.sample(n=args.max_samples, random_state=args.seed)
             logger.info(f"  Sampled {args.max_samples} from {len(df)} samples")
