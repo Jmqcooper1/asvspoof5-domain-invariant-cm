@@ -157,7 +157,15 @@ def main():
     for split_name, manifest_path in splits:
         logger.info(f"Extracting features for {split_name}...")
         
-        df = pd.read_parquet(manifest_path)
+        # Support both parquet and protocol txt files
+        if manifest_path.suffix == '.parquet':
+            df = pd.read_parquet(manifest_path)
+        elif manifest_path.suffix in ['.txt', '.tsv']:
+            # ASVspoof5 protocol format (whitespace-separated)
+            df = pd.read_csv(manifest_path, sep=r'\s+', header=None,
+                           names=['speaker_id', 'flac_file', 'gender', 'attack_label', 'key'])
+        else:
+            df = pd.read_parquet(manifest_path)  # Default to parquet
         
         # Sample if too large
         if len(df) > args.max_samples:
@@ -168,13 +176,15 @@ def main():
         labels = []
         
         for _, row in tqdm(df.iterrows(), total=len(df), desc=split_name):
-            # Handle different path column names
+            # Handle different path column names (parquet vs protocol)
             if 'path' in row:
                 rel_path = row['path']
+            elif 'flac_file' in row:
+                rel_path = row['flac_file']
             elif 'file' in row:
                 rel_path = row['file']
             else:
-                logger.warning(f"No path column found in manifest")
+                logger.warning(f"No path column found in manifest. Columns: {list(row.index)}")
                 continue
             
             audio_path = args.data_root / rel_path
@@ -195,13 +205,17 @@ def main():
             
             features.append(list(feat.values()))
             
-            # Handle different label formats
+            # Handle different label formats (parquet vs protocol)
             if 'label' in row:
-                label = row['label']
+                label = int(row['label'])
             elif 'key' in row:
-                label = 0 if row['key'] == 'bonafide' else 1
+                # ASVspoof5 protocol: bonafide=0, spoof=1
+                label = 0 if str(row['key']).lower() == 'bonafide' else 1
+            elif 'attack_label' in row:
+                label = 0 if str(row['attack_label']) == '-' else 1
             else:
-                label = 0  # Default
+                logger.warning(f"No label column found. Columns: {list(row.index)}")
+                continue
             
             labels.append(label)
         
