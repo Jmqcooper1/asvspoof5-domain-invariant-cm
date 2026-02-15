@@ -45,7 +45,6 @@ COLORS = {
     "wavlm_dann": "#64B5F6",  # Light blue
     "w2v2_erm": "#FFB74D",    # Light orange
     "w2v2_dann": "#81C784",   # Light green
-    "w2v2_dann_v2": "#BA68C8",
     "lfcc_gmm": "#A1887F",
     "trillsson_logistic": "#4DB6AC",
     "trillsson_mlp": "#9575CD",
@@ -56,7 +55,6 @@ MODEL_RUN_DIRS = {
     "wavlm_dann": "wavlm_dann",
     "w2v2_erm": "w2v2_erm",
     "w2v2_dann": "w2v2_dann",
-    "w2v2_dann_v2": "w2v2_dann_v2",
     "lfcc_gmm": "lfcc_gmm_32",
     "trillsson_logistic": "trillsson_logistic",
     "trillsson_mlp": "trillsson_mlp",
@@ -66,8 +64,7 @@ MODEL_LABELS = {
     "wavlm_erm": "WavLM ERM",
     "wavlm_dann": "WavLM DANN",
     "w2v2_erm": "W2V2 ERM",
-    "w2v2_dann": "W2V2 DANN v1",
-    "w2v2_dann_v2": "W2V2 DANN v2",
+    "w2v2_dann": "W2V2 DANN",
     "lfcc_gmm": "LFCC-GMM",
     "trillsson_logistic": "TRILLsson Logistic",
     "trillsson_mlp": "TRILLsson MLP",

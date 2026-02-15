@@ -56,11 +56,18 @@ MODEL_RUN_DIRS = {
     "trillsson_mlp": "trillsson_mlp",
 }
 
+T1_EXTRA_MODEL_RUN_DIRS = {
+    "wavlm_erm_aug": "wavlm_erm_aug",
+    "w2v2_erm_aug": "w2v2_erm_aug",
+}
+
 MODEL_LABELS = {
     "wavlm_erm": "WavLM ERM",
+    "wavlm_erm_aug": "WavLM ERM + Aug",
     "wavlm_dann": "WavLM DANN",
     "w2v2_erm": "W2V2 ERM",
-    "w2v2_dann": "W2V2 DANN v1",
+    "w2v2_erm_aug": "W2V2 ERM + Aug",
+    "w2v2_dann": "W2V2 DANN",
     "w2v2_dann_v2": "W2V2 DANN v2",
     "lfcc_gmm": "LFCC-GMM",
     "trillsson_logistic": "TRILLsson Logistic",
@@ -173,7 +180,8 @@ def load_main_results_from_runs(results_dir: Path) -> Dict[str, Dict[str, Option
     """Load eval metrics and dev EER from runs directory structure."""
     results: Dict[str, Dict[str, Optional[float]]] = {}
 
-    for model_key, run_dir_name in MODEL_RUN_DIRS.items():
+    main_results_run_dirs = {**MODEL_RUN_DIRS, **T1_EXTRA_MODEL_RUN_DIRS}
+    for model_key, run_dir_name in main_results_run_dirs.items():
         model_dir = results_dir / run_dir_name
         eval_dir_name = resolve_eval_results_dir(model_dir)
         if eval_dir_name is None:
@@ -265,6 +273,7 @@ def to_latex_table(
     caption: str = "",
     label: str = "",
     column_format: Optional[str] = None,
+    note: str = "",
 ) -> str:
     """Convert headers and rows to LaTeX table format."""
     if column_format is None:
@@ -285,6 +294,9 @@ def to_latex_table(
         lines.append(" & ".join(row) + r" \\")
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
+    if note:
+        lines.append(r"\vspace{0.4em}")
+        lines.append(rf"{{\footnotesize {note}}}")
     lines.append(r"\end{table}")
     return "\n".join(lines)
 
@@ -306,13 +318,14 @@ def save_table(
     rows: List[List[str]],
     caption: str = "",
     label: str = "",
+    latex_note: str = "",
 ) -> None:
     """Save table in both LaTeX and Markdown formats."""
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # LaTeX
     tex_path = output_dir / f"{name}.tex"
-    tex_content = to_latex_table(headers, rows, caption, label)
+    tex_content = to_latex_table(headers, rows, caption, label, note=latex_note)
     tex_path.write_text(tex_content)
     logger.info(f"Saved LaTeX: {tex_path}")
     
@@ -339,8 +352,10 @@ def generate_t1_main_results(
     if main_results is None:
         rows = [
             ["ERM", "WavLM", "—", "—", "—"],
+            ["ERM + Aug", "WavLM", "—", "—", "—"],
             ["DANN", "WavLM", "—", "—", "—"],
             ["ERM", "W2V2", "—", "—", "—"],
+            ["ERM + Aug", "W2V2", "—", "—", "—"],
             ["DANN", "W2V2", "—", "—", "—"],
             ["LFCC-GMM", "LFCC", "—", "—", "—"],
             ["TRILLsson Logistic", "TRILLsson", "—", "—", "—"],
@@ -351,10 +366,11 @@ def generate_t1_main_results(
         rows = []
         model_order = [
             "wavlm_erm",
+            "wavlm_erm_aug",
             "wavlm_dann",
             "w2v2_erm",
+            "w2v2_erm_aug",
             "w2v2_dann",
-            "w2v2_dann_v2",
             "lfcc_gmm",
             "trillsson_logistic",
             "trillsson_mlp",
@@ -374,7 +390,12 @@ def generate_t1_main_results(
                 method = "TRILLsson MLP"
             else:
                 backbone = "WavLM" if "wavlm" in model_key else "W2V2"
-                method = "DANN v2" if model_key == "w2v2_dann_v2" else ("DANN" if "dann" in model_key else "ERM")
+                if "dann" in model_key:
+                    method = "DANN"
+                elif "erm_aug" in model_key:
+                    method = "ERM + Aug"
+                else:
+                    method = "ERM"
             
             dev_eer = model_data.get("dev_eer", "—")
             eval_eer = model_data.get("eval_eer", "—")
@@ -393,6 +414,10 @@ def generate_t1_main_results(
         output_dir, "T1_main_results", headers, rows,
         caption="Main Results: EER and minDCF for ERM vs DANN",
         label="tab:main_results",
+        latex_note=(
+            r"W2V2 DANN uses weighted pooling across all 12 layers "
+            r"with an exponential $\lambda$ schedule 0.01$\rightarrow$1.0 and no warmup."
+        ),
     )
     return True
 
@@ -407,7 +432,15 @@ def generate_t2_per_codec(
     """Generate T2: Per-codec EER comparison table."""
     logger.info("Generating T2: Per-Codec EER Comparison")
     
-    model_order = list(MODEL_RUN_DIRS.keys())
+    model_order = [
+        "wavlm_erm",
+        "wavlm_dann",
+        "w2v2_erm",
+        "w2v2_dann",
+        "lfcc_gmm",
+        "trillsson_logistic",
+        "trillsson_mlp",
+    ]
     if per_codec:
         available_models = {
             model_key
@@ -470,8 +503,6 @@ def generate_t3_ood_gap(
         for backbone in ["wavlm", "w2v2"]:
             backbone_name = "WavLM" if backbone == "wavlm" else "W2V2"
             method_pairs = [("ERM", f"{backbone}_erm"), ("DANN", f"{backbone}_dann")]
-            if backbone == "w2v2":
-                method_pairs.append(("DANN v2", "w2v2_dann_v2"))
 
             baseline_data = main_results.get(f"{backbone}_erm", {})
             baseline_dev = baseline_data.get("dev_eer", 0)
