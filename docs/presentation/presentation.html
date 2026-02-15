@@ -1,18 +1,9 @@
 <!DOCTYPE html>
-<!--
-  Domain-Invariant Speech Deepfake Detection - Thesis Presentation
-  
-  NOTE: This presentation requires an internet connection to load:
-  - Reveal.js framework from cdn.jsdelivr.net
-  - Google Fonts (Source Serif 4, Source Sans 3, JetBrains Mono)
-  
-  See README.md for more details.
--->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Domain-Invariant Speech Deepfake Detection</title>
+    <title>Domain-Adversarial Training for Codec-Robust Speech Deepfake Detection</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/theme/white.css">
     <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&family=Source+Sans+3:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -28,13 +19,13 @@
             --border: #e2e8f0;
             --surface: #f8fafc;
         }
-        
+
         .reveal {
             font-family: var(--body-font);
             font-size: 24px;
             color: var(--text-primary);
         }
-        
+
         .reveal h1, .reveal h2, .reveal h3 {
             font-family: var(--heading-font);
             font-weight: 600;
@@ -43,85 +34,63 @@
             letter-spacing: -0.01em;
             line-height: 1.2;
         }
-        
+
         .reveal h1 { font-size: 2em; margin-bottom: 0.3em; }
         .reveal h2 { font-size: 1.5em; margin-bottom: 0.5em; }
-        .reveal h3 { font-size: 1.1em; margin-bottom: 0.4em; color: var(--text-secondary); }
-        
-        .reveal section {
-            text-align: left;
-            height: 100%;
-            padding: 1em 2em;
-            box-sizing: border-box;
-        }
-        
-        .reveal .center { text-align: center; }
-        
-        .reveal ul, .reveal ol {
-            margin: 0.5em 0 0.5em 1.2em;
-            line-height: 1.5;
-        }
-        
-        .reveal li {
-            margin: 0.25em 0;
-            font-size: 0.9em;
-        }
-        
-        .reveal li li { font-size: 0.95em; }
-        
-        .accent { color: var(--accent); }
-        .muted { color: var(--text-secondary); }
-        .small { font-size: 0.75em; color: var(--text-secondary); }
-        
+        .reveal h3 { font-size: 1.1em; margin-bottom: 0.4em; color: var(--text-secondary); font-weight: 500; }
+
+        .reveal ul, .reveal ol { text-align: left; }
+        .reveal li { margin-bottom: 0.3em; }
+
         .two-col {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 2em;
             align-items: start;
         }
-        
-        .col { min-height: 0; }
-        
-        table.data {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.8em;
-            margin: 0.5em 0;
-        }
-        
-        table.data th, table.data td {
-            border: 1px solid var(--border);
-            padding: 0.4em 0.6em;
-            text-align: left;
-        }
-        
-        table.data th {
-            background: var(--surface);
-            font-weight: 600;
-        }
-        
+
         .card {
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 6px;
             padding: 0.6em 1em;
             margin: 0.4em 0;
+            text-align: left;
         }
-        
+
         .card-accent {
             background: var(--accent-light);
             border-left: 3px solid var(--accent);
         }
-        
-        .formula {
-            font-family: var(--mono-font);
-            font-size: 0.85em;
-            background: var(--surface);
-            padding: 0.3em 0.6em;
-            border-radius: 4px;
-            display: inline-block;
+
+        .card-green {
+            background: #dcfce7;
+            border-left: 3px solid #16a34a;
         }
-        
+
+        table.data {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75em;
+            margin: 0.5em 0;
+        }
+
+        table.data th, table.data td {
+            border: 1px solid var(--border);
+            padding: 0.4em 0.6em;
+            text-align: left;
+        }
+
+        table.data th {
+            background: var(--surface);
+            font-weight: 600;
+        }
+
+        table.data tr.highlight {
+            background: #dbeafe;
+            font-weight: 600;
+        }
+
         .tag {
             display: inline-block;
             font-size: 0.7em;
@@ -130,42 +99,20 @@
             border-radius: 3px;
             vertical-align: middle;
         }
-        
+
         .tag-green { background: #dcfce7; color: #166534; }
         .tag-amber { background: #fef3c7; color: #92400e; }
         .tag-blue { background: #dbeafe; color: #1e40af; }
-        
-        .status-pending {
-            background: #fffbeb;
-            border: 1px dashed #f59e0b;
-            border-radius: 6px;
-            padding: 1em;
-            text-align: center;
-            color: #92400e;
+        .tag-red { background: #fee2e2; color: #991b1b; }
+
+        .formula {
+            font-family: var(--mono-font);
+            font-size: 0.85em;
+            background: var(--surface);
+            padding: 0.3em 0.6em;
+            border-radius: 4px;
+            display: inline-block;
         }
-        
-        .checklist {
-            list-style: none;
-            margin-left: 0;
-            padding-left: 0;
-        }
-        
-        .checklist li {
-            padding-left: 1.5em;
-            position: relative;
-        }
-        
-        .checklist li::before {
-            position: absolute;
-            left: 0;
-            font-weight: 600;
-        }
-        
-        .checklist li.done::before { content: "✓"; color: #16a34a; }
-        .checklist li.pending::before { content: "○"; color: #f59e0b; }
-        .checklist li.future::before { content: "·"; color: #94a3b8; }
-        
-        .reveal .slides section { overflow: hidden; }
 
         .flow-diagram {
             display: flex;
@@ -174,7 +121,7 @@
             gap: 0.3em;
             margin: 0.5em auto;
         }
-        
+
         .flow-box {
             padding: 0.4em 1em;
             border-radius: 6px;
@@ -183,743 +130,587 @@
             text-align: center;
             min-width: 180px;
         }
-        
+
         .flow-box.blue { background: #dbeafe; border: 2px solid #3b82f6; }
         .flow-box.green { background: #dcfce7; border: 2px solid #22c55e; }
         .flow-box.orange { background: #fed7aa; border: 2px solid #f97316; }
         .flow-box.purple { background: #e9d5ff; border: 2px solid #a855f7; }
         .flow-box.gray { background: #f1f5f9; border: 2px solid #94a3b8; }
-        
+        .flow-box.red { background: #fee2e2; border: 2px solid #ef4444; }
+
         .flow-arrow { color: #64748b; font-size: 1.2em; }
-        
+
         .flow-split {
             display: flex;
             gap: 2em;
             justify-content: center;
         }
-        
+
         .flow-branch {
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 0.3em;
         }
+
+        .small { font-size: 0.8em; color: var(--text-secondary); }
+        .smaller { font-size: 0.7em; color: var(--text-secondary); }
+
+        .rq-box {
+            background: var(--accent-light);
+            border-left: 4px solid var(--accent);
+            padding: 0.8em 1em;
+            margin: 0.5em 0;
+            font-style: italic;
+            text-align: left;
+        }
+
+        .figure-container {
+            text-align: center;
+            margin: 0.5em 0;
+        }
+
+        .figure-container img {
+            max-width: 100%;
+            max-height: 420px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+
+        .figure-caption {
+            font-size: 0.7em;
+            color: var(--text-secondary);
+            margin-top: 0.3em;
+        }
+
+        .metric-box {
+            display: inline-block;
+            padding: 0.5em 1em;
+            margin: 0.3em;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .metric-box .value {
+            font-size: 1.8em;
+            font-weight: 700;
+            display: block;
+        }
+
+        .metric-box .label {
+            font-size: 0.7em;
+            color: var(--text-secondary);
+        }
+
+        .metric-box.green { background: #dcfce7; }
+        .metric-box.blue { background: #dbeafe; }
+        .metric-box.amber { background: #fef3c7; }
+
+        .checklist {
+            list-style: none;
+            margin-left: 0;
+            padding-left: 0;
+            text-align: left;
+        }
+
+        .checklist li {
+            padding-left: 1.5em;
+            position: relative;
+            margin-bottom: 0.4em;
+        }
+
+        .checklist li::before {
+            position: absolute;
+            left: 0;
+            font-weight: 600;
+        }
+
+        .checklist li.done::before { content: "✓"; color: #16a34a; }
+        .checklist li.no::before { content: "✗"; color: #dc2626; }
+
+        blockquote {
+            border-left: 4px solid var(--accent);
+            padding-left: 1em;
+            margin-left: 0;
+            font-style: italic;
+            color: var(--text-secondary);
+        }
     </style>
 </head>
 <body>
     <div class="reveal">
         <div class="slides">
-            
-            <!-- 1. Title -->
-            <section class="center" style="display: flex; flex-direction: column; justify-content: center;">
-                <h1 style="font-size: 2.2em;">Domain-Invariant Speech<br>Deepfake Detection</h1>
-                <h3 style="font-weight: 400; margin-top: 0.5em;">Domain-Adversarial Training on ASVspoof 5</h3>
+
+            <!-- Title Slide -->
+            <section style="display: flex; flex-direction: column; justify-content: center; height: 100%;">
+                <h1 style="font-size: 1.8em;">Domain-Adversarial Training for<br>Codec-Robust Speech Deepfake Detection</h1>
+                <h3 style="font-weight: 400; margin-top: 0.5em;">MSc Artificial Intelligence Thesis</h3>
                 <p style="margin-top: 2.5em; color: var(--text-secondary);">
                     Mike Cooper<br>
-                    <span class="small">Supervisor Meeting · February 2026</span>
+                    <span class="small">University of Amsterdam · February 2026</span>
                 </p>
             </section>
-            
-            <!-- 2. Problem Statement -->
+
+            <!-- Research Question -->
             <section>
-                <h2>The Problem: Domain Shift</h2>
-                <div class="two-col" style="margin-top: 0.5em;">
-                    <div class="col">
-                        <h3>Detectors Fail Under Real Conditions</h3>
-                        <ul>
-                            <li>Models trained on clean data <span class="accent">degrade</span> when audio is compressed, transmitted, or re-recorded</li>
-                            <li>Detectors learn <strong>shortcut cues</strong> tied to codec artifacts</li>
-                            <li>Attackers can exploit this mismatch</li>
-                        </ul>
-                    </div>
-                    <div class="col">
-                        <h3>Why It Matters</h3>
-                        <ul>
-                            <li>Real-world audio is never pristine</li>
-                            <li>Messaging apps, VoIP, and social media all apply compression</li>
-                        </ul>
-                        <div class="card card-accent" style="margin-top: 0.8em;">
-                            <strong>Goal:</strong> Build detectors robust to codec and channel shifts
-                        </div>
-                    </div>
+                <h2>Research Question</h2>
+                <div class="rq-box" style="font-size: 1.2em; margin-top: 1em;">
+                    Can domain-adversarial training (DANN) improve generalization of speech deepfake detectors to unseen transmission codecs?
+                </div>
+                <div style="margin-top: 1.5em;">
+                    <h3>Sub-questions</h3>
+                    <ol style="font-size: 0.9em;">
+                        <li><strong>RQ1:</strong> Does DANN reduce the out-of-domain (OOD) gap?</li>
+                        <li><strong>RQ2:</strong> Does DANN improve per-codec performance?</li>
+                        <li><strong>RQ3:</strong> Where is domain information removed?</li>
+                        <li><strong>RQ4:</strong> What components cause domain invariance?</li>
+                    </ol>
                 </div>
             </section>
-            
-            <!-- 3. ASVspoof 5 Dataset -->
+
+            <!-- Problem: Codec Mismatch -->
             <section>
-                <h2>ASVspoof 5: A Modern Benchmark</h2>
-                <ul style="margin-bottom: 0.5em;">
-                    <li><strong>Track 1:</strong> Stand-alone bonafide vs spoof classification</li>
-                    <li><strong>Crowdsourced audio</strong> with diverse recording conditions</li>
-                    <li><strong>11 codec configurations</strong> (C01–C11): OPUS, AMR, Speex, Encodec, MP3, AAC, device channels</li>
-                </ul>
-                <table class="data">
-                    <tr>
-                        <th>Split</th>
-                        <th>Samples</th>
-                        <th>Codec Diversity</th>
-                    </tr>
-                    <tr>
-                        <td>Train</td>
-                        <td>~180k</td>
-                        <td>Uncoded only</td>
-                    </tr>
-                    <tr>
-                        <td>Dev</td>
-                        <td>~140k</td>
-                        <td>Uncoded only</td>
-                    </tr>
-                    <tr>
-                        <td>Eval</td>
-                        <td>~700k</td>
-                        <td><strong>Full codec diversity</strong></td>
-                    </tr>
-                </table>
-                <p class="small" style="margin-top: 0.3em;">Train/Dev have no codec shift — the evaluation set is the true generalization test.</p>
-            </section>
-            
-            <!-- 4. Research Questions & Hypotheses -->
-            <section>
-                <h2>Research Questions & Hypotheses</h2>
+                <h2>The Problem: Codec Mismatch</h2>
                 <div class="two-col">
-                    <div class="col">
-                        <h3>Research Questions</h3>
-                        <ul style="font-size: 0.85em;">
-                            <li><strong>RQ1:</strong> Does DANN improve generalization under codec shift vs ERM?</li>
-                            <li><strong>RQ2:</strong> What is the trade-off between detection and domain invariance?</li>
-                            <li><strong>RQ3:</strong> Where is codec information encoded, and how does DANN change it?</li>
-                            <li><strong>RQ4:</strong> Can activation patching reduce domain leakage without retraining?</li>
-                        </ul>
-                    </div>
-                    <div class="col">
-                        <h3>Hypotheses</h3>
-                        <ul style="font-size: 0.85em;">
-                            <li><strong>H1:</strong> DANN reduces domain leakage and improves out-of-domain EER</li>
-                            <li><strong>H2:</strong> Domain information concentrates in specific layers; DANN suppresses it</li>
-                            <li><strong>H3:</strong> Effects are consistent across WavLM and Wav2Vec2, but layer-wise localization differs</li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
-            
-            <!-- 5. ASVspoof5 Design: Addressing Shortcut Learning -->
-            <section>
-                <h2>ASVspoof5 Design: Addressing Shortcut Learning</h2>
-                <div class="card card-accent" style="margin: 0.5em 0; font-style: italic; font-size: 0.85em;">
-                    "We have been alerted to the presence of shortcut artefacts which plagues some earlier ASVspoof databases — namely artefacts which are semantically unrelated to the spoof/deepfake problem but which can nonetheless be utilised for detection."
-                    <p class="small" style="margin-top: 0.3em; font-style: normal;">— ASVspoof5 Paper</p>
-                </div>
-                <div class="two-col" style="margin-top: 0.6em;">
-                    <div class="col">
-                        <h3>The Deliberate Design Choice</h3>
-                        <table class="data">
-                            <tr>
-                                <th>Split</th>
-                                <th>Codec Diversity</th>
-                            </tr>
-                            <tr>
-                                <td>Train</td>
-                                <td>Clean only (no codecs)</td>
-                            </tr>
-                            <tr>
-                                <td>Dev</td>
-                                <td>Clean only (no codecs)</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Eval</strong></td>
-                                <td><strong>C01–C11</strong> (full diversity)</td>
-                            </tr>
-                        </table>
-                        <p class="small" style="margin-top: 0.3em;">This forces models to generalize to unseen transmission conditions.</p>
-                    </div>
-                    <div class="col">
-                        <h3>Our Solution: DANN + Synthetic Augmentation</h3>
-                        <ul style="font-size: 0.85em;">
-                            <li><strong>Problem:</strong> No codec labels in train/dev to learn from</li>
-                            <li><strong>Solution:</strong> Create synthetic codec domains via FFmpeg</li>
-                            <li><strong>Goal:</strong> Learn <span class="accent">domain-invariant features</span> that generalize to real eval codecs</li>
-                        </ul>
-                        <div class="card" style="margin-top: 0.6em; font-size: 0.85em;">
-                            <strong>This is exactly what the dataset designers hoped for</strong> — systems that detect deepfakes based on spoofing artifacts, not codec shortcuts.
-                        </div>
-                    </div>
-                </div>
-            </section>
-            
-            <!-- 5b. Synthetic Augmentation Coverage Analysis -->
-            <section>
-                <h2>Synthetic Augmentation Coverage</h2>
-                <p style="font-size: 0.85em; margin-bottom: 0.3em;">We analyzed the ASVspoof5 protocol files to understand what our synthetic augmentation can and cannot cover:</p>
-                <div class="two-col" style="margin-top: 0.3em;">
-                    <div class="col">
-                        <h3 style="margin-bottom: 0.3em;">Dataset Composition</h3>
-                        <table class="data" style="font-size: 0.75em;">
-                            <tr>
-                                <th>Split</th>
-                                <th>Samples</th>
-                                <th>Codec Diversity</th>
-                            </tr>
-                            <tr>
-                                <td>Train</td>
-                                <td>182,357</td>
-                                <td>100% NONE</td>
-                            </tr>
-                            <tr>
-                                <td>Dev</td>
-                                <td>140,950</td>
-                                <td>100% NONE</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Eval</strong></td>
-                                <td><strong>680,774</strong></td>
-                                <td><strong>12 conditions</strong></td>
-                            </tr>
-                        </table>
-                        <div class="card card-accent" style="margin-top: 0.4em; font-size: 0.8em; padding: 0.4em 0.8em;">
-                            <strong>79.2%</strong> of eval covered by synthetic augmentation<br>
-                            <strong>20.8%</strong> uncovered (C04, C07, C11)
-                        </div>
-                        <p class="small" style="margin-top: 0.4em;"><strong>Uncovered:</strong> C04 (neural), C07 (cascade), C11 (device)</p>
-                    </div>
-                    <div class="col">
-                        <h3 style="margin-bottom: 0.3em;">Eval Set Codec Distribution</h3>
-                        <table class="data" style="font-size: 0.65em;">
-                            <tr><th>Codec</th><th>%</th><th>Synth</th></tr>
-                            <tr><td>NONE</td><td>25.2%</td><td>✓</td></tr>
-                            <tr><td>C01 (OPUS)</td><td>6.9%</td><td>✓</td></tr>
-                            <tr><td>C02 (AMR)</td><td>7.0%</td><td>✓</td></tr>
-                            <tr><td>C03 (SPEEX)</td><td>7.0%</td><td>✓</td></tr>
-                            <tr style="background: #fef2f2;"><td>C04 (Encodec)</td><td>7.0%</td><td>❌</td></tr>
-                            <tr><td>C05 (MP3)</td><td>7.0%</td><td>✓</td></tr>
-                            <tr><td>C06 (AAC)</td><td>6.1%</td><td>✓</td></tr>
-                            <tr style="background: #fef2f2;"><td>C07 (Cascade)</td><td>7.0%</td><td>❌</td></tr>
-                            <tr><td>C08 (OPUS-NB)</td><td>6.9%</td><td>✓</td></tr>
-                            <tr><td>C09 (AMR-NB)</td><td>6.1%</td><td>✓</td></tr>
-                            <tr><td>C10 (SPEEX-NB)</td><td>7.0%</td><td>✓</td></tr>
-                            <tr style="background: #fef2f2;"><td>C11 (Device)</td><td>6.8%</td><td>❌</td></tr>
-                        </table>
-                    </div>
-                </div>
-            </section>
-            
-            <!-- 6. Multi-Task Domain Adaptation: CODEC & CODEC_Q -->
-            <section>
-                <h2>Multi-Task Domain Adaptation: CODEC & CODEC_Q</h2>
-                <p>We define <strong>two independent domain discrimination tasks</strong> to cover the full space of transmission conditions:</p>
-                <div class="two-col" style="margin-top: 0.5em;">
-                    <div class="col">
-                        <div class="card" style="border-left: 3px solid #a855f7;">
-                            <h3 style="margin-top: 0;">CODEC <span class="tag tag-blue">Format Type</span></h3>
-                            <p style="font-size: 0.85em;">The compression format used:</p>
-                            <ul style="font-size: 0.8em;">
-                                <li>MP3, AAC (lossy audio)</li>
-                                <li>OPUS, Speex (VoIP)</li>
-                                <li>AMR (telephony)</li>
-                                <li>Encodec (neural codec)</li>
-                            </ul>
-                            <p class="small" style="margin-top: 0.4em;"><strong>Why it matters:</strong> Different codecs introduce <em>different types</em> of artifacts (psychoacoustic vs. neural vs. speech-specific)</p>
-                        </div>
-                    </div>
-                    <div class="col">
-                        <div class="card" style="border-left: 3px solid #f97316;">
-                            <h3 style="margin-top: 0;">CODEC_Q <span class="tag tag-amber">Quality Level</span></h3>
-                            <p style="font-size: 0.85em;">Bitrate/quality setting (1–5):</p>
-                            <ul style="font-size: 0.8em;">
-                                <li><strong>1:</strong> Heavy compression (low bitrate)</li>
-                                <li><strong>3:</strong> Medium quality</li>
-                                <li><strong>5:</strong> Light compression (high bitrate)</li>
-                            </ul>
-                            <p class="small" style="margin-top: 0.4em;"><strong>Why it matters:</strong> Different quality levels = different <em>severity</em> of artifacts</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="card card-accent" style="margin-top: 0.6em;">
-                    <strong>Key insight:</strong> CODEC and CODEC_Q are <strong>independent</strong> — any codec can have any quality level. By adapting to both jointly, the model becomes robust across the full space of real-world transmission conditions.
-                </div>
-                <p class="small" style="margin-top: 0.4em;"><strong>Note:</strong> C11 (device/playback effects) cannot be simulated via codec augmentation — requires physical re-recording.</p>
-            </section>
-            
-            <!-- 7. Method Overview -->
-            <section>
-                <h2>Method: ERM vs DANN</h2>
-                <div class="two-col">
-                    <div class="col">
-                        <h3>ERM <span class="tag tag-blue">Baseline</span></h3>
+                    <div>
+                        <h3>Training Data</h3>
                         <ul>
-                            <li>Standard supervised training</li>
-                            <li>Minimize task loss only</li>
-                            <li>No domain awareness</li>
+                            <li>Clean, uncompressed audio</li>
+                            <li>No codec diversity</li>
+                            <li>Lab conditions</li>
                         </ul>
-                        <p style="margin-top: 0.8em;"><span class="formula">L = L<sub>task</sub></span></p>
-                    </div>
-                    <div class="col">
-                        <h3>DANN <span class="tag tag-green">Proposed</span></h3>
+                        <h3 style="margin-top: 1em;">Real World</h3>
                         <ul>
-                            <li>Domain-Adversarial Neural Network</li>
-                            <li>Gradient Reversal Layer (GRL)</li>
-                            <li>Forces domain-invariant features</li>
+                            <li>Compressed (MP3, AAC, Opus)</li>
+                            <li>Voice calls (AMR, Speex)</li>
+                            <li>Neural codecs (Encodec)</li>
                         </ul>
-                        <p style="margin-top: 0.8em;"><span class="formula">L = L<sub>task</sub> + λ · (L<sub>codec</sub> + L<sub>codec_q</sub>)</span></p>
                     </div>
-                </div>
-                <div class="card" style="margin-top: 0.8em;">
-                    <strong>Key insight:</strong> DANN learns representations that discriminate deepfakes while remaining invariant to codec domains.
+                    <div>
+                        <div class="card" style="margin-top: 0.5em;">
+                            <strong>ASVspoof 5 Dataset</strong>
+                            <table class="data" style="margin-top: 0.5em;">
+                                <tr><th>Split</th><th>Codec Diversity</th></tr>
+                                <tr><td>Train</td><td>0% (all uncoded)</td></tr>
+                                <tr><td>Dev</td><td>0% (all uncoded)</td></tr>
+                                <tr><td>Eval</td><td>75% coded (11 codecs)</td></tr>
+                            </table>
+                        </div>
+                        <div class="card-accent card" style="margin-top: 0.8em;">
+                            Detectors overfit to codec-free artifacts → fail on compressed audio
+                        </div>
+                    </div>
                 </div>
             </section>
-            
-            <!-- 8. Architecture Diagram -->
+
+            <!-- Solution: DANN -->
             <section>
-                <h2>Model Architecture</h2>
-                <div class="flow-diagram">
+                <h2>Solution: Domain-Adversarial Training</h2>
+                <div class="flow-diagram" style="margin-top: 0.5em;">
                     <div class="flow-box gray">Audio Waveform</div>
                     <div class="flow-arrow">↓</div>
-                    <div class="flow-box blue">SSL Backbone (WavLM / Wav2Vec2)<br><span class="small" style="color: #1e40af;">FROZEN</span></div>
+                    <div class="flow-box blue">SSL Backbone (WavLM / W2V2)<br><span class="smaller">Frozen</span></div>
                     <div class="flow-arrow">↓</div>
-                    <div class="flow-box green">Layer Mixing + Projection Head</div>
+                    <div class="flow-box green">Projection Head<br><span class="smaller">Learnable · 256-dim</span></div>
                     <div class="flow-arrow">↓</div>
                     <div class="flow-split">
                         <div class="flow-branch">
                             <div class="flow-box orange">Task Classifier</div>
                             <div class="flow-arrow">↓</div>
-                            <div class="small"><strong>bonafide / spoof</strong></div>
+                            <div class="small"><strong>Bonafide / Spoof</strong></div>
                         </div>
                         <div class="flow-branch">
-                            <div class="flow-box purple">GRL (λ)</div>
+                            <div class="flow-box red">GRL</div>
                             <div class="flow-arrow">↓</div>
                             <div class="flow-box purple">Domain Discriminator</div>
                             <div class="flow-arrow">↓</div>
-                            <div class="small"><strong>CODEC / CODEC_Q</strong></div>
+                            <div class="small"><strong>Codec Label</strong></div>
                         </div>
                     </div>
                 </div>
-                <p class="small center" style="margin-top: 0.3em;">GRL = Gradient Reversal Layer: identity on forward pass, negates gradients on backward pass</p>
+                <p class="small" style="text-align: center; margin-top: 0.5em;">
+                    <strong>GRL:</strong> Gradient Reversal Layer — forces encoder to <em>unlearn</em> codec information
+                </p>
             </section>
-            
-            <!-- 9. Gradient Reversal -->
-            <section>
-                <h2>Gradient Reversal Layer</h2>
-                <div class="two-col">
-                    <div class="col">
-                        <h3>Forward Pass</h3>
-                        <div class="formula">GRL(x) = x</div>
-                        <p class="small" style="margin-top: 0.3em;">Identity — discriminator sees normal features</p>
-                    </div>
-                    <div class="col">
-                        <h3>Backward Pass</h3>
-                        <div class="formula">∂GRL/∂x = −λ · grad</div>
-                        <p class="small" style="margin-top: 0.3em;">Reversed gradients push backbone to confuse discriminator</p>
-                    </div>
-                </div>
-                <div class="card card-accent" style="margin-top: 1em;">
-                    <strong>Effect:</strong> The backbone learns to produce representations where codec information is suppressed, while task-relevant signal is preserved.
-                </div>
-                <h3 style="margin-top: 0.8em;">Lambda Schedule</h3>
-                <ul>
-                    <li>Exponential warmup: λ starts small, grows during training</li>
-                    <li>Prevents early destabilization of the adversarial game</li>
-                </ul>
-            </section>
-            
-            <!-- 10. Multi-Head Discriminator -->
-            <section>
-                <h2>Multi-Head Domain Discriminator</h2>
-                <div class="flow-diagram" style="margin-top: 1em;">
-                    <div class="flow-box green">Shared Features (256-dim)</div>
-                    <div class="flow-arrow">↓</div>
-                    <div class="flow-box gray">Shared MLP</div>
-                    <div class="flow-arrow">↓</div>
-                    <div class="flow-split">
-                        <div class="flow-box purple">CODEC Head<br><span class="small" style="color: #7c3aed;">N classes</span></div>
-                        <div class="flow-box purple">CODEC_Q Head<br><span class="small" style="color: #7c3aed;">M classes</span></div>
-                    </div>
-                </div>
-                <ul style="margin-top: 1em;">
-                    <li><strong>Two domain tasks:</strong> predict codec type and codec quality separately</li>
-                    <li><strong>Synthetic augmentation:</strong> use pre-computed MP3/AAC augmentations</li>
-                    <li>Encourages invariance to both codec family and quality level</li>
-                </ul>
-            </section>
-            
-            <!-- 11. Backbones & Baselines -->
-            <section>
-                <h2>Backbones & Baselines</h2>
-                <h3>SSL Backbones (Frozen)</h3>
-                <table class="data">
-                    <tr>
-                        <th>Backbone</th>
-                        <th>Layers</th>
-                        <th>Hidden Dim</th>
-                        <th>Pre-training</th>
-                    </tr>
-                    <tr>
-                        <td><strong>WavLM Base+</strong></td>
-                        <td>12</td>
-                        <td>768</td>
-                        <td>94k hours (diverse)</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Wav2Vec 2.0 Base</strong></td>
-                        <td>12</td>
-                        <td>768</td>
-                        <td>960h (LibriSpeech)</td>
-                    </tr>
-                </table>
-                <h3 style="margin-top: 0.6em;">Baselines</h3>
-                <ul>
-                    <li><strong>ERM:</strong> Same architecture without domain adversary (per backbone)</li>
-                    <li><strong>TRILLsson:</strong> Paralinguistic embeddings + classifier (non-semantic)</li>
-                    <li><strong>LFCC-GMM / MFCC-GMM:</strong> Classical acoustic features + Gaussian Mixture Model</li>
-                    <li><strong>AASIST / RawNet:</strong> Official ASVspoof baselines (reference)</li>
-                </ul>
-            </section>
-            
-            <!-- 12. Codec Augmentation -->
+
+            <!-- Synthetic Augmentation -->
             <section>
                 <h2>Synthetic Codec Augmentation</h2>
-                <p>Train/Dev have no codec diversity — we create it synthetically via FFmpeg:</p>
-                <table class="data" style="margin-top: 0.4em;">
-                    <tr>
-                        <th>Synthetic</th>
-                        <th>ASVspoof 5 Codecs</th>
-                        <th>Status</th>
-                    </tr>
-                    <tr>
-                        <td>NONE</td>
-                        <td>"−" (original)</td>
-                        <td><span class="tag tag-green">Simulated</span></td>
-                    </tr>
-                    <tr>
-                        <td>MP3, AAC</td>
-                        <td>C05, C06</td>
-                        <td><span class="tag tag-green">Simulated</span></td>
-                    </tr>
-                    <tr>
-                        <td>OPUS, SPEEX, AMR</td>
-                        <td>C01, C02, C03, C08, C09, C10</td>
-                        <td><span class="tag tag-green">Simulated</span></td>
-                    </tr>
-                    <tr>
-                        <td>—</td>
-                        <td>C04 (Encodec), C07 (cascade), C11 (device)</td>
-                        <td><span class="tag tag-amber">Not simulated</span></td>
-                    </tr>
-                </table>
-                <p class="small" style="margin-top: 0.4em;">Augmentations are pre-computed offline for ~5× training speedup vs on-the-fly FFmpeg.</p>
-            </section>
-            
-            <!-- 13. Training Setup -->
-            <section>
-                <h2>Training Setup</h2>
                 <div class="two-col">
-                    <div class="col">
-                        <h3>Hyperparameters</h3>
-                        <ul>
-                            <li>Optimizer: AdamW, lr = 1e-4</li>
-                            <li>Batch size: 128</li>
-                            <li>Max epochs: 50 (early stopping)</li>
-                            <li>λ schedule: linear 0.1→0.75</li>
+                    <div>
+                        <h3>Why?</h3>
+                        <p>Train/dev have <strong>no codec diversity</strong> — DANN needs domain labels to learn from.</p>
+                        
+                        <h3 style="margin-top: 1em;">How?</h3>
+                        <p>Apply synthetic codecs via ffmpeg during training:</p>
+                        <ul style="font-size: 0.9em;">
+                            <li>MP3 (64-320 kbps)</li>
+                            <li>AAC (32-256 kbps)</li>
                         </ul>
                     </div>
-                    <div class="col">
-                        <h3>Infrastructure</h3>
-                        <ul>
-                            <li>Snellius HPC (SURF)</li>
-                            <li>GPU: A100 (48GB)</li>
-                            <li>~24–48h per DANN run</li>
-                            <li>W&B tracking</li>
-                        </ul>
-                    </div>
-                </div>
-                <h3 style="margin-top: 0.6em;">Recent Fixes</h3>
-                <ul class="checklist">
-                    <li class="done">Pre-compute codec augmentations offline (PR #42, #46, #47)</li>
-                    <li class="done">Fix discriminator double-λ bug (PR #44)</li>
-                    <li class="done">Exponential λ schedule + pre-projection tap (PR #44)</li>
-                    <li class="done">Domain probe diagnostic script (PR #41)</li>
-                </ul>
-            </section>
-            
-            <!-- 13b. Lambda Instability & Tuning -->
-            <section>
-                <h2>Lambda Instability & Tuning</h2>
-                <p>DANN training is inherently unstable — the adversarial game can destabilize if λ grows too fast or too high.</p>
-                <div class="two-col" style="margin-top: 0.5em;">
-                    <div class="col">
-                        <h3>Problem Discovered</h3>
-                        <div class="card" style="background: #fef2f2; border-left: 3px solid #ef4444;">
-                            <strong>λ &gt; 0.75 → gradient explosion</strong>
-                            <ul style="font-size: 0.8em; margin-top: 0.3em;">
-                                <li>Task loss spikes suddenly</li>
-                                <li>Discriminator wins too decisively</li>
-                                <li>Backbone features collapse</li>
+                    <div>
+                        <div class="card">
+                            <strong>Training Distribution</strong>
+                            <ul style="font-size: 0.85em; margin-top: 0.5em;">
+                                <li>50% original (uncoded)</li>
+                                <li>25% MP3</li>
+                                <li>25% AAC</li>
                             </ul>
                         </div>
-                        <p class="small" style="margin-top: 0.4em;">Observed in WavLM DANN runs when using exponential λ warmup to 1.0</p>
-                    </div>
-                    <div class="col">
-                        <h3>Solution (PR #62)</h3>
-                        <div class="card" style="background: #f0fdf4; border-left: 3px solid #22c55e;">
-                            <strong>Stabilized λ schedule:</strong>
-                            <ul style="font-size: 0.8em; margin-top: 0.3em;">
-                                <li><strong>Linear</strong> warmup (not exponential)</li>
-                                <li>λ: 0.1 → 0.75 (capped)</li>
-                                <li>3 warmup epochs before λ starts</li>
-                                <li>Gradient clipping: max_norm = 0.5</li>
-                            </ul>
-                        </div>
-                        <p class="small" style="margin-top: 0.4em;">Result: Stable training for 20+ epochs, best checkpoints at epoch 6 (WavLM) and 14 (Wav2Vec2)</p>
-                    </div>
-                </div>
-                <div class="card card-accent" style="margin-top: 0.6em;">
-                    <strong>Takeaway:</strong> DANN hyperparameter tuning is critical. The adversarial strength (λ) must be carefully balanced — too low and domain info leaks through, too high and the model collapses.
-                </div>
-            </section>
-            
-            <!-- 14. Evaluation Metrics -->
-            <section>
-                <h2>Evaluation Metrics</h2>
-                <p style="font-size: 0.8em; margin-bottom: 0.2em;"><strong>Task:</strong> Binary classification (bonafide vs spoof). We use threshold-independent metrics standard in speaker verification:</p>
-                <div class="two-col" style="margin-top: 0.2em;">
-                    <div class="col">
-                        <div class="card" style="border-left: 3px solid #3b82f6; padding: 0.5em 0.8em; margin-bottom: 0.3em;">
-                            <h3 style="margin-top: 0; margin-bottom: 0.15em;">EER <span class="tag tag-blue">Primary</span></h3>
-                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>What:</strong> Point where FAR = FRR</p>
-                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>Why:</strong> Threshold-independent; standard in speaker verification</p>
-                        </div>
-                        <div class="card" style="border-left: 3px solid #22c55e; padding: 0.5em 0.8em; margin-bottom: 0.3em;">
-                            <h3 style="margin-top: 0; margin-bottom: 0.15em;">minDCF <span class="tag tag-green">Application</span></h3>
-                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>What:</strong> Weighted cost of misses vs false alarms</p>
-                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>Why:</strong> Reflects deployment costs (P<sub>target</sub> = 0.05)</p>
-                        </div>
-                        <div class="card" style="border-left: 3px solid #a855f7; padding: 0.5em 0.8em;">
-                            <h3 style="margin-top: 0; margin-bottom: 0.15em;">t-DCF <span class="tag tag-amber">Tandem</span></h3>
-                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>What:</strong> CM + ASV as tandem system</p>
-                            <p style="font-size: 0.7em; margin: 0.1em 0;"><strong>Why:</strong> Captures full pipeline security impact</p>
-                        </div>
-                    </div>
-                    <div class="col">
-                        <div class="card card-accent" style="padding: 0.5em 0.8em; font-size: 0.75em;">
-                            <strong>Why not F1?</strong> F1 requires a fixed threshold. EER/DCF are threshold-independent, allowing fair comparison across systems without tuning.
-                        </div>
-                        <div class="card" style="padding: 0.5em 0.8em; font-size: 0.75em; margin-top: 0.3em;">
-                            <strong>Summary:</strong><br>
-                            • EER → detection quality<br>
-                            • minDCF → deployment context<br>
-                            • t-DCF → ASV security impact
+                        <div class="card-accent card" style="margin-top: 0.8em;">
+                            <strong>Key insight:</strong> Even with only 2 synthetic codecs, DANN achieves significant OOD improvement
                         </div>
                     </div>
                 </div>
             </section>
-            
-            <!-- 15. Results: Dev vs Eval Generalization Gap -->
+
+            <!-- Main Results -->
             <section>
-                <h2>Results: Dev vs Eval Generalization</h2>
-                <p style="font-size: 0.85em;">Comparing in-distribution (Dev) vs out-of-distribution (Eval) performance across all models:</p>
-                <table class="data" style="margin-top: 0.3em; font-size: 0.75em;">
+                <h2>Main Results</h2>
+                <table class="data">
                     <tr>
                         <th>Model</th>
+                        <th>Backbone</th>
                         <th>Dev EER</th>
                         <th>Eval EER</th>
-                        <th>Abs. Gap</th>
-                        <th>Rel. Gap</th>
+                        <th>OOD Gap</th>
                         <th>minDCF</th>
                     </tr>
                     <tr>
-                        <td>WavLM ERM</td>
-                        <td><strong>3.46%</strong></td>
-                        <td>8.48%</td>
-                        <td style="color: #dc2626;">+5.02%</td>
-                        <td style="color: #dc2626;">+145%</td>
-                        <td>0.636</td>
-                    </tr>
-                    <tr style="background: #f0fdf4;">
-                        <td><strong>WavLM DANN</strong></td>
-                        <td>4.44%</td>
-                        <td><strong>7.19%</strong></td>
-                        <td style="color: #16a34a;">+2.75%</td>
-                        <td style="color: #16a34a;">+62%</td>
-                        <td><strong>0.563</strong></td>
+                        <td>ERM</td>
+                        <td>WavLM</td>
+                        <td>3.26%</td>
+                        <td>8.47%</td>
+                        <td>+160%</td>
+                        <td>0.639</td>
                     </tr>
                     <tr>
-                        <td>W2V2 ERM</td>
-                        <td><strong>4.81%</strong></td>
-                        <td>15.15%</td>
-                        <td style="color: #dc2626;">+10.34%</td>
-                        <td style="color: #dc2626;">+215%</td>
+                        <td>ERM+Aug</td>
+                        <td>WavLM</td>
+                        <td>3.26%</td>
+                        <td>8.47%</td>
+                        <td>+160%</td>
+                        <td>0.639</td>
+                    </tr>
+                    <tr class="highlight">
+                        <td><strong>DANN</strong></td>
+                        <td><strong>WavLM</strong></td>
+                        <td><strong>4.76%</strong></td>
+                        <td><strong>7.34%</strong></td>
+                        <td><strong>+54%</strong></td>
+                        <td><strong>0.585</strong></td>
+                    </tr>
+                    <tr>
+                        <td>ERM</td>
+                        <td>W2V2</td>
+                        <td>4.24%</td>
+                        <td>15.30%</td>
+                        <td>+261%</td>
                         <td>1.000</td>
                     </tr>
-                    <tr style="background: #f0fdf4;">
-                        <td><strong>W2V2 DANN</strong></td>
-                        <td>5.29%</td>
-                        <td><strong>14.37%</strong></td>
-                        <td style="color: #16a34a;">+9.08%</td>
-                        <td style="color: #16a34a;">+172%</td>
-                        <td><strong>0.995</strong></td>
+                    <tr>
+                        <td>DANN</td>
+                        <td>W2V2</td>
+                        <td>4.45%</td>
+                        <td>14.33%</td>
+                        <td>+222%</td>
+                        <td>1.000</td>
                     </tr>
                 </table>
-                <div class="two-col" style="margin-top: 0.4em;">
-                    <div class="col">
-                        <h3 style="font-size: 0.95em;">Key Findings</h3>
-                        <ul style="font-size: 0.75em;">
-                            <li><strong>DANN reduces OOD gap</strong> for both backbones</li>
-                            <li>WavLM: 145% → 62% relative gap (<span style="color: #16a34a;">-83pp</span>)</li>
-                            <li>W2V2: 215% → 172% relative gap (<span style="color: #16a34a;">-43pp</span>)</li>
-                            <li>WavLM backbone generalizes better overall</li>
-                        </ul>
+                <div style="margin-top: 0.8em; text-align: center;">
+                    <div class="metric-box green">
+                        <span class="value">66%</span>
+                        <span class="label">OOD Gap Reduction</span>
                     </div>
-                    <div class="col">
-                        <div class="card card-accent" style="font-size: 0.75em; padding: 0.4em 0.7em;">
-                            <strong>Evidence for H1:</strong> DANN reduces domain leakage and improves OOD EER. The trade-off of ~1% Dev EER yields significant Eval gains.
-                        </div>
-                        <div class="card" style="margin-top: 0.3em; font-size: 0.75em; padding: 0.4em 0.7em; border-left: 3px solid #22c55e;">
-                            <strong>Best overall:</strong> WavLM DANN achieves lowest Eval EER (7.19%) and minDCF (0.563).
-                        </div>
+                    <div class="metric-box blue">
+                        <span class="value">7.34%</span>
+                        <span class="label">Best Eval EER</span>
                     </div>
                 </div>
             </section>
-            
-            <!-- 16. Domain Probe Findings: WavLM vs Wav2Vec2 -->
+
+            <!-- RQ1: OOD Gap -->
             <section>
-                <h2>Domain Probe Findings: Backbone Comparison</h2>
-                <p>Linear probe accuracy predicting codec from frozen SSL features (3-class: MP3/AAC/OPUS):</p>
-                <div class="two-col" style="margin-top: 0.3em;">
-                    <div class="col">
-                        <img src="data:image/jpeg;base64,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iwwwww8s8884/PPPPMcMMMMMMMMMMMMMMCgQQQQQQQQQf/PPFtHPPPPPPPK/vvvvvPvvvvwwwww1PPPPKAAAAAAwggggPffffQwwwwwwwwwwwwwww6ggggggggggvfPPEO+NPPPOPMI/ust/vPsOPvwwASA1PP8APygAQMAAMIc4ID3vTf0MMAMMMMM0MMMMQsOoIQMIIIYkAL3zzxCwzzzzwDDzP71xz7z44/78NDMMNTyx3ygBNGAAMLFIID03330MOPAMMOBMMMNGAAOoLGMIIJHEML3zzwhzDzzzzzzyv77777z77778MMMMNTzzzygAAAAAMIIIID33330MMMMMMMMMMMMMMMOoIIIIIIIIIL3zzyimzjTzzzzyv77777z77778MMMMNTzzzygAAAAAMIIIID33330MMMMMMMMMMMMMMMOoIIIIIIIIIL3zzy//AMs888888pwwwwwICCCCWPPPPPV8888vAAAAA5yyyyjyyyyyKCCCCRzzzz3yyyyyU/8A/wD/ALzzzzzc8888c8M888888p99999pCCCCC+++++U8888+DDDDDqBBBBCCCCCCoCCCCBCCCCWAAAAA+++++qAAAAA+888/V88U88888p99999pCCCCC+++++U8888+DDDDDqBBBBCCCCCCoCCCCBCCCCWAAAAA+++++qAAAAA+888rCwUc8w484l9pfW9pCK9CC+8Od+U8Ya8+DH1hDqBt4BCCAnCCoAOTCBCnLKWAT9AA++xb+qAGcBA+88858M88sMMMcp99999pCCCCC+++++U8+88+DDDDDqBxBBCCSyCCoCyCCBCSiCWAAAgA+++u+qAAAgA+888hVc0888888p99999pCCCCC+++++U8888+DDDDDqBBBBCCCCCCoCCCCBCCCCWAAAAA+++++qAAAAA+888A+8c888888vwwwwwnOOOOP99999U++++8BBJBBmNNNNONNNNNpBBBBONNNNbCCCCC88888oCCCCC/888RZ48888888888A8888808888c8888w08888Q8888008888c8888888884U8888g08880Q8888k888888c88c88888888888888888888s8888c8888ss8888oc884ww48888c888ss8888cc888Mc8888cc888888888888888888888888888888888888888888888css88cc8888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888/8QAKxEAAgIBAwMCBQUBAAAAAAAAAREAMSAQUWEhMLFA8EFQocHRcHGBkeGA/9oACAEDAQE/EP0lEEJ58GcInCJwicInCIW1OGcM4Zwz4FOKcU4pxTijR6TinFOKcUSqcE4JwTgnBCDqJtE2ibRNoDaIRCIRCIRCIRCIRCIRCIRCIRCIRCIRCIQBEIhEIhEIhEIhEIhL4CYG33gr90+ez5Pg5G+2WONMjfyYtgS/g+8+vPns+T4OgBkp1OrrAQQxob0u61AYoHAICzCIomAghjSx0+I4CdAdKaEgXCCzqb0S3AQawOJvixkxixkYxetsEfw/efUnz2fJ8HQwhFL8L7xoF1/o++0uD0N6fH1v8k77mGMF0/qXvgKpx9k+/wC/95nSNLHR0Q4wC60priRJLuDQ3oFCcCtgLGFsV0gCLwIhbAhxQBYFFgYoNLYf1CdX7h7Pk+Dkb7ZY40yN/Ji2DBnUfZ8nwcjfbLHGmRv5MWwUTLHslABr8T2DPYM9gz2DPYMd17YAAAAAYOIAAwZAAAXerSSZJJJJIAABJJCTtgAAAACCwWBKHs1ZCu2WY0yN+gn1Uagrs1ZCu2WY0yN+gn1UaUo7NWhIRlwiQzoK0DEwGwDgEoSfhAWNLMaZG9FCMIDnwYCK1EB6HQMHAJWADKgFqAgDgGaLgDKisxGUaAlXZqyFdssxpkb9BPqqglPZqyFdssxpkb9BPqoeglXZojEYjEYjEAK4m8TeJvE3gIYjEYjEYljjTIjrFFFFBiMRiMRiMRiMRiMRhBiMRiMRiMbaNtG2jbRto20baNtG2jbRto20baNtG2jbQFh6SUH/ACJ//8QAKhEAAgEDAwMDBAMBAAAAAAAAAAERIDFhEFHwITBxQJGhQVCBsXCA4fH/2gAIAQIBAT8Q/iW+SJEiRIbTcluS3JbktxkXMhkMhkMg9wyGQyGQyGQyGQyGQyGQyGQyGQyGQyGQyGQyGQyGQyGQyGQyGQyGQyGQyDNyW5LcluS3JbktyW5LcluS3HmhER1Jdm/U702VP7i/dQ8IWfHZv6JN2IcSNRo7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7z6LfMt8stNHo2+WW1V49Op8em3zLaq5ad30Gp6bfMtqrxLVVvodH02y3zLaq3q7NKc30IrHn/nKgW4IYEmiNk9rBAP5YHUdPU6bS+XpuvT1On+26XefvP4up8dM1Om6P4mzSkr+pMhCWZL2gq9iXGlrqtsp8UF8x2epFLUBgsZqGUDjaF2KCnd4IGaAyUgCfp/KA6jp6nTaXy9N16ep0/23S7z95/F1Pjpmp03R/E2aU8fCK35/5yqUQWSCBkCCPtB86C5ZTxCqoKpfMILMRkqkRkE1pLhq0DUAwB+UB1HT1Om0vl6br09Tp/tul3n7z+LqfHTNTpuj+Js0pGz/APijtef+P50DqOnqdNpfL03Xp6nT/bdLvP3n8XU+OmanTdH8TbpVysEdrz/y/DOR+uL4bZxreca3nGt5xrecS3nEt5xreca3nGt5xreLTi/zOS7zku85LvOS7zgu85LvOS7zku85LvOS7wzEs9//AGnFt5xbecW3nFt5zbecW3nFt5xbecW3nFt4ACWeGZzDecw3nMN5zDecw3nMN5zDecw3nMN5zDeNvA/ucQ3nEN5xDecQ3nAN5xDecQ3nEN5xDecQ3lpyP5nKN5yjeco3nKN5yjeco3nKN5yjeco3nKN4nyTyuca3nGt5xreca3nOt5xreca3nGt5xreca3nu6edzne853vOd7zne84/vOd7zne853vOd7zne843vON7zje843vON7zje843vON7zje843vLLxc8znu857vOe7znu857vOe7znu857vOe7znu8Lzm/wAzju847vOO7zju847vOO7zju847vOO7zju8aXm/wAznu857vOe7znu857vOe7znu857vOe7znu8b1nEH8B6PQwRQNPiVKHRXlKtbcDyozbtLO9Ba71LOvM9BQKCKY1Eg3BcNkCvLYewu34B4GKLA8Wmk4PtOD7Tg+04PtH54TJAODss1IevAAuk4PtOD7Tg+04PtOD7Tg+04PtOD7Tg+0TnmQuKHBcEBtDnicH2nB9pwfacH2nB9pwfacH2nB9pwfaMyJoFWmheQT+ZwfacH2nB9pwfacH2nF9pzfac32nN9pzfaOhPGTCQ7gn8zm+05vtOb7Tm+05vtOb7Tm+05vtOb7Tm+0Z1xDU14Heyc32nN9pzfac32nN9pzfac32nN9pzfac32ivwIyFfB5DnxOb7Tm+05vtOb7Tm+04PtOD7Tg+04PtOD7RhTewG7VhzmcH2nB9pwfacH2nB9pwfacH2nB9pwfacH2mVeVRqWlYv/c4PtOD7Tg+04PtOD7Tg+04PtOD7Tg+04PtFcQLULnsVoVOD7Tg+04PtOD7Tg+04HtOB7Tge04HtOB7R2LPwVtFZCfxOB7Tge04HtOB7Tge04HtOB7Tge04HtOB7TW+bsEdlZs08Tge04HtOB7Tge04HtOB7Tge04HtOB7Tge0NyWcg5p5TjzOB7Tge04HtOB7RL+0EryNY6ANgUiWJOA7RK+UUj5Gpq9bvNsGQSy+1y6HW4JwSq/B2CeMrIsFlsUf3NFT6O+67v4lvu0xYGwUaBFX+URwDkMm1G3BjopWagpMUXmWDLRQfxML8CddwOzDVejinBV0EjT7ke4WIgBaKNW6xLQaikgVkMiU5xrr0cNgZNqjThyd41GTANjsOHPaNsbXXwKoJ4NVrno3/AOK6yzs4ZaCP2x48vtBfY3IsWoWgC173WOjTpwUYJU4yh/MeklsjEEo227IlSVcEYE4nW2+jbJNUbGM+Rc6xaHlSr3RlANdzRDOjrpSyxgdRr+ejX1n0bHGdM5DOJbO4oR4okWWHFPVVDaL4ro4/OgahLdMDjxBS9yuTSo6FXTX7hIKd1GANZKVRoNF9HCRczduVWVbSFaLpdQCW2S4cEB16VXIE7Up6C4UyVdIKQW9IAsitFGrpCsOxnLhQ0vysRXdrLBaxybaylHQw+WsbQNOHIQCAgZRf5GW6jB7mLtSoVqpfz600FDUmOq/6bLQOicVgutFwqU881UCgktFumC+iwGqJGOMcoFWIF+1wH4sGRRBAqi8ldFeAFoFAv+4/ytU2w0YULzpH02r6MZABoBoP56No3EKLC12zAQflIkAsRh+f7iAvmH9LjBWgO630UF5RQPvQtfxHhhRgBkxFl69ppnV5YpVLdU5ovTosmlpK0SgpZXSPBSxyRgqJjRL+IUy66QRYCi80djothVisq5Cl1WkZ1tIpdFQJZi9b7QS5U8AMApV2K06N4upxyjaLx7do62oDCrEol2UMP+vdUFX0RBegl1ZFmenaYQ9bcpaUaw2wvmFdk5uQWZcBVC1cdEoU/YEiOgtBTNGH3BetlHzO4FEX2nYGAPAdB2wGroKJFo1VKMNgZQ7w4tEcPSgBtq8lR8EmeVplARg5Bg6F3jhaLC12zBIrl5QsIoUznHvDINNDvQRNV33gMQq9ZAECusvFa/8A5tEi8VYrYfamvmA1e1+G0pj2UihE6gV/cTCYAbqKNLnKBbcMV1VaYEFlDfen2iIKQ6K695cDiaDDN6QNU1AckFQY5Q5IMAiugc41n9coePu7u/aOA5gWq5kUULq81FlgGlOCIgpGhvWAgJojY/8AxAN9NT2D2rkQLXIKaYqAhSRKArcFoBGtV2j+jvtIR3htRbcsQowcmpRbFsM3axLoUCJjRqrcK9771D+lmghzTm6NDqg0jspxrQok1WGTOIbUW/aVXdrzKdnCye+wWcp2JRUt9HZVQo6mGhMPKHGTQ+ajMhBc9FrAKGmbE0vOe6677hH842OfnKAjKtmGvepgLr5uJK3vF1TUBK9IB4A0/wDiVdGh7SoB8hqFb7gWT3/+3f/Z" alt="Codec Encoding Heatmap" style="width: 100%; border-radius: 6px; border: 1px solid var(--border);">
-                        <p class="small" style="margin-top: 0.3em; text-align: center;">Chance = 33.3% (3-class). Wav2Vec2 late layers approach chance.</p>
-                    </div>
-                    <div class="col">
-                        <h3>Key Insights</h3>
-                        <ul style="font-size: 0.85em;">
-                            <li><strong>WavLM encodes MORE codec info</strong> — but DANN still works better with it</li>
-                            <li>WavLM has <strong>uniform distribution</strong> across layers (94% → 72%)</li>
-                            <li>Wav2Vec2 <strong>drops sharply</strong> (77% → 51%, near chance)</li>
-                            <li>Gap between backbones <em>increases</em> in late layers</li>
-                        </ul>
-                        <div class="card card-accent" style="margin-top: 0.5em; font-size: 0.85em;">
-                            <strong>Hypothesis:</strong> WavLM's uniform codec encoding makes it easier for DANN to find layer combinations that preserve task signal while suppressing domain info.
-                        </div>
-                    </div>
+                <h2>RQ1: Does DANN Reduce the OOD Gap?</h2>
+                <div class="card-green card" style="font-size: 1.1em; margin-bottom: 0.8em;">
+                    <strong>✓ Yes.</strong> WavLM OOD gap reduced from 160% to 54% (66% relative reduction)
+                </div>
+                <div class="figure-container">
+                    <img src="../figures/ood_gap.png" alt="OOD Gap Comparison">
+                    <div class="figure-caption">Figure: OOD gap (Eval EER − Dev EER) for ERM vs DANN</div>
                 </div>
             </section>
-            
-            <!-- 17. Interpretability Analysis -->
+
+            <!-- RQ2: Per-Codec -->
             <section>
-                <h2>Interpretability: Where Does DANN Help?</h2>
-                <p style="font-size: 0.85em;"><strong>RQ3:</strong> Where is codec information encoded, and how does DANN change it?</p>
-                <div class="two-col" style="margin-top: 0.4em;">
-                    <div class="col">
-                        <h3>Completed <span class="tag tag-green">Done</span></h3>
-                        <ul style="font-size: 0.85em;">
-                            <li><strong>Backbone probe analysis</strong> — WavLM vs Wav2Vec2 codec encoding per layer (see earlier slide)</li>
-                            <li>Finding: WavLM has uniform codec info (94%→72%), Wav2Vec2 drops sharply (77%→51%)</li>
-                        </ul>
-                        <h3 style="margin-top: 0.5em;">Next: ERM vs DANN Probe <span class="tag tag-amber">Ready</span></h3>
-                        <ul style="font-size: 0.85em;">
-                            <li>Compare probe accuracy on <em>trained</em> representations</li>
-                            <li>Hypothesis: DANN features have lower codec probe accuracy</li>
-                            <li>Job script ready: <code>probe_domain.job</code></li>
-                        </ul>
-                    </div>
-                    <div class="col">
-                        <h3>Future Work <span class="tag tag-blue">RQ4</span></h3>
-                        <ul style="font-size: 0.85em;">
-                            <li><strong>CKA similarity:</strong> Where do ERM/DANN representations diverge?</li>
-                            <li><strong>Activation patching:</strong> Can we transplant DANN's domain-invariance into ERM without retraining?</li>
-                        </ul>
-                        <div class="card card-accent" style="margin-top: 0.5em; font-size: 0.8em;">
-                            <strong>Goal:</strong> Understand <em>mechanistically</em> how DANN achieves domain invariance — not just that it works, but <em>where</em> and <em>how</em>.
-                        </div>
-                    </div>
+                <h2>RQ2: Does DANN Improve Per-Codec Performance?</h2>
+                <div class="card-green card" style="font-size: 1.1em; margin-bottom: 0.8em;">
+                    <strong>✓ Yes.</strong> Improvement observed across all codecs in the evaluation set
+                </div>
+                <div class="figure-container">
+                    <img src="../figures/per_codec_eer.png" alt="Per-Codec EER">
+                    <div class="figure-caption">Figure: Per-codec EER comparison (WavLM ERM vs DANN)</div>
                 </div>
             </section>
-            
-            <!-- 18. Status -->
+
+            <!-- RQ3: Where is domain info removed? -->
             <section>
-                <h2>Status & Next Steps</h2>
-                <div class="two-col">
-                    <div class="col">
-                        <h3>Completed</h3>
-                        <ul class="checklist" style="font-size: 0.85em;">
-                            <li class="done">Full ERM + DANN codebase (60+ tests)</li>
-                            <li class="done">Pre-computed augmentation (1.6M files)</li>
-                            <li class="done">Lambda stability fix (PR #62, #70)</li>
-                            <li class="done">WavLM + Wav2Vec2 training (ERM & DANN)</li>
-                            <li class="done">Full eval set evaluation (680k samples)</li>
-                            <li class="done">Dev vs Eval comparison (RQ1 evidence)</li>
-                            <li class="done">Backbone codec probe analysis</li>
-                            <li class="done">Codec coverage analysis (79.2%)</li>
-                        </ul>
-                    </div>
-                    <div class="col">
-                        <h3>In Progress</h3>
-                        <ul class="checklist" style="font-size: 0.85em;">
-                            <li class="pending">Wav2Vec2 DANN v2 training (first_k config)</li>
-                            <li class="pending">Per-codec EER breakdown (job ready)</li>
-                            <li class="pending">ERM vs DANN probe comparison (job ready)</li>
-                        </ul>
-                        <h3 style="margin-top: 0.5em;">Upcoming</h3>
-                        <ul class="checklist" style="font-size: 0.85em;">
-                            <li class="future">CKA representation similarity</li>
-                            <li class="future">Activation patching (RQ4)</li>
-                            <li class="future">Thesis writing</li>
-                        </ul>
-                    </div>
+                <h2>RQ3: Where is Domain Information Removed?</h2>
+                <div class="card-green card" style="font-size: 1.1em; margin-bottom: 0.8em;">
+                    <strong>✓ Projection layer.</strong> Codec probe accuracy drops 43.4% → 38.8%
                 </div>
-                <div class="card" style="margin-top: 0.5em; font-size: 0.8em;">
-                    <strong>Key result:</strong> H1 supported — DANN reduces OOD gap from +145% to +62% (WavLM), achieving 7.19% Eval EER vs 8.48% for ERM.
+                <div class="figure-container">
+                    <img src="../figures/rq3_combined.png" alt="Domain Probing Results">
+                    <div class="figure-caption">Figure: Layer-wise codec probe accuracy (ERM vs DANN)</div>
                 </div>
-            </section>
-            
-            <!-- APPENDIX -->
-            
-            <!-- A1. Challenges & Solutions -->
-            <section>
-                <h2>Appendix: Challenges & Solutions</h2>
-                <p>Key engineering contributions during implementation:</p>
-                <table class="data" style="margin-top: 0.5em;">
-                    <tr>
-                        <th>Challenge</th>
-                        <th>Impact</th>
-                        <th>Solution</th>
-                    </tr>
-                    <tr>
-                        <td><strong>5× training slowdown</strong></td>
-                        <td>On-the-fly FFmpeg codec conversion bottlenecked I/O</td>
-                        <td>Pre-cached augmentation: 820k AAC + 820k MP3 files (PR #42, #46)</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Double-λ bug</strong></td>
-                        <td>GRL applied λ twice — once in GRL, once in loss weighting</td>
-                        <td>Fixed GRL to use λ=1, apply scaling only in loss (PR #44)</td>
-                    </tr>
-                    <tr>
-                        <td><strong>λ instability</strong></td>
-                        <td>Gradient explosion when λ &gt; 0.75</td>
-                        <td>Linear schedule, capped λ, gradient clipping (PR #62)</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Discriminator tap point</strong></td>
-                        <td>Post-projection features lost domain signal</td>
-                        <td>Moved discriminator tap to pre-projection (PR #44)</td>
-                    </tr>
-                </table>
-                <div class="card card-accent" style="margin-top: 0.6em;">
-                    <strong>Lesson:</strong> Domain-adversarial training requires careful engineering. The original DANN paper glosses over many practical details that matter significantly at scale.
-                </div>
-            </section>
-            
-            <!-- Questions -->
-            <section class="center" style="display: flex; flex-direction: column; justify-content: center;">
-                <h2>Questions?</h2>
-                <p style="margin-top: 2em; color: var(--text-secondary); font-size: 0.9em;">
-                    <strong>Repository:</strong> github.com/Jmqcooper1/asvspoof5-domain-invariant-cm<br>
-                    <strong>W&B:</strong> mike-cooper-uva/asvspoof5-dann
+                <p class="small" style="text-align: center; margin-top: 0.3em;">
+                    Backbone layers identical (frozen) — invariance emerges in learnable projection head
                 </p>
             </section>
-            
+
+            <!-- RQ4: What causes invariance? -->
+            <section>
+                <h2>RQ4: What Components Cause Invariance?</h2>
+                <div class="card-green card" style="font-size: 1.1em; margin-bottom: 0.5em;">
+                    <strong>✓ Pooling weights + projection head.</strong> CKA shows layer 11 diverges (0.098)
+                </div>
+                <div class="two-col" style="gap: 1em;">
+                    <div class="figure-container">
+                        <img src="../figures/rq4/cka_layer_divergence.png" alt="CKA Layer Divergence" style="max-height: 280px;">
+                        <div class="figure-caption">CKA similarity per layer</div>
+                    </div>
+                    <div class="figure-container">
+                        <img src="../figures/rq4/intervention_comparison.png" alt="Intervention Comparison" style="max-height: 280px;">
+                        <div class="figure-caption">Ablation: component patching</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RQ4: Representation Visualization -->
+            <section>
+                <h2>RQ4: Representation Visualization</h2>
+                <div class="figure-container">
+                    <img src="../figures/rq4/representation_dr.png" alt="Representation DR" style="max-height: 380px;">
+                    <div class="figure-caption">PCA / UMAP / t-SNE of learned representations (ERM vs DANN)</div>
+                </div>
+                <div class="two-col" style="margin-top: 0.5em; font-size: 0.9em;">
+                    <div class="card">
+                        <strong>ERM:</strong> Codec-separated clusters
+                    </div>
+                    <div class="card-green card">
+                        <strong>DANN:</strong> Mixed/overlapping representations
+                    </div>
+                </div>
+            </section>
+
+            <!-- Key Ablation: ERM+Aug -->
+            <section>
+                <h2>Key Ablation: Augmentation ≠ DANN</h2>
+                <div class="rq-box">
+                    Does codec augmentation alone improve OOD generalization?
+                </div>
+                <table class="data" style="margin-top: 1em;">
+                    <tr>
+                        <th>Model</th>
+                        <th>Backbone</th>
+                        <th>Eval EER</th>
+                        <th>vs ERM</th>
+                    </tr>
+                    <tr>
+                        <td>ERM</td>
+                        <td>WavLM</td>
+                        <td>8.47%</td>
+                        <td>—</td>
+                    </tr>
+                    <tr>
+                        <td>ERM+Aug</td>
+                        <td>WavLM</td>
+                        <td>8.47%</td>
+                        <td><span class="tag tag-amber">Identical</span></td>
+                    </tr>
+                    <tr class="highlight">
+                        <td>DANN</td>
+                        <td>WavLM</td>
+                        <td>7.34%</td>
+                        <td><span class="tag tag-green">−13%</span></td>
+                    </tr>
+                    <tr>
+                        <td>ERM</td>
+                        <td>W2V2</td>
+                        <td>15.30%</td>
+                        <td>—</td>
+                    </tr>
+                    <tr>
+                        <td>ERM+Aug</td>
+                        <td>W2V2</td>
+                        <td>15.79%</td>
+                        <td><span class="tag tag-red">Worse</span></td>
+                    </tr>
+                </table>
+                <div class="card-accent card" style="margin-top: 0.8em;">
+                    <strong>Conclusion:</strong> Augmentation alone is insufficient — DANN's adversarial objective is necessary
+                </div>
+            </section>
+
+            <!-- Baselines -->
+            <section>
+                <h2>Baseline Comparison</h2>
+                <table class="data">
+                    <tr>
+                        <th>Model</th>
+                        <th>Type</th>
+                        <th>Eval EER</th>
+                    </tr>
+                    <tr class="highlight">
+                        <td><strong>WavLM DANN</strong></td>
+                        <td>SSL + DANN</td>
+                        <td><strong>7.34%</strong></td>
+                    </tr>
+                    <tr>
+                        <td>WavLM ERM</td>
+                        <td>SSL baseline</td>
+                        <td>8.47%</td>
+                    </tr>
+                    <tr>
+                        <td>W2V2 DANN</td>
+                        <td>SSL + DANN</td>
+                        <td>14.33%</td>
+                    </tr>
+                    <tr>
+                        <td>TRILLsson Logistic</td>
+                        <td>Non-semantic</td>
+                        <td>23.75%</td>
+                    </tr>
+                    <tr>
+                        <td>TRILLsson MLP</td>
+                        <td>Non-semantic</td>
+                        <td>25.65%</td>
+                    </tr>
+                    <tr>
+                        <td>LFCC-GMM</td>
+                        <td>Classical</td>
+                        <td>43.33%</td>
+                    </tr>
+                </table>
+                <p class="small" style="margin-top: 0.8em; text-align: center;">
+                    SSL backbones significantly outperform non-semantic and classical approaches.<br>
+                    DANN provides additional improvement on top of strong SSL baseline.
+                </p>
+            </section>
+
+            <!-- Novelty -->
+            <section>
+                <h2>Novelty & Contributions</h2>
+                <div class="rq-box" style="font-size: 0.95em;">
+                    "First systematic application of domain-adversarial training (DANN) specifically for codec robustness in speech deepfake detection."
+                </div>
+                <div style="margin-top: 1em;">
+                    <ul class="checklist">
+                        <li class="done">DANN applied specifically to codec mismatch problem</li>
+                        <li class="done">Frozen backbone + DANN = invariance in projection layer only</li>
+                        <li class="done">Probing + CKA analysis provides interpretability</li>
+                        <li class="done">Ablation confirms augmentation ≠ adversarial training</li>
+                    </ul>
+                </div>
+                <div class="card" style="margin-top: 1em;">
+                    <strong>Practical takeaway:</strong> Domain invariance doesn't require fine-tuning billion-parameter models — a lightweight projection head is sufficient
+                </div>
+            </section>
+
+            <!-- Limitations -->
+            <section>
+                <h2>Limitations</h2>
+                <div class="two-col">
+                    <div>
+                        <ul style="font-size: 0.9em;">
+                            <li><strong>2 synthetic codecs</strong> (MP3, AAC)<br>
+                                <span class="small">OPUS failed silently during training</span></li>
+                            <li><strong>Backbone matters more</strong><br>
+                                <span class="small">WavLM (7.34%) >> W2V2 (14.33%)</span></li>
+                            <li><strong>Frozen backbone</strong><br>
+                                <span class="small">Limits where invariance can emerge</span></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <ul style="font-size: 0.9em;">
+                            <li><strong>No MMD/CORAL comparison</strong><br>
+                                <span class="small">Other DA methods not evaluated</span></li>
+                            <li><strong>Single training seed</strong><br>
+                                <span class="small">Bootstrap CIs on eval only</span></li>
+                            <li><strong>Not mechanistic interp</strong><br>
+                                <span class="small">We know where, not how</span></li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Future Work -->
+            <section>
+                <h2>Future Work</h2>
+                <ul>
+                    <li><strong>Partial backbone unfreezing</strong><br>
+                        <span class="small">Allow DANN to affect deeper layers</span></li>
+                    <li><strong>More codec diversity</strong><br>
+                        <span class="small">Neural codecs (Encodec), device/channel effects</span></li>
+                    <li><strong>Compare with MMD, CORAL</strong><br>
+                        <span class="small">Other domain adaptation methods</span></li>
+                    <li><strong>Multi-seed experiments</strong><br>
+                        <span class="small">Capture training variance</span></li>
+                    <li><strong>Publication</strong><br>
+                        <span class="small">Interspeech 2026 / ICASSP 2027</span></li>
+                </ul>
+            </section>
+
+            <!-- Summary -->
+            <section>
+                <h2>Summary</h2>
+                <div style="margin-top: 0.5em;">
+                    <div class="card-green card">
+                        <strong>RQ1:</strong> DANN reduces OOD gap by 66% (160% → 54%)
+                    </div>
+                    <div class="card-green card">
+                        <strong>RQ2:</strong> Improvement across all codecs
+                    </div>
+                    <div class="card-green card">
+                        <strong>RQ3:</strong> Invariance emerges in projection layer
+                    </div>
+                    <div class="card-green card">
+                        <strong>RQ4:</strong> Pooling weights + projection head are key
+                    </div>
+                </div>
+                <div style="margin-top: 1em; text-align: center;">
+                    <div class="metric-box green">
+                        <span class="value">7.34%</span>
+                        <span class="label">Best EER</span>
+                    </div>
+                    <div class="metric-box blue">
+                        <span class="value">0.585</span>
+                        <span class="label">Best minDCF</span>
+                    </div>
+                    <div class="metric-box amber">
+                        <span class="value">66%</span>
+                        <span class="label">OOD Reduction</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Thank You -->
+            <section style="display: flex; flex-direction: column; justify-content: center; height: 100%;">
+                <h1>Thank You</h1>
+                <h3 style="font-weight: 400; margin-top: 0.5em;">Questions?</h3>
+                <p style="margin-top: 2em; color: var(--text-secondary);">
+                    Mike Cooper<br>
+                    <span class="small">mike.cooper@student.uva.nl</span>
+                </p>
+                <p style="margin-top: 1.5em;">
+                    <span class="small">
+                        Code: <a href="https://github.com/Jmqcooper1/asvspoof5-domain-invariant-cm">github.com/Jmqcooper1/asvspoof5-domain-invariant-cm</a>
+                    </span>
+                </p>
+            </section>
+
         </div>
     </div>
-    
     <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.js"></script>
     <script>
         Reveal.initialize({
