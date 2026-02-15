@@ -45,7 +45,7 @@ import numpy as np
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from asvspoof5_domain_invariant_cm.data.codec_augment import CodecAugmentor, CodecAugmentorConfig
+from asvspoof5_domain_invariant_cm.data.codec_augment import CodecAugmentor, CodecAugmentConfig
 from asvspoof5_domain_invariant_cm.data.audio import load_waveform
 
 logging.basicConfig(
@@ -395,7 +395,7 @@ def main() -> int:
     np.random.seed(args.seed)
     
     # Create augmentor
-    config = CodecAugmentorConfig(
+    config = CodecAugmentConfig(
         codec_prob=1.0,  # Always apply for visualization
         codecs=["MP3", "AAC", "OPUS"],
         qualities=[1, 2, 3, 4, 5],
