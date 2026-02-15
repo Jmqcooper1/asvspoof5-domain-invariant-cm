@@ -441,100 +441,6 @@
                 </div>
             </section>
 
-            <!-- RQ1 continued: Detailed Tables -->
-            <section>
-                <h2>RQ1: Detailed Results Tables</h2>
-                <div class="two-col" style="gap: 1.5em; align-items: start;">
-                    <div>
-                        <h3>Table 1: Main Results</h3>
-                        <table class="data" style="font-size: 0.65em;">
-                            <tr>
-                                <th>Model</th>
-                                <th>Backbone</th>
-                                <th>Dev EER</th>
-                                <th>Eval EER</th>
-                                <th>minDCF</th>
-                            </tr>
-                            <tr>
-                                <td>ERM</td>
-                                <td>WavLM</td>
-                                <td>3.26%</td>
-                                <td>8.47%</td>
-                                <td>0.639</td>
-                            </tr>
-                            <tr class="highlight">
-                                <td><strong>DANN</strong></td>
-                                <td><strong>WavLM</strong></td>
-                                <td><strong>4.76%</strong></td>
-                                <td><strong>7.34%</strong></td>
-                                <td><strong>0.585</strong></td>
-                            </tr>
-                            <tr>
-                                <td>ERM</td>
-                                <td>W2V2</td>
-                                <td>4.24%</td>
-                                <td>15.30%</td>
-                                <td>1.000</td>
-                            </tr>
-                            <tr>
-                                <td>DANN</td>
-                                <td>W2V2</td>
-                                <td>4.45%</td>
-                                <td>14.33%</td>
-                                <td>1.000</td>
-                            </tr>
-                            <tr>
-                                <td>LFCC-GMM</td>
-                                <td>LFCC</td>
-                                <td>17.59%</td>
-                                <td>43.33%</td>
-                                <td>0.999</td>
-                            </tr>
-                            <tr>
-                                <td>TRILLsson Log</td>
-                                <td>TRILLsson</td>
-                                <td>19.35%</td>
-                                <td>23.75%</td>
-                                <td>1.000</td>
-                            </tr>
-                            <tr>
-                                <td>TRILLsson MLP</td>
-                                <td>TRILLsson</td>
-                                <td>20.32%</td>
-                                <td>25.65%</td>
-                                <td>1.000</td>
-                            </tr>
-                        </table>
-                    </div>
-                    <div>
-                        <h3>Table 2: Per-Codec EER (%)</h3>
-                        <table class="data" style="font-size: 0.6em;">
-                            <tr>
-                                <th>Codec</th>
-                                <th>WavLM ERM</th>
-                                <th>WavLM DANN</th>
-                                <th>Δ</th>
-                            </tr>
-                            <tr><td>NONE</td><td>5.68</td><td><strong>4.19</strong></td><td class="small" style="color:#16a34a;">−26%</td></tr>
-                            <tr><td>C01 (opus)</td><td>7.49</td><td><strong>6.63</strong></td><td class="small" style="color:#16a34a;">−11%</td></tr>
-                            <tr><td>C02 (amr)</td><td>5.88</td><td><strong>5.27</strong></td><td class="small" style="color:#16a34a;">−10%</td></tr>
-                            <tr><td>C03 (speex)</td><td>7.90</td><td><strong>6.88</strong></td><td class="small" style="color:#16a34a;">−13%</td></tr>
-                            <tr><td>C04 (encodec)</td><td>10.68</td><td><strong>9.32</strong></td><td class="small" style="color:#16a34a;">−13%</td></tr>
-                            <tr><td>C05 (mp3)</td><td>6.09</td><td><strong>4.54</strong></td><td class="small" style="color:#16a34a;">−25%</td></tr>
-                            <tr><td>C06 (m4a)</td><td>6.85</td><td><strong>5.43</strong></td><td class="small" style="color:#16a34a;">−21%</td></tr>
-                            <tr><td>C07 (mp3+enc)</td><td>12.50</td><td><strong>11.16</strong></td><td class="small" style="color:#16a34a;">−11%</td></tr>
-                            <tr><td>C08 (opus_nb)</td><td>10.22</td><td><strong>9.66</strong></td><td class="small" style="color:#16a34a;">−5%</td></tr>
-                            <tr><td>C09 (amr_nb)</td><td>9.97</td><td><strong>9.10</strong></td><td class="small" style="color:#16a34a;">−9%</td></tr>
-                            <tr><td>C10 (speex_nb)</td><td>10.90</td><td><strong>10.37</strong></td><td class="small" style="color:#16a34a;">−5%</td></tr>
-                            <tr><td>C11 (device)</td><td>8.19</td><td><strong>6.85</strong></td><td class="small" style="color:#16a34a;">−16%</td></tr>
-                        </table>
-                    </div>
-                </div>
-                <p class="small" style="text-align: center; margin-top: 0.5em;">
-                    DANN improves on <strong>all codecs</strong>, including uncovered ones (C04, C07, C11)
-                </p>
-            </section>
-
             <!-- RQ2: Per-Codec -->
             <section>
                 <h2>RQ2: Does DANN Improve Per-Codec Performance?</h2>
@@ -788,6 +694,100 @@
                 </div>
             </section>
 
+
+            <!-- Appendix -->
+            <section>
+                <h2>Appendix: Detailed Results Tables</h2>
+                <div class="two-col" style="gap: 1.5em; align-items: start;">
+                    <div>
+                        <h3>Table 1: Main Results</h3>
+                        <table class="data" style="font-size: 0.65em;">
+                            <tr>
+                                <th>Model</th>
+                                <th>Backbone</th>
+                                <th>Dev EER</th>
+                                <th>Eval EER</th>
+                                <th>minDCF</th>
+                            </tr>
+                            <tr>
+                                <td>ERM</td>
+                                <td>WavLM</td>
+                                <td>3.26%</td>
+                                <td>8.47%</td>
+                                <td>0.639</td>
+                            </tr>
+                            <tr class="highlight">
+                                <td><strong>DANN</strong></td>
+                                <td><strong>WavLM</strong></td>
+                                <td><strong>4.76%</strong></td>
+                                <td><strong>7.34%</strong></td>
+                                <td><strong>0.585</strong></td>
+                            </tr>
+                            <tr>
+                                <td>ERM</td>
+                                <td>W2V2</td>
+                                <td>4.24%</td>
+                                <td>15.30%</td>
+                                <td>1.000</td>
+                            </tr>
+                            <tr>
+                                <td>DANN</td>
+                                <td>W2V2</td>
+                                <td>4.45%</td>
+                                <td>14.33%</td>
+                                <td>1.000</td>
+                            </tr>
+                            <tr>
+                                <td>LFCC-GMM</td>
+                                <td>LFCC</td>
+                                <td>17.59%</td>
+                                <td>43.33%</td>
+                                <td>0.999</td>
+                            </tr>
+                            <tr>
+                                <td>TRILLsson Log</td>
+                                <td>TRILLsson</td>
+                                <td>19.35%</td>
+                                <td>23.75%</td>
+                                <td>1.000</td>
+                            </tr>
+                            <tr>
+                                <td>TRILLsson MLP</td>
+                                <td>TRILLsson</td>
+                                <td>20.32%</td>
+                                <td>25.65%</td>
+                                <td>1.000</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div>
+                        <h3>Table 2: Per-Codec EER (%)</h3>
+                        <table class="data" style="font-size: 0.6em;">
+                            <tr>
+                                <th>Codec</th>
+                                <th>WavLM ERM</th>
+                                <th>WavLM DANN</th>
+                                <th>Δ</th>
+                            </tr>
+                            <tr><td>NONE</td><td>5.68</td><td><strong>4.19</strong></td><td class="small" style="color:#16a34a;">−26%</td></tr>
+                            <tr><td>C01 (opus)</td><td>7.49</td><td><strong>6.63</strong></td><td class="small" style="color:#16a34a;">−11%</td></tr>
+                            <tr><td>C02 (amr)</td><td>5.88</td><td><strong>5.27</strong></td><td class="small" style="color:#16a34a;">−10%</td></tr>
+                            <tr><td>C03 (speex)</td><td>7.90</td><td><strong>6.88</strong></td><td class="small" style="color:#16a34a;">−13%</td></tr>
+                            <tr><td>C04 (encodec)</td><td>10.68</td><td><strong>9.32</strong></td><td class="small" style="color:#16a34a;">−13%</td></tr>
+                            <tr><td>C05 (mp3)</td><td>6.09</td><td><strong>4.54</strong></td><td class="small" style="color:#16a34a;">−25%</td></tr>
+                            <tr><td>C06 (m4a)</td><td>6.85</td><td><strong>5.43</strong></td><td class="small" style="color:#16a34a;">−21%</td></tr>
+                            <tr><td>C07 (mp3+enc)</td><td>12.50</td><td><strong>11.16</strong></td><td class="small" style="color:#16a34a;">−11%</td></tr>
+                            <tr><td>C08 (opus_nb)</td><td>10.22</td><td><strong>9.66</strong></td><td class="small" style="color:#16a34a;">−5%</td></tr>
+                            <tr><td>C09 (amr_nb)</td><td>9.97</td><td><strong>9.10</strong></td><td class="small" style="color:#16a34a;">−9%</td></tr>
+                            <tr><td>C10 (speex_nb)</td><td>10.90</td><td><strong>10.37</strong></td><td class="small" style="color:#16a34a;">−5%</td></tr>
+                            <tr><td>C11 (device)</td><td>8.19</td><td><strong>6.85</strong></td><td class="small" style="color:#16a34a;">−16%</td></tr>
+                        </table>
+                    </div>
+                </div>
+                <p class="small" style="text-align: center; margin-top: 0.5em;">
+                    DANN improves on <strong>all codecs</strong>, including uncovered ones (C04, C07, C11)
+                </p>
+            </section>
             <!-- Thank You -->
             <section style="display: flex; flex-direction: column; justify-content: center; height: 100%;">
                 <h1>Thank You</h1>
