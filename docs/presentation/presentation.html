@@ -388,9 +388,9 @@
                         <td>ERM+Aug</td>
                         <td>WavLM</td>
                         <td>3.26%</td>
-                        <td>8.47%</td>
-                        <td>+160%</td>
-                        <td>0.639</td>
+                        <td>7.98%</td>
+                        <td>+145%</td>
+                        <td>0.605</td>
                     </tr>
                     <tr class="highlight">
                         <td><strong>DANN</strong></td>
@@ -525,8 +525,8 @@
                     <tr>
                         <td>ERM+Aug</td>
                         <td>WavLM</td>
-                        <td>8.47%</td>
-                        <td><span class="tag tag-amber">Identical</span></td>
+                        <td>7.98%</td>
+                        <td><span class="tag tag-green">−6%</span></td>
                     </tr>
                     <tr class="highlight">
                         <td>DANN</td>
@@ -543,12 +543,12 @@
                     <tr>
                         <td>ERM+Aug</td>
                         <td>W2V2</td>
-                        <td>15.79%</td>
-                        <td><span class="tag tag-red">Worse</span></td>
+                        <td>18.02%</td>
+                        <td><span class="tag tag-red">+18%</span></td>
                     </tr>
                 </table>
                 <div class="card-accent card" style="margin-top: 0.8em;">
-                    <strong>Conclusion:</strong> Augmentation alone is insufficient — DANN's adversarial objective is necessary
+                    <strong>Conclusion:</strong> Augmentation helps WavLM (−6%) but DANN provides additional benefit (−13%). For W2V2, augmentation hurts — adversarial training is key.
                 </div>
             </section>
 
