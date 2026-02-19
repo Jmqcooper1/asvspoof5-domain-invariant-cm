@@ -536,14 +536,14 @@
                 </div>
                 <div class="two-col" style="margin-top: 0.5em; font-size: 0.9em;">
                     <div class="card">
-                        <strong>ERM:</strong> Codec-separated clusters
+                        <strong>ERM:</strong> More apparent codec structure
                     </div>
                     <div class="card-green card">
-                        <strong>DANN:</strong> Mixed/overlapping representations
+                        <strong>DANN:</strong> Codec structure less separable
                     </div>
                 </div>
                 <p class="small" style="text-align: center; margin-top: 0.3em;">
-                    In ERM, samples from the same codec (especially MP3/AAC) cluster together, suggesting the model encodes codec identity. In DANN, these clusters dissolve — samples from different codecs overlap, indicating the adversarial objective successfully reduces codec-specific structure in the representation space. These visualizations are projections of high-dimensional space; see per-codec EER (slide 9) for quantitative confirmation.
+                    2D projections of <strong>projection-head output</strong> (the representation DANN directly shapes) on eval set, colored by codec. Visual structure changes under DANN, suggesting reduced codec-specific geometry. Note: UMAP/t-SNE can produce apparent structure depending on hyperparameters — treat as illustrative. Quantitative codec decodability is measured via domain probes (slide 10: 43.4% → 38.8%).
                 </p>
             </section>
 
@@ -598,7 +598,7 @@
                     </tr>
                 </table>
                 <div class="card-accent card" style="margin-top: 0.8em;">
-                    <strong>Conclusion:</strong> For WavLM, augmentation alone helps (−0.49 pp) but DANN provides more than double the improvement (−1.13 pp). For W2V2, augmentation actually hurts (+2.72 pp) while DANN still improves (−0.97 pp). The adversarial objective is necessary — simple data augmentation is not sufficient.
+                    <strong>Conclusion:</strong> For WavLM, augmentation alone helps (−0.49 pp) but DANN provides additional gains beyond augmentation (−1.13 pp) — augmentation alone is insufficient to match DANN. For W2V2, augmentation hurts (+2.72 pp) while DANN still improves (−0.97 pp), showing the adversarial objective provides robustness that simple augmentation cannot.
                 </div>
             </section>
 
@@ -650,7 +650,7 @@
                             <span style="font-size: 0.9em;">High train accuracy (82.6%) but chance-level on dev/eval (~50% EER)</span>
                         </div>
                         <div class="card-accent card" style="margin-top: 0.8em;">
-                            <strong>Conclusion:</strong> OOD gap is NOT explained by these five shortcut artifacts (ASVspoof5 §4.2). The performance gap between dev and eval must come from something else — namely the codec domain shift.
+                            <strong>Conclusion:</strong> OOD gap is NOT explained by these five shortcut artifacts (ASVspoof5 §4.2). This is consistent with codec shift being a major driver of the performance gap; other distribution differences may still contribute.
                         </div>
                         <p class="smaller" style="margin-top: 0.4em;">Features are used as raw continuous values (e.g., exact duration in seconds, energy level) rather than binarized (present/absent). This gives the classifier maximum information — and it still fails on dev/eval, strengthening the conclusion.</p>
                     </div>
