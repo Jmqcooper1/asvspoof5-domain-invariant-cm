@@ -1,19 +1,21 @@
 # Multi-Seed Experiments
 
-Run each model configuration with 5 seeds (42, 123, 456, 789, 1337) to measure variance and generate DET curves.
+Run each model configuration with 3 seeds to measure variance and establish statistical significance.
+
+**Seed 42 is already complete** for all 4 configs. This job runs seeds 123 and 456 only (8 new GPU jobs total).
 
 ## Configurations
 
-| Config | Description |
-|--------|-------------|
-| `wavlm_erm` | WavLM backbone, standard ERM training |
-| `wavlm_dann` | WavLM backbone, DANN domain adaptation |
-| `w2v2_erm` | Wav2Vec2 backbone, standard ERM training |
-| `w2v2_dann` | Wav2Vec2 backbone, DANN domain adaptation |
+| Config | Seed 42 | Seeds 123 + 456 |
+|--------|---------|-----------------|
+| `wavlm_erm` | ✅ Done | 2 new runs |
+| `wavlm_dann` | ✅ Done | 2 new runs |
+| `w2v2_erm` | ✅ Done | 2 new runs |
+| `w2v2_dann` | ✅ Done | 2 new runs |
 
 ## Running Experiments
 
-Submit all 4 configs (each launches 5 array jobs = 20 total runs):
+Submit all 4 configs (each launches 2 array jobs = 8 total new runs):
 
 ```bash
 sbatch scripts/jobs/train_multi_seed.job wavlm_erm
@@ -28,21 +30,26 @@ Monitor progress:
 squeue -u $USER
 ```
 
-Each array job trains with one seed, then evaluates on both `dev` and `eval` splits. Predictions are saved to `results/predictions/`.
+Each array job trains with one seed, then evaluates on both `dev` and `eval` splits with per-domain breakdown, bootstrap CIs, and score files.
 
 ## Output Structure
 
 ```
 results/predictions/
-├── wavlm_erm_seed42_eval.csv
-├── wavlm_erm_seed42_dev.csv
-├── wavlm_erm_seed123_eval.csv
-├── ...
-├── w2v2_dann_seed1337_eval.csv
-└── w2v2_dann_seed1337_dev.csv
+├── wavlm_erm_seed123_eval/
+│   ├── predictions.tsv
+│   ├── metrics.json
+│   └── scores.txt
+├── wavlm_erm_seed123_dev/
+│   └── ...
+├── wavlm_erm_seed456_eval/
+│   └── ...
+└── ...
 ```
 
-Each CSV has columns: `flac_file, score, prediction, y_task, codec`.
+Predictions TSV has columns: `flac_file, score, prediction, y_task, codec`.
+
+**Note:** Seed 42 results are already in `/projects/prjs1904/runs/{config}/` — copy or symlink those prediction files into `results/predictions/{config}_seed42_{split}/` to have everything in one place.
 
 ## Generating Figures
 
