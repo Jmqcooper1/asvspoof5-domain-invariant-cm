@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Visualize codec artifacts: waveform, spectrogram, and residual per codec.
+"""Visualize codec artifacts: waveform, spectrogram, spectral envelope, and residual.
 
-Creates a 12-row × 3-column grid showing how each ASVspoof 5 codec condition
+Creates a 12-row × 4-column grid showing how each ASVspoof 5 codec condition
 affects the same speaker's bonafide audio.
 
 Usage:
@@ -10,9 +10,6 @@ Usage:
         --predictions results/runs/wavlm_erm/eval_eval_full/predictions.tsv \
         --speaker E_0002 \
         --output figures/codec_artifacts
-
-Columns: Waveform | Spectrogram | Residual (vs NONE reference)
-Rows: NONE, C01, C02, ..., C11
 """
 import argparse
 import sys
@@ -21,32 +18,46 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from matplotlib.colors import Normalize
+import matplotlib.colorbar as mcolorbar
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from thesis_style import STYLE, set_style
+from thesis_style import COLORS, STYLE, set_style
 
-# ASVspoof 5 codec labels (human-readable)
+
+# ── Codec metadata ───────────────────────────────────────────────────────────
 CODEC_LABELS = {
-    'NONE': 'No codec (original)',
-    'C01': 'C01: mp3 (8kHz)',
-    'C02': 'C02: aac (8kHz)',
-    'C03': 'C03: ogg (8kHz)',
-    'C04': 'C04: Encodec',
-    'C05': 'C05: mp3 (16kHz)',
-    'C06': 'C06: aac (16kHz)',
-    'C07': 'C07: mp3+Encodec',
-    'C08': 'C08: G.722',
-    'C09': 'C09: GSM-FR',
-    'C10': 'C10: G.711 μ-law',
-    'C11': 'C11: Device effects',
+    'NONE': 'No Codec',
+    'C01':  'C01 · Opus 8 kHz',
+    'C02':  'C02 · AMR-WB 8 kHz',
+    'C03':  'C03 · Speex 8 kHz',
+    'C04':  'C04 · Encodec',
+    'C05':  'C05 · MP3 16 kHz',
+    'C06':  'C06 · AAC 16 kHz',
+    'C07':  'C07 · MP3 + Encodec',
+    'C08':  'C08 · Opus NB',
+    'C09':  'C09 · AMR-NB',
+    'C10':  'C10 · Speex NB',
+    'C11':  'C11 · Device Effects',
 }
 
 CODEC_ORDER = ['NONE', 'C01', 'C02', 'C03', 'C04', 'C05', 'C06', 'C07',
                'C08', 'C09', 'C10', 'C11']
 
+# Colour per codec for spectral envelope overlay
+CODEC_COLORS = {
+    'NONE': '#333333',
+    'C01':  '#D4795A', 'C02': '#E8946E', 'C03': '#F0A882',
+    'C04':  '#7C3AED',
+    'C05':  '#4CA08A', 'C06': '#6BC4AE',
+    'C07':  '#9B59B6',
+    'C08':  '#3B82F6', 'C09': '#60A5FA', 'C10': '#93C5FD',
+    'C11':  '#F59E0B',
+}
 
+
+# ── Audio helpers ────────────────────────────────────────────────────────────
 def load_audio(flac_path: Path, target_sr: int = 16000):
-    """Load a FLAC file and return waveform + sample rate."""
     try:
         import soundfile as sf
         audio, sr = sf.read(str(flac_path))
@@ -54,70 +65,50 @@ def load_audio(flac_path: Path, target_sr: int = 16000):
         import librosa
         audio, sr = librosa.load(str(flac_path), sr=target_sr)
     if len(audio.shape) > 1:
-        audio = audio[:, 0]  # mono
+        audio = audio[:, 0]
     return audio, sr
 
 
 def compute_spectrogram(audio, sr, n_fft=1024, hop_length=256):
-    """Compute log-magnitude spectrogram."""
-    # Use numpy STFT
+    window = np.hanning(n_fft)
     n_frames = 1 + (len(audio) - n_fft) // hop_length
     spec = np.zeros((n_fft // 2 + 1, n_frames))
-    window = np.hanning(n_fft)
     for i in range(n_frames):
         start = i * hop_length
         frame = audio[start:start + n_fft] * window
-        fft = np.fft.rfft(frame)
-        spec[:, i] = np.abs(fft)
-    # Log magnitude
-    spec_db = 20 * np.log10(np.maximum(spec, 1e-10))
-    return spec_db
+        spec[:, i] = np.abs(np.fft.rfft(frame))
+    return 20 * np.log10(np.maximum(spec, 1e-10))
 
 
-def align_and_trim(audio, ref_audio, max_samples=None):
-    """Trim both signals to the same length."""
-    min_len = min(len(audio), len(ref_audio))
-    if max_samples is not None:
-        min_len = min(min_len, max_samples)
-    return audio[:min_len], ref_audio[:min_len]
+def compute_spectral_envelope(spec_db):
+    """Mean power per frequency bin across all frames → spectral envelope."""
+    return np.mean(spec_db, axis=1)
 
 
+# ── Main ─────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description='Visualize codec artifacts')
-    parser.add_argument('--data-root', type=str, required=True,
-                        help='Path to ASVspoof5 dataset root')
-    parser.add_argument('--predictions', type=str, required=True,
-                        help='Path to predictions.tsv with codec labels')
-    parser.add_argument('--speaker', type=str, default='E_0002',
-                        help='Speaker ID to visualize')
-    parser.add_argument('--output', type=str, default='figures/codec_artifacts',
-                        help='Output path (without extension)')
-    parser.add_argument('--max-seconds', type=float, default=3.0,
-                        help='Max duration to display (seconds)')
+    parser.add_argument('--data-root', type=str, required=True)
+    parser.add_argument('--predictions', type=str, required=True)
+    parser.add_argument('--speaker', type=str, default='E_0002')
+    parser.add_argument('--output', type=str, default='figures/codec_artifacts')
+    parser.add_argument('--max-seconds', type=float, default=3.0)
     args = parser.parse_args()
 
     set_style()
 
     data_root = Path(args.data_root)
-    # Eval FLAC files are in flac_E_eval/
     eval_dir = data_root / 'flac_E_eval'
     if not eval_dir.exists():
-        # Try alternative structure
         for candidate in ['flac_E', 'eval']:
             if (data_root / candidate).exists():
                 eval_dir = data_root / candidate
                 break
 
-    # Load predictions to find utterances
     import pandas as pd
     df = pd.read_csv(args.predictions, sep='\t')
     bon = df[(df['y_task'] == 0) & (df['speaker_id'] == args.speaker)]
 
-    if len(bon) == 0:
-        print(f'Error: no bonafide utterances for speaker {args.speaker}')
-        sys.exit(1)
-
-    # Pick one utterance per codec
     utterances = {}
     for codec in CODEC_ORDER:
         subset = bon[bon['codec'] == codec]
@@ -126,32 +117,36 @@ def main():
             continue
         utterances[codec] = subset.iloc[0]['flac_file']
 
-    print(f'Speaker {args.speaker}: found {len(utterances)}/{len(CODEC_ORDER)} codecs')
+    print(f'Speaker {args.speaker}: {len(utterances)}/{len(CODEC_ORDER)} codecs')
 
-    # Load reference (NONE) audio
     if 'NONE' not in utterances:
-        print('Error: no NONE (uncoded) reference utterance found')
-        sys.exit(1)
+        print('Error: no NONE reference'); sys.exit(1)
 
     ref_path = eval_dir / f'{utterances["NONE"]}.flac'
-    if not ref_path.exists():
-        print(f'Error: reference file not found: {ref_path}')
-        sys.exit(1)
-
     ref_audio, sr = load_audio(ref_path)
     max_samples = int(args.max_seconds * sr)
     ref_audio = ref_audio[:max_samples]
+    ref_spec = compute_spectrogram(ref_audio, sr)
+    ref_envelope = compute_spectral_envelope(ref_spec)
+    freq_bins = np.linspace(0, sr / 2, ref_spec.shape[0])
     print(f'Reference: {ref_path.name} ({len(ref_audio)/sr:.2f}s, {sr}Hz)')
 
-    # Create figure: 12 rows × 3 columns
+    # ── Figure layout ────────────────────────────────────────────────────────
     n_codecs = len(utterances)
-    fig = plt.figure(figsize=(16, 2.2 * n_codecs))
-    gs = gridspec.GridSpec(n_codecs, 3, figure=fig,
-                           width_ratios=[1, 1.2, 1],
-                           hspace=0.35, wspace=0.25)
+    row_h = 1.8
+    fig_h = row_h * n_codecs + 1.5   # extra for suptitle + colorbar
+    fig = plt.figure(figsize=(18, fig_h))
 
-    # Column headers
-    col_titles = ['Waveform', 'Spectrogram', 'Residual vs Original']
+    # 4 columns: waveform | spectrogram | spectral envelope | residual
+    gs = gridspec.GridSpec(
+        n_codecs + 1, 4, figure=fig,
+        width_ratios=[1, 1.3, 0.8, 1.3],
+        height_ratios=[1] * n_codecs + [0.06],
+        hspace=0.40, wspace=0.30,
+    )
+
+    vmin_spec, vmax_spec = -80, 0
+    vmin_res, vmax_res = -30, 30
 
     for row_idx, codec in enumerate(CODEC_ORDER):
         if codec not in utterances:
@@ -159,91 +154,135 @@ def main():
 
         flac_path = eval_dir / f'{utterances[codec]}.flac'
         if not flac_path.exists():
-            print(f'Warning: file not found: {flac_path}')
-            continue
+            print(f'Warning: {flac_path} not found'); continue
 
         audio, _ = load_audio(flac_path)
         audio = audio[:max_samples]
         t = np.arange(len(audio)) / sr
-
+        spec = compute_spectrogram(audio, sr)
+        envelope = compute_spectral_envelope(spec)
         label = CODEC_LABELS.get(codec, codec)
+        color = CODEC_COLORS.get(codec, '#888888')
         print(f'  {codec}: {flac_path.name} ({len(audio)/sr:.2f}s)')
 
-        # ── Column 1: Waveform ──
-        ax_wave = fig.add_subplot(gs[row_idx, 0])
-        ax_wave.plot(t, audio, color='#4CA08A', linewidth=0.3, alpha=0.8)
-        ax_wave.set_ylabel(label, fontsize=8, fontweight='bold', rotation=0,
-                          labelpad=120, ha='left', va='center')
-        ax_wave.set_ylim(-1, 1)
-        ax_wave.set_xlim(0, args.max_seconds)
+        # ── Col 0: Waveform ──────────────────────────────────────────────
+        ax = fig.add_subplot(gs[row_idx, 0])
+        ax.plot(t, audio, color=color, linewidth=0.25, alpha=0.85)
+        ax.set_ylim(-1, 1)
+        ax.set_xlim(0, args.max_seconds)
+        ax.set_ylabel(label, fontsize=9, fontweight='bold',
+                      rotation=0, labelpad=115, ha='left', va='center')
+        ax.yaxis.set_label_coords(-0.55, 0.5)
         if row_idx == 0:
-            ax_wave.set_title(col_titles[0], fontsize=11, fontweight='bold', pad=10)
+            ax.set_title('Waveform', fontsize=12, fontweight='bold', pad=8)
         if row_idx < n_codecs - 1:
-            ax_wave.set_xticklabels([])
+            ax.set_xticklabels([])
         else:
-            ax_wave.set_xlabel('Time (s)', fontsize=9)
-        ax_wave.tick_params(labelsize=7)
+            ax.set_xlabel('Time (s)', fontsize=10)
+        ax.tick_params(labelsize=8)
+        ax.set_yticks([-0.5, 0, 0.5])
 
-        # ── Column 2: Spectrogram ──
-        ax_spec = fig.add_subplot(gs[row_idx, 1])
-        spec = compute_spectrogram(audio, sr)
-        freq_bins = np.linspace(0, sr / 2, spec.shape[0])
+        # ── Col 1: Spectrogram ───────────────────────────────────────────
+        ax = fig.add_subplot(gs[row_idx, 1])
         time_bins = np.linspace(0, len(audio) / sr, spec.shape[1])
-        vmin, vmax = -80, 0
-        ax_spec.pcolormesh(time_bins, freq_bins / 1000, spec,
-                          cmap='magma', vmin=vmin, vmax=vmax,
-                          shading='gouraud', rasterized=True)
-        ax_spec.set_ylim(0, 8)
+        im_spec = ax.pcolormesh(
+            time_bins, freq_bins / 1000, spec,
+            cmap='magma', vmin=vmin_spec, vmax=vmax_spec,
+            shading='gouraud', rasterized=True,
+        )
+        ax.set_ylim(0, 8)
         if row_idx == 0:
-            ax_spec.set_title(col_titles[1], fontsize=11, fontweight='bold', pad=10)
+            ax.set_title('Spectrogram', fontsize=12, fontweight='bold', pad=8)
         if row_idx < n_codecs - 1:
-            ax_spec.set_xticklabels([])
+            ax.set_xticklabels([])
         else:
-            ax_spec.set_xlabel('Time (s)', fontsize=9)
-        ax_spec.set_ylabel('kHz', fontsize=8)
-        ax_spec.tick_params(labelsize=7)
+            ax.set_xlabel('Time (s)', fontsize=10)
+        ax.set_ylabel('kHz', fontsize=9)
+        ax.tick_params(labelsize=8)
 
-        # ── Column 3: Residual ──
-        ax_res = fig.add_subplot(gs[row_idx, 2])
+        # ── Col 2: Spectral envelope ─────────────────────────────────────
+        ax = fig.add_subplot(gs[row_idx, 2])
+        # Plot reference (NONE) as thin grey, current codec as coloured
+        ax.plot(ref_envelope, freq_bins / 1000, color='#CCCCCC',
+                linewidth=1.2, alpha=0.7, label='No Codec' if row_idx == 0 else None)
+        ax.plot(envelope, freq_bins / 1000, color=color,
+                linewidth=1.8, alpha=0.9)
+        ax.set_ylim(0, 8)
+        ax.set_xlim(-80, 0)
+        if row_idx == 0:
+            ax.set_title('Spectral Envelope', fontsize=12, fontweight='bold', pad=8)
+            ax.legend(loc='upper right', fontsize=7, framealpha=0.7)
+        if row_idx < n_codecs - 1:
+            ax.set_xticklabels([])
+        else:
+            ax.set_xlabel('Power (dB)', fontsize=10)
+        ax.set_ylabel('kHz', fontsize=9)
+        ax.tick_params(labelsize=8)
+        ax.axhline(y=4, color=STYLE['GRID'], linewidth=0.5, linestyle='--', alpha=0.5)
+
+        # ── Col 3: Spectral residual ─────────────────────────────────────
+        ax = fig.add_subplot(gs[row_idx, 3])
         if codec == 'NONE':
-            # No residual for reference — show flat line
-            ax_res.axhline(y=0, color='#9CA3AF', linewidth=0.5)
-            ax_res.text(0.5, 0.5, '(reference)', transform=ax_res.transAxes,
-                       ha='center', va='center', fontsize=9, color='#9CA3AF')
+            ax.set_facecolor(STYLE['PLOT_BG'])
+            ax.text(0.5, 0.5, '(reference)', transform=ax.transAxes,
+                    ha='center', va='center', fontsize=10, color='#9CA3AF',
+                    fontstyle='italic')
+            ax.set_ylim(0, 8)
+            ax.set_xlim(0, args.max_seconds)
         else:
-            # Compute residual against NONE reference
-            # Note: different utterances, so residual shows structural differences
-            # rather than per-sample codec artifacts. Use spectrogram difference instead.
-            spec_ref = compute_spectrogram(ref_audio, sr)
-            # Align spectrograms to shorter length
-            min_frames = min(spec.shape[1], spec_ref.shape[1])
-            residual = spec[:, :min_frames] - spec_ref[:, :min_frames]
+            min_frames = min(spec.shape[1], ref_spec.shape[1])
+            residual = spec[:, :min_frames] - ref_spec[:, :min_frames]
             time_res = np.linspace(0, min(len(audio), len(ref_audio)) / sr, min_frames)
-            ax_res.pcolormesh(time_res, freq_bins / 1000, residual,
-                            cmap='RdBu_r', vmin=-30, vmax=30,
-                            shading='gouraud', rasterized=True)
-            ax_res.set_ylim(0, 8)
+            im_res = ax.pcolormesh(
+                time_res, freq_bins / 1000, residual,
+                cmap='RdBu_r', vmin=vmin_res, vmax=vmax_res,
+                shading='gouraud', rasterized=True,
+            )
+            ax.set_ylim(0, 8)
 
         if row_idx == 0:
-            ax_res.set_title(col_titles[2], fontsize=11, fontweight='bold', pad=10)
+            ax.set_title('Spectral Residual', fontsize=12, fontweight='bold', pad=8)
         if row_idx < n_codecs - 1:
-            ax_res.set_xticklabels([])
+            ax.set_xticklabels([])
         else:
-            ax_res.set_xlabel('Time (s)', fontsize=9)
-        if codec != 'NONE':
-            ax_res.set_ylabel('kHz', fontsize=8)
-        ax_res.tick_params(labelsize=7)
+            ax.set_xlabel('Time (s)', fontsize=10)
+        ax.set_ylabel('kHz', fontsize=9)
+        ax.tick_params(labelsize=8)
 
-    fig.suptitle(f'Codec Artifacts: Speaker {args.speaker} (bonafide)',
-                fontsize=14, fontweight='bold', y=1.0)
+    # ── Colorbars (bottom row) ───────────────────────────────────────────────
+    ax_cb_spec = fig.add_subplot(gs[n_codecs, 1])
+    cb1 = fig.colorbar(
+        plt.cm.ScalarMappable(norm=Normalize(vmin_spec, vmax_spec), cmap='magma'),
+        cax=ax_cb_spec, orientation='horizontal',
+    )
+    cb1.set_label('Power (dB)', fontsize=9)
+    cb1.ax.tick_params(labelsize=8)
 
-    # Save
+    ax_cb_res = fig.add_subplot(gs[n_codecs, 3])
+    cb2 = fig.colorbar(
+        plt.cm.ScalarMappable(norm=Normalize(vmin_res, vmax_res), cmap='RdBu_r'),
+        cax=ax_cb_res, orientation='horizontal',
+    )
+    cb2.set_label('Δ Power (dB)', fontsize=9)
+    cb2.ax.tick_params(labelsize=8)
+
+    # Hide unused bottom cells
+    for col in [0, 2]:
+        ax_empty = fig.add_subplot(gs[n_codecs, col])
+        ax_empty.axis('off')
+
+    fig.suptitle(
+        f'Codec Artifacts Across ASVspoof 5 Conditions — Speaker {args.speaker} (Bonafide)',
+        fontsize=14, fontweight='bold', y=1.005,
+    )
+
+    # ── Save ─────────────────────────────────────────────────────────────────
     output_base = args.output.removesuffix('.png').removesuffix('.pdf')
     Path(output_base).parent.mkdir(parents=True, exist_ok=True)
     for ext in ['.png', '.pdf']:
-        out_path = output_base + ext
-        fig.savefig(out_path, dpi=300, bbox_inches='tight')
-        print(f'Saved: {out_path}')
+        out = output_base + ext
+        fig.savefig(out, dpi=300, bbox_inches='tight')
+        print(f'Saved: {out}')
     plt.close()
 
 
