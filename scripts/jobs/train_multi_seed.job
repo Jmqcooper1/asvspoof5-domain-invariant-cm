@@ -60,8 +60,8 @@ export WANDB_PROJECT=${WANDB_PROJECT:-asvspoof5-dann}
 export HF_HOME=${HF_HOME:-/scratch-shared/$USER/.cache/huggingface}
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-# Load ffmpeg for DANN configs (needed for codec augmentation)
-if [[ "$CONFIG" == *dann* ]]; then
+# Load ffmpeg for configs that use codec augmentation (DANN and ERM+Aug)
+if [[ "$CONFIG" == *dann* ]] || [[ "$CONFIG" == *aug* ]]; then
   load_ffmpeg_module
   echo "Checking ffmpeg encoder support..."
   check_ffmpeg_encoders_or_fail
