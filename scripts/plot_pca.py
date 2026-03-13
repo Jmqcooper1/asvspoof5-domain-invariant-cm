@@ -13,7 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
-sys.path.insert(0, '/root/.openclaw/workspace/master-thesis-uva/figures/')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from thesis_style import COLORS, STYLE, set_style
 
 COLOR_CODED = '#D4795A'    # Terracotta
@@ -84,7 +84,7 @@ def main():
     parser.add_argument('--dann-repr', type=str, help='Path to DANN representations .npy')
     parser.add_argument('--labels', type=str, help='Path to codec labels .npy')
     parser.add_argument('--output', type=str,
-                        default='/root/.openclaw/workspace/master-thesis-uva/figures/pca_representations')
+                        default='figures/pca_representations')
     parser.add_argument('--demo', action='store_true', help='Generate synthetic data for layout testing')
     args = parser.parse_args()
 
@@ -123,6 +123,7 @@ def main():
 
     # Save
     output_base = args.output.removesuffix('.png').removesuffix('.pdf')
+    Path(output_base).parent.mkdir(parents=True, exist_ok=True)
     for ext in ['.png', '.pdf']:
         out_path = output_base + ext
         fig.savefig(out_path, dpi=300, bbox_inches='tight')

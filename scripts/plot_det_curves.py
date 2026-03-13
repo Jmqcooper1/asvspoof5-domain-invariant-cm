@@ -13,7 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 
-sys.path.insert(0, '/root/.openclaw/workspace/master-thesis-uva/figures/')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from thesis_style import COLORS, STYLE, set_style
 
 
@@ -121,7 +121,7 @@ def main():
     parser.add_argument('--predictions-dir', type=str, default=None,
                         help='Directory with prediction CSVs')
     parser.add_argument('--output', type=str,
-                        default='/root/.openclaw/workspace/master-thesis-uva/figures/det_curves')
+                        default='figures/det_curves')
     parser.add_argument('--demo', action='store_true',
                         help='Generate synthetic DET curves for layout testing')
     args = parser.parse_args()
@@ -181,6 +181,7 @@ def main():
 
     # Save
     output_base = args.output.removesuffix('.png').removesuffix('.pdf')
+    Path(output_base).parent.mkdir(parents=True, exist_ok=True)
     for ext in ['.png', '.pdf']:
         out_path = output_base + ext
         fig.savefig(out_path, dpi=300, bbox_inches='tight')
