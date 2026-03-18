@@ -2,18 +2,13 @@
 
 Domain-adversarial training (DANN) for codec-robust speech deepfake detection.
 
-**Thesis:** *Can domain-adversarial training improve generalization of speech deepfake detectors to unseen transmission codecs?*
+**Thesis:** 
 
 ## Results
 
 | Model | Backbone | Eval EER | OOD Gap | minDCF |
 |-------|----------|----------|---------|--------|
-| **DANN** | **WavLM** | **7.34%** | **+54%** | **0.585** |
-| ERM | WavLM | 8.47% | +160% | 0.639 |
-| DANN | W2V2 | 14.33% | +222% | 1.000 |
-| ERM | W2V2 | 15.30% | +261% | 1.000 |
 
-DANN reduces the OOD gap by 66% (160% → 54%) compared to standard ERM training.
 
 ## Setup
 
@@ -188,16 +183,6 @@ src/               Main package code
 tests/             Unit tests
 runs/              Experiment outputs (created at runtime)
 ```
-
-## Key Configs
-
-| Config | Description |
-|--------|-------------|
-| `wavlm_erm.yaml` | WavLM + ERM baseline |
-| `wavlm_dann.yaml` | WavLM + DANN (linear λ) |
-| `wavlm_dann_exponential.yaml` | WavLM + DANN (exponential λ, best) |
-| `w2v2_erm.yaml` | Wav2Vec2 + ERM |
-| `w2v2_dann.yaml` | Wav2Vec2 + DANN |
 
 ## Citation
 
