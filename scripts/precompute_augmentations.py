@@ -1004,7 +1004,7 @@ def main():
                     results["skipped"] += len(group) * augs_per_file
                     continue
 
-            logger.info(f"  Shard {shard_id}/{len(shard_groups)}: processing {len(group)} files...")
+            logger.info(f"  Shard {shard_id} ({si + 1}/{len(shard_groups)}): processing {len(group)} files...")
             shard_result = process_tar_shard(
                 shard_index=shard_id,
                 audio_paths=group,
@@ -1046,7 +1046,7 @@ def main():
             tar_entries=all_entries,
         )
         if is_sharded:
-            manifest_path = args.output_dir / f"manifest_shard_{args.shard_index}.json"
+            manifest_path = args.output_dir / f"manifest_shard_{args.shard_index:06d}.json"
         else:
             manifest_path = args.output_dir / "manifest.json"
         with open(manifest_path, "w") as f:
@@ -1130,7 +1130,7 @@ def main():
             output_format=args.output_format,
         )
         if is_sharded:
-            manifest_path = args.output_dir / f"manifest_shard_{args.shard_index}.json"
+            manifest_path = args.output_dir / f"manifest_shard_{args.shard_index:06d}.json"
         else:
             manifest_path = args.output_dir / "manifest.json"
         with open(manifest_path, "w") as f:
