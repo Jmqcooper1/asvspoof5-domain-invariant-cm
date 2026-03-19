@@ -47,9 +47,9 @@ for CHECKPOINT in $(find "${RUNS_BASE}" -path "*seed*/checkpoints/best.pt" | sor
   RUN_DIR=$(dirname "$(dirname "${CHECKPOINT}")")
   FULL_RUN_NAME=$(basename "${RUN_DIR}")
 
-  # Strip timestamp/job-id suffix for clean output dir name
+  # Extract up to seed<N>, stripping any suffix (job ID, git hash, timestamp)
   # e.g. wavlm_erm_seed123_5223811 -> wavlm_erm_seed123
-  CLEAN_NAME=$(echo "${FULL_RUN_NAME}" | sed -E 's/_[0-9]{6,}$//')
+  CLEAN_NAME=$(echo "${FULL_RUN_NAME}" | sed -E 's/(seed[0-9]+).*/\1/')
 
   OUTPUT_DIR="results/predictions/${CLEAN_NAME}_eval"
 

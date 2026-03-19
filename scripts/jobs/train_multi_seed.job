@@ -84,7 +84,7 @@ echo ""
 # ── Evaluate ─────────────────────────────────────────────────────────────────
 # train.py appends a suffix to the run name, so we find the checkpoint by glob
 RUNS_BASE="${RUNS_DIR:-./runs}"
-CHECKPOINT=$(find "${RUNS_BASE}" -path "*/${RUN_NAME}*/checkpoints/best.pt" -print -quit 2>/dev/null)
+CHECKPOINT=$(find "${RUNS_BASE}" -path "*/${RUN_NAME}_*/checkpoints/best.pt" -print -quit 2>/dev/null)
 if [[ -z "${CHECKPOINT}" ]]; then
   echo "ERROR: No best.pt found for ${RUN_NAME} under ${RUNS_BASE}" >&2
   exit 1
