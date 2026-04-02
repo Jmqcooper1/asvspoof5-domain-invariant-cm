@@ -162,9 +162,12 @@ def plot_det_panel(ax, models: dict, title: str):
     models: dict of {name: (far, frr, eer)}
     """
     for name, (far, frr, eer) in models.items():
-        color = PALETTE.get(name, '#888888')
-        label_name = MODEL_LABELS.get(name, name.replace('_', ' ').upper())
-        ls_props = LINE_STYLES.get(name, {"ls": "-", "lw": 2.0})
+        # Strip seed suffixes to match PALETTE keys (e.g. wavlm_dann_seed123 → wavlm_dann)
+        import re
+        base_name = re.sub(r'_seed\d+(_v\d+)?$', '', name)
+        color = PALETTE.get(base_name, PALETTE.get(name, '#888888'))
+        label_name = MODEL_LABELS.get(base_name, MODEL_LABELS.get(name, name.replace('_', ' ').upper()))
+        ls_props = LINE_STYLES.get(base_name, LINE_STYLES.get(name, {"ls": "-", "lw": 2.0}))
         eer_pct = eer * 100
         ax.plot(far * 100, frr * 100, color=color,
                 linestyle=ls_props["ls"], linewidth=ls_props["lw"],
