@@ -355,7 +355,7 @@ def _plot_projection_panel_single(
     # Formatting
     ax.set_xlabel('')
     ax.set_ylabel('Codec Probe Accuracy')
-    ax.set_title(f'(b) Projection Layer Probes ({backbone_name})\n(Trainable — DANN reduces codec info)')
+    ax.set_title(f'(b) Projection Layer Probes ({backbone_name})\n(Trainable — minimal DANN effect)')
     
     ax.set_xticks(x)
     ax.set_xticklabels(['ERM', 'DANN'], fontsize=12)
@@ -491,7 +491,7 @@ def _plot_projection_panel_dual(
     # Formatting
     ax.set_xlabel('')
     ax.set_ylabel('Codec Probe Accuracy')
-    ax.set_title('(b) Projection Layer Probes (WavLM & W2V2)\n(Trainable — DANN reduces codec info)')
+    ax.set_title('(b) Projection Layer Probes (WavLM & W2V2)\n(Trainable — minimal DANN effect)')
     
     # X-axis labels
     ax.set_xticks([0, 1, 2.5, 3.5])
@@ -551,7 +551,7 @@ def create_combined_figure(
     
     # Overall title
     fig.suptitle(
-        'RQ3: Does DANN Reduce Domain Information in Learned Representations?',
+        'RQ3: Effect of DANN on Domain Information in Learned Representations',
         fontsize=14, fontweight='bold', y=1.02,
     )
     
