@@ -488,14 +488,14 @@ def main():
     parser.add_argument(
         '--cka-results',
         type=Path,
-        default=Path('results/rq4_cka_results.csv'),
-        help='Path to rq4_cka_results.csv (default: results/rq4_cka_results.csv)',
+        default=Path('results/rq4_cka_results_v2.csv'),
+        help='Path to CKA results CSV (default: results/rq4_cka_results_v2.csv)',
     )
     parser.add_argument(
         '--intervention-results',
         type=Path,
-        default=Path('results/rq4_results_summary.csv'),
-        help='Path to rq4_results_summary.csv (default: results/rq4_results_summary.csv)',
+        default=Path('results/rq4_results_summary_v2.csv'),
+        help='Path to intervention results CSV (default: results/rq4_results_summary_v2.csv)',
     )
     parser.add_argument('--output-dir', type=Path, default=Path('figures/rq4'), help='Output directory')
     args = parser.parse_args()
