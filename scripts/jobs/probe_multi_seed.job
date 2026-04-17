@@ -1,0 +1,119 @@
+#!/bin/bash
+#SBATCH --partition=gpu_a100
+#SBATCH --gpus=1
+#SBATCH --job-name=ProbeMultiSeed
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=18
+#SBATCH --time=12:00:00
+#SBATCH --output=./scripts/jobs/out/%x_%j.out
+
+# =============================================================================
+# Layer-wise domain probing for all 12 multi-seed checkpoints
+# (WavLM/W2V2 x ERM/DANN x 3 seeds).
+#
+# Each run produces per-layer (L0..L11 + Lrepr) codec and codec_q probe
+# accuracies via 5-fold stratified CV logistic regression on the frozen
+# backbone's mean-pooled hidden states.
+#
+# Because the backbone is frozen and shared, the L0..L11 accuracies are
+# identical across any same-backbone checkpoints. Lrepr does vary across
+# seeds (projection head is trained). Run all 12 so the pool-weight
+# correlation and Lrepr multi-seed analyses have matching data.
+#
+# Usage:  sbatch scripts/jobs/probe_multi_seed.job
+#
+# Outputs: results/domain_probes/<clean_name>/probe_results.json
+#          + per-layer plots + analysis_event.json
+# =============================================================================
+
+set -euo pipefail
+
+module purge
+module load 2025
+
+cd "${SLURM_SUBMIT_DIR:-.}"
+if [[ ! -f "pyproject.toml" ]]; then
+  echo "ERROR: pyproject.toml not found in $(pwd)." >&2
+  exit 1
+fi
+echo "Repo root: $(pwd)"
+
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+uv sync --locked
+
+# shellcheck disable=SC1091
+source scripts/jobs/_job_common.sh
+load_and_require_asvspoof5_root
+
+export WANDB_PROJECT=${WANDB_PROJECT:-asvspoof5-dann}
+export HF_HOME=${HF_HOME:-/scratch-shared/$USER/.cache/huggingface}
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+RUNS_BASE="${RUNS_DIR:-/gpfs/work5/0/prjs1904/runs}"
+OUT_BASE="results/domain_probes"
+mkdir -p "$OUT_BASE"
+
+# Verify CUDA
+uv run python - <<'EOF'
+import torch
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"Active GPU: {torch.cuda.get_device_name(0)}")
+EOF
+echo ""
+
+# (cluster_run_dir, clean_output_name) pairs. Clean names match
+# results/predictions/ and results/pool_weights/ conventions.
+CHECKPOINTS=(
+  "wavlm_erm:wavlm_erm_seed42"
+  "wavlm_erm_seed123_5223811:wavlm_erm_seed123"
+  "wavlm_erm_seed456_5223811:wavlm_erm_seed456"
+  "wavlm_dann_seed42_v2_1e2d5c7:wavlm_dann_seed42_v2"
+  "wavlm_dann_seed123_5223811:wavlm_dann_seed123"
+  "wavlm_dann_seed456_5223811:wavlm_dann_seed456"
+  "w2v2_erm:w2v2_erm_seed42"
+  "w2v2_erm_seed123_5223811:w2v2_erm_seed123"
+  "w2v2_erm_seed456_5223811:w2v2_erm_seed456"
+  "w2v2_dann_seed42_v2_1e2d5c7:w2v2_dann_seed42_v2"
+  "w2v2_dann_seed123_5223811:w2v2_dann_seed123"
+  "w2v2_dann_seed456_5223811:w2v2_dann_seed456"
+)
+
+echo "=== Probing ${#CHECKPOINTS[@]} checkpoints ==="
+echo "Runs base:  $RUNS_BASE"
+echo "Output dir: $OUT_BASE"
+echo ""
+
+for entry in "${CHECKPOINTS[@]}"; do
+  src_name="${entry%%:*}"
+  out_name="${entry##*:}"
+  ckpt="${RUNS_BASE}/${src_name}/checkpoints/best.pt"
+  out_dir="${OUT_BASE}/${out_name}"
+
+  if [[ -f "${out_dir}/probe_results.json" ]]; then
+    echo "SKIP  $out_name (probe_results.json already exists)"
+    continue
+  fi
+  if [[ ! -f "$ckpt" ]]; then
+    echo "WARN  missing checkpoint: $ckpt" >&2
+    continue
+  fi
+
+  mkdir -p "$out_dir"
+  echo ""
+  echo "=== Probing $out_name ==="
+  echo "  Checkpoint: $ckpt"
+  echo "  Output:     $out_dir/"
+
+  srun uv run python scripts/probe_domain.py \
+      --checkpoint "$ckpt" \
+      --split eval \
+      --domain-source protocol \
+      --output-dir "$out_dir"
+
+  echo "Done: $out_name"
+done
+
+echo ""
+echo "=== All probing runs complete ==="
