@@ -110,14 +110,17 @@ def main() -> None:
             writer.writerow({k: row.get(k, "") for k in fieldnames})
 
     print(f"Wrote {args.output}\n")
-    print(f'{"run":<40}{"status":<18}{"best_ep":<8}{"final":<7}{"best_eer":<10}{"λ@save":<10}')
+    print(f'{"run":<40}{"status":<18}{"best_ep":<8}{"final":<7}{"best_eer":<10}{"lambda@save":<12}')
     for r in rows:
+        best_eer = r.get("best_eer")
+        best_eer_str = f"{best_eer:.4f}" if best_eer is not None else ""
+        lam = r.get("lambda_at_save")
+        lam_str = f"{lam:.3f}" if lam is not None else ""
         print(
             f"{r['run']:<40}{r['status']:<18}"
             f"{str(r.get('best_epoch', '')):<8}"
             f"{str(r.get('final_epoch', '')):<7}"
-            f"{(f'{r[\"best_eer\"]:.4f}' if r.get('best_eer') is not None else ''):<10}"
-            f"{(f'{r[\"lambda_at_save\"]:.3f}' if r.get('lambda_at_save') is not None else ''):<10}"
+            f"{best_eer_str:<10}{lam_str:<12}"
         )
 
 
