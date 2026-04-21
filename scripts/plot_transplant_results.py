@@ -36,11 +36,13 @@ ROOT = Path(__file__).resolve().parent.parent
 IN_DIR = ROOT / "results" / "component_transplant"
 OUT_DIR = ROOT / "figures" / "rq4"
 
-# Component transplant interventions are DANN-donor operations, so bars
-# use the DANN (teal) family. WavLM = bold teal, W2V2 = lighter teal.
+# Transplant is its own comparison dimension (not ERM-vs-DANN), so use the
+# gold/amber family the thesis already reserves for "transplant / augment"
+# operations (see plot_per_codec_bias ERM+Aug). WavLM = bold gold,
+# W2V2 = lighter gold.
 COLORS = {
-    "wavlm": "#4CA08A",  # teal (bold)
-    "w2v2":  "#8EC6B4",  # teal (light)
+    "wavlm": "#C49A3C",  # gold (bold)
+    "w2v2":  "#E6C878",  # gold (light)
 }
 
 MODES = [
