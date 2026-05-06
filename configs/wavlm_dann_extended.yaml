@@ -1,0 +1,152 @@
+# WavLM Base+ DANN — extended training, no early stopping.
+#
+# Identical to wavlm_dann_exponential.yaml except early stopping is
+# effectively disabled (patience > max_epochs) so training runs the full
+# lambda schedule. Standard EER-best save policy halts the canonical
+# WavLM DANN at epoch ~3 with lambda ~0.1; here training continues to
+# epoch 50 with lambda reaching 1.0. Use this checkpoint set ONLY for
+# mechanistic analysis (pool-weight redistribution / probing) — practical
+# EER comparisons should keep using the canonical wavlm_dann_seed*_v2
+# checkpoints.
+
+# Backbone
+backbone:
+  name: wavlm_base_plus
+  pretrained: microsoft/wavlm-base-plus
+  num_layers: 12
+  hidden_size: 768
+  freeze: true
+
+  layer_selection:
+    method: weighted
+    k: 6
+    init_lower_bias: true
+
+# Pooling
+pooling:
+  method: stats
+
+# Projection head
+projection:
+  input_dim: 1536
+  hidden_dim: 512
+  output_dim: 256
+  num_layers: 2
+  dropout: 0.1
+
+# Task classifier
+classifier:
+  input_dim: 256
+  num_classes: 2
+  hidden_dim: 0
+  dropout: 0.1
+
+# Training — early stopping disabled so the full lambda schedule runs.
+training:
+  method: dann
+
+  optimizer:
+    name: adamw
+    lr: 1.0e-4
+    weight_decay: 0.01
+    betas: [0.9, 0.999]
+
+  scheduler:
+    name: cosine
+    warmup_steps: 500
+    min_lr: 1.0e-6
+
+  max_epochs: 50
+  # Effectively disable early stopping so DANN sees full adversarial pressure.
+  patience: 9999
+  min_delta: 0.001
+  train_loss_threshold: 0.0
+  plateau_patience: 9999
+  gradient_clip: 1.0
+
+  # Snapshot every 5 epochs so we can read off the trajectory after training.
+  save_every_n_epochs: 5
+  save_best_only: true
+  monitor_metric: eer
+  monitor_mode: min
+
+# Loss
+loss:
+  task:
+    name: cross_entropy
+    weight: 1.0
+    label_smoothing: 0.0
+
+  domain:
+    codec:
+      name: cross_entropy
+      weight: 1.0
+    codec_q:
+      name: cross_entropy
+      weight: 1.0
+      mask_for_none: true
+
+# DANN — same exponential schedule as v2, ramping all the way to 1.0 by
+# the end of training (the smoke run will reveal whether late-training
+# checkpoints show the W2V2-style pool-weight redistribution).
+dann:
+  lambda_: 0.1
+
+  lambda_schedule:
+    enabled: true
+    type: exponential
+    start: 0.01
+    end: 1.0
+    warmup_epochs: 0
+
+  discriminator:
+    input_dim: 1536
+    hidden_dim: 512
+    dropout: 0.1
+
+# Synthetic codec augmentation
+augmentation:
+  enabled: true
+  codec_prob: 0.5
+  codecs: [MP3, AAC, OPUS]
+  qualities: [1, 2, 3, 4, 5]
+  cache_dir: null
+  use_synthetic_labels: true
+
+# Audio
+audio:
+  sample_rate: 16000
+  max_duration_sec: 6.0
+
+# Dataloader
+dataloader:
+  batch_size: 256
+  num_workers: 8
+  pin_memory: true
+  drop_last: true
+  prefetch_factor: 4
+  persistent_workers: true
+
+# Logging
+logging:
+  log_every_n_steps: 50
+  val_every_n_epochs: 1
+  log_domain_accuracy: true
+  log_domain_breakdown_every: 5
+  json_logs: true
+  log_batch_samples: 0.02
+  track_gradients: true
+  track_layer_weights: true
+
+# Wandb
+wandb:
+  enabled: true
+  project: asvspoof5-dann
+  entity: null
+  tags: ["wavlm", "dann", "extended", "no-early-stop"]
+  log_model: true
+  log_code: true
+
+# Reproducibility
+seed: 42
+deterministic: true

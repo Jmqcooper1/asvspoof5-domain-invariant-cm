@@ -1,0 +1,121 @@
+#!/bin/bash
+#SBATCH --partition=gpu_a100
+#SBATCH --gpus=1
+#SBATCH --job-name=WavlmDannExt
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=18
+#SBATCH --time=24:00:00
+#SBATCH --output=./scripts/jobs/out/%x_%j.out
+
+# =============================================================================
+# WavLM DANN extended training (early stopping disabled).
+#
+# Trains a single seed all the way through the lambda schedule so we can
+# observe whether late-training checkpoints exhibit the W2V2-style pool-
+# weight redistribution. Subsequent analysis uses the saved intermediates
+# (epoch_5/10/.../50.pt) plus best.pt and last.pt.
+#
+# Usage:
+#     sbatch scripts/jobs/train_wavlm_dann_extended.job              # seed 42
+#     sbatch scripts/jobs/train_wavlm_dann_extended.job 123          # seed 123
+#     sbatch scripts/jobs/train_wavlm_dann_extended.job 456          # seed 456
+# =============================================================================
+
+set -euo pipefail
+
+SEED="${1:-42}"
+CONFIG="wavlm_dann_extended"
+RUN_NAME="${CONFIG}_seed${SEED}"
+
+echo "=== Extended WavLM DANN training ==="
+echo "Config: ${CONFIG}"
+echo "Seed:   ${SEED}"
+echo "Run:    ${RUN_NAME}"
+echo ""
+
+module purge
+module load 2025
+
+cd "${SLURM_SUBMIT_DIR:-.}"
+if [[ ! -f "pyproject.toml" ]]; then
+  echo "ERROR: pyproject.toml not found in $(pwd)." >&2
+  exit 1
+fi
+echo "Repo root: $(pwd)"
+
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+uv sync --locked
+
+# shellcheck disable=SC1091
+source scripts/jobs/_job_common.sh
+load_and_require_asvspoof5_root
+
+export WANDB_PROJECT=${WANDB_PROJECT:-asvspoof5-dann}
+export HF_HOME=${HF_HOME:-/scratch-shared/$USER/.cache/huggingface}
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+# DANN training requires synthetic codec augmentation -> ffmpeg.
+load_ffmpeg_module
+echo "Checking ffmpeg encoder support..."
+check_ffmpeg_encoders_or_fail
+echo "ffmpeg encoders OK."
+echo ""
+
+# ── Train ────────────────────────────────────────────────────────────────────
+echo "=== Training ${RUN_NAME} (50 epochs, no early stopping) ==="
+srun uv run python scripts/train.py \
+    --config "configs/${CONFIG}.yaml" \
+    --name "${RUN_NAME}" \
+    --seed "${SEED}" \
+    --wandb \
+    --amp
+
+echo ""
+echo "Training complete!"
+
+# ── Locate the run directory train.py created (it appends a job-id suffix) ───
+RUNS_BASE="${RUNS_DIR:-./runs}"
+RUN_DIR=$(find "${RUNS_BASE}" -maxdepth 2 -type d -name "${RUN_NAME}_*" -print -quit 2>/dev/null)
+if [[ -z "${RUN_DIR}" ]]; then
+  echo "ERROR: No run dir matching ${RUN_NAME}_* under ${RUNS_BASE}" >&2
+  exit 1
+fi
+echo "Run directory: ${RUN_DIR}"
+
+# ── Pool-weight trajectory (cheap sanity check; full plot is local) ──────────
+TRAJ_OUT="results/pool_weights_trajectory/${RUN_NAME}.json"
+mkdir -p "$(dirname "$TRAJ_OUT")"
+echo ""
+echo "=== Extracting pool-weight trajectory ==="
+uv run python scripts/extract_pool_weights_trajectory.py \
+    --run-dir "${RUN_DIR}" \
+    --output  "${TRAJ_OUT}"
+
+# ── Eval the final and best checkpoints ──────────────────────────────────────
+for tag in last best; do
+  CKPT="${RUN_DIR}/checkpoints/${tag}.pt"
+  [[ -f "${CKPT}" ]] || { echo "skip: ${CKPT} missing"; continue; }
+  OUTPUT_DIR="results/predictions/${RUN_NAME}_${tag}_eval"
+  if [[ -f "${OUTPUT_DIR}/predictions.tsv" ]]; then
+    echo "skip: ${OUTPUT_DIR}/predictions.tsv already exists"
+    continue
+  fi
+  mkdir -p "${OUTPUT_DIR}"
+  echo ""
+  echo "=== Evaluating ${RUN_NAME} ${tag}.pt on eval (680k) ==="
+  srun uv run python scripts/evaluate.py \
+      --checkpoint "${CKPT}" \
+      --split eval \
+      --output-dir "${OUTPUT_DIR}" \
+      --per-domain \
+      --bootstrap \
+      --scorefile \
+      --wandb \
+      --wandb-project asvspoof5-dann
+done
+
+echo ""
+echo "=== Done: ${RUN_NAME} ==="
+echo "Trajectory:   ${TRAJ_OUT}"
+echo "Predictions:  results/predictions/${RUN_NAME}_*_eval/"
