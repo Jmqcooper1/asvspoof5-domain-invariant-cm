@@ -22,6 +22,14 @@ OUT_CSV = ROOT / "results" / "per_codec_seeds_summary.csv"
 SEEDS = [42, 123, 456, 789, 2024]
 # Models that used a "_v2_eval" suffix on seed 42
 V2_MODELS = {"wavlm_dann", "wavlm_erm_aug", "w2v2_dann", "w2v2_erm_aug"}
+# Override (model, seed) → suffix when a later retrain supersedes the original.
+# wavlm_dann seed 123 was retrained with patience=20 (commit c31e507) so that
+# DANN had time to engage past warmup; best.pt moved from epoch 2 (lambda=0,
+# pre-DANN) to epoch 14 (lambda≈0.25, actively DANN-trained). We use the
+# patched eval for the 5-seed mean ± std; the original is preserved on disk.
+P20_OVERRIDES: dict[tuple[str, int], str] = {
+    ("wavlm_dann", 123): "seed123_p20_eval",
+}
 MODELS = [
     ("wavlm_erm", "WavLM ERM"),
     ("wavlm_erm_aug", "WavLM ERM+Aug"),
@@ -34,7 +42,12 @@ CODEC_ORDER = [f"C{i:02d}" for i in range(1, 12)] + ["NONE"]
 
 
 def pred_dir(model: str, seed: int) -> Path:
-    suffix = f"seed{seed}_v2_eval" if (seed == 42 and model in V2_MODELS) else f"seed{seed}_eval"
+    if (model, seed) in P20_OVERRIDES:
+        suffix = P20_OVERRIDES[(model, seed)]
+    elif seed == 42 and model in V2_MODELS:
+        suffix = "seed42_v2_eval"
+    else:
+        suffix = f"seed{seed}_eval"
     return PRED / f"{model}_{suffix}" / "tables" / "metrics_by_codec.csv"
 
 

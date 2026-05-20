@@ -31,6 +31,11 @@ OUT_CSV = ROOT / "results" / "headline_seeds_summary.csv"
 
 SEEDS = [42, 123, 456, 789, 2024]
 V2_MODELS = {"wavlm_dann", "wavlm_erm_aug", "w2v2_dann", "w2v2_erm_aug"}
+# See aggregate_per_codec_seeds.py for rationale: wavlm_dann seed 123 was
+# retrained with patience=20 so DANN actually engaged.
+P20_OVERRIDES: dict[tuple[str, int], str] = {
+    ("wavlm_dann", 123): "seed123_p20_eval",
+}
 MODELS = ["wavlm_erm", "wavlm_erm_aug", "wavlm_dann",
           "w2v2_erm", "w2v2_erm_aug", "w2v2_dann"]
 
@@ -43,7 +48,12 @@ METRIC_COLS = [
 
 
 def metrics_path(model: str, seed: int) -> Path:
-    suffix = f"seed{seed}_v2_eval" if (seed == 42 and model in V2_MODELS) else f"seed{seed}_eval"
+    if (model, seed) in P20_OVERRIDES:
+        suffix = P20_OVERRIDES[(model, seed)]
+    elif seed == 42 and model in V2_MODELS:
+        suffix = "seed42_v2_eval"
+    else:
+        suffix = f"seed{seed}_eval"
     return PRED / f"{model}_{suffix}" / "metrics.json"
 
 

@@ -39,14 +39,18 @@ COLORS = {
     "dann_eval": "#4CA08A",
 }
 
-# (clean-name, backbone, method, seed-label) per column on the x-axis
-ERM_SEEDS  = ["seed42",    "seed123", "seed456", "seed789", "seed2024"]
-DANN_SEEDS = ["seed42_v2", "seed123", "seed456", "seed789", "seed2024"]
+# (clean-name, backbone, method, seed-label) per column on the x-axis.
+# WavLM DANN seed 123 uses the patience=20 retrain (seed123_p20) which
+# escaped the pre-warmup early-stop trap; the original seed123 saved best.pt
+# at epoch 2 with lambda=0, the patched run at epoch 14 with lambda≈0.25.
+ERM_SEEDS         = ["seed42",    "seed123",     "seed456", "seed789", "seed2024"]
+DANN_SEEDS_WAVLM  = ["seed42_v2", "seed123_p20", "seed456", "seed789", "seed2024"]
+DANN_SEEDS_W2V2   = ["seed42_v2", "seed123",     "seed456", "seed789", "seed2024"]
 GROUPS = [
     ("WavLM\nERM",   "wavlm", "erm",  ERM_SEEDS),
-    ("WavLM\nDANN",  "wavlm", "dann", DANN_SEEDS),
+    ("WavLM\nDANN",  "wavlm", "dann", DANN_SEEDS_WAVLM),
     ("W2V2\nERM",    "w2v2",  "erm",  ERM_SEEDS),
-    ("W2V2\nDANN",   "w2v2",  "dann", DANN_SEEDS),
+    ("W2V2\nDANN",   "w2v2",  "dann", DANN_SEEDS_W2V2),
 ]
 
 # W2V2 ERM seed-42 dev EER is not in the cluster metrics_train.json

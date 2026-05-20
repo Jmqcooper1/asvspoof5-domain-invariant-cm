@@ -97,5 +97,10 @@
     "best_epoch": 8,
     "best_eer": 0.04174020023987229,
     "run_dir": "w2v2_dann_seed2024_fca361a"
+  },
+  "wavlm_dann_seed123_p20": {
+    "best_epoch": 14,
+    "best_eer": 0.03331737211118012,
+    "run_dir": "wavlm_dann_seed123_p20_c31e507"
   }
 }

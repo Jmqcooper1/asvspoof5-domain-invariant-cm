@@ -68,6 +68,21 @@ DEFAULT_COLORS = {
 }
 
 
+# When a (backbone, method) pair has a "_p20" retrain that supersedes the
+# original eval, list the *original* directory names to skip here. The
+# corresponding "_p20_eval" sibling will be picked up automatically by the
+# normal seed* matcher and used in place of the skipped one.
+SKIP_DIRS = {
+    "wavlm_dann_seed123_eval",   # superseded by wavlm_dann_seed123_p20_eval
+}
+
+# All other "_p20_eval" dirs that we have *not* explicitly opted into are
+# unused for the multi-seed mean (we ran them but don't substitute them).
+P20_KEEP = {
+    "wavlm_dann_seed123_p20_eval",
+}
+
+
 def find_seed_dirs(predictions_dir: Path, backbone: str, method: str) -> List[Path]:
     """Find all seed directories for a given backbone/method combination.
 
@@ -75,6 +90,7 @@ def find_seed_dirs(predictions_dir: Path, backbone: str, method: str) -> List[Pa
       {backbone}_{method}_eval/
       {backbone}_{method}_seed{N}_eval/
       {backbone}_{method}_seed{N}_v2_eval/
+      {backbone}_{method}_seed{N}_p20_eval/  (only if in P20_KEEP)
     """
     prefix = f"{backbone}_{method}"
     dirs = []
@@ -82,6 +98,10 @@ def find_seed_dirs(predictions_dir: Path, backbone: str, method: str) -> List[Pa
         if not p.is_dir():
             continue
         name = p.name
+        if name in SKIP_DIRS:
+            continue
+        if "_p20_eval" in name and name not in P20_KEEP:
+            continue
         # Match {backbone}_{method}_*_eval
         if name.startswith(prefix + "_") and name.endswith("_eval"):
             # Exclude wrong matches like wavlm_erm_* matching wavlm_erm_aug
