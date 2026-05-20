@@ -4,7 +4,7 @@
 For each backbone, shows how DANN's per-layer pooling weights evolve from
 initialization through the saved intermediate epoch checkpoints (epoch_0,
 epoch_5, epoch_10, ...). Overlaid on top: the matching ERM final pool
-weights (averaged across 3 seeds for context). Colorbar / line-color
+weights (averaged across all ERM seeds for context). Colorbar / line-color
 encodes training epoch + lambda_grl at that epoch.
 
 This figure is the diagnostic: it shows whether DANN's pool-weight
@@ -78,12 +78,12 @@ def plot_panel(ax, backbone: str) -> None:
         key=epoch_sort_key,
     )
 
-    # ERM reference (mean of 3 seeds)
+    # ERM reference (mean across all available seeds)
     layers = np.arange(N_LAYERS)
     ax.plot(
         layers, erm_ref, marker="o", linewidth=2.0, markersize=5,
         color=COLORS[f"{backbone}_erm"],
-        label=f"ERM (mean of 3 seeds)",
+        label=f"ERM (mean of {len(ERM_SEEDS)} seeds)",
         zorder=4,
     )
 

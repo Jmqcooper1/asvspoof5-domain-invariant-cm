@@ -5,9 +5,9 @@ Two-panel figure (WavLM | W2V2). On each panel:
   - line plot (left y-axis): per-layer codec probe accuracy (frozen-backbone
     property, identical across seeds).
   - signed bars (right y-axis): mean DANN-ERM pool-weight delta (pp) with
-    error bars = std across 3 seeds.
+    error bars = std across all DANN seeds (currently n=5).
 
-Annotates Pearson r (mean +/- std across 3 seeds) per backbone. Uses the
+Annotates Pearson r (mean +/- std across all DANN seeds) per backbone. Uses the
 terracotta/teal/gold palette that matches the rest of the thesis figures.
 
 Usage:
@@ -107,7 +107,7 @@ def plot_panel(ax, backbone: str) -> None:
     # r annotation — upper-right of the line axis, well clear of bars and markers
     ax.text(
         0.985, 0.965,
-        f"$r = {r_mean:+.3f} \\pm {r_std:.3f}$  (n=3 seeds)",
+        f"$r = {r_mean:+.3f} \\pm {r_std:.3f}$  (n={len(DANN_SEEDS)} seeds)",
         transform=ax.transAxes, fontsize=10,
         va="top", ha="right",
         bbox=dict(

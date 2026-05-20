@@ -8,7 +8,7 @@ Two-panel figure:
 Each panel groups by intervention mode (pool_weight_transplant,
 layer_patch_mixed, layer_patch_repr, layer_patch_hidden) with paired bars
 for WavLM (bold terracotta/teal variant) and Wav2Vec 2.0 (lighter).
-Error bars = std across 3 seeds.
+Error bars = std across all seeds (currently n=5).
 
 Uses the thesis terracotta/teal palette. No title — the LaTeX caption
 provides the heading.

@@ -2,7 +2,7 @@
 """Learned layer-pooling weights — multi-seed, both backbones.
 
 2x2 panel layout:
-    (a) WavLM   pool weights (ERM + DANN, mean +/- std across 3 seeds)
+    (a) WavLM   pool weights (ERM + DANN, mean +/- std across all seeds)
     (b) Wav2Vec 2.0 pool weights
     (c) WavLM   DANN - ERM weight shift
     (d) Wav2Vec 2.0 DANN - ERM weight shift
@@ -77,14 +77,14 @@ def plot_weights_panel(ax, backbone: str) -> None:
         yerr=erm.std(0, ddof=1), capsize=3,
         color=COLORS[f"{backbone}_erm"], edgecolor="#1F2937", linewidth=0.5,
         error_kw={"linewidth": 0.7, "ecolor": "#374151"},
-        label="ERM (3 seeds)",
+        label=f"ERM ({len(ERM_SEEDS)} seeds)",
     )
     ax.bar(
         x + width / 2, dann.mean(0), width,
         yerr=dann.std(0, ddof=1), capsize=3,
         color=COLORS[f"{backbone}_dann"], edgecolor="#1F2937", linewidth=0.5,
         error_kw={"linewidth": 0.7, "ecolor": "#374151"},
-        label="DANN (3 seeds)",
+        label=f"DANN ({len(DANN_SEEDS)} seeds)",
     )
 
     ax.axhline(
